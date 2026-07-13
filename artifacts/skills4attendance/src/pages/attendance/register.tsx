@@ -65,10 +65,14 @@ export default function RegisterPage() {
   }, [register]);
 
   // Auto-save effect
+  // NOTE: depend only on primitives/stable references (debouncedDrafts, sessionId,
+  // saveMutate, queryClient). Including the whole `saveMutation` result object or
+  // `register` here caused this effect to re-run on every render (their identity
+  // changes on unrelated renders/cache patches), which re-fired mutate() in a tight
+  // loop and crashed the app with "Maximum update depth exceeded".
   const lastSavedRef = React.useRef<string>("");
+  const saveMutate = saveMutation.mutate;
   React.useEffect(() => {
-    if (!register) return;
-    
     // Only save dirty entries
     const dirtyEntries = Object.values(debouncedDrafts).filter(d => d._isDirty);
     if (dirtyEntries.length === 0) return;
@@ -79,22 +83,26 @@ export default function RegisterPage() {
 
     const payloadString = JSON.stringify(dirtyEntries);
     if (payloadString === lastSavedRef.current) return;
-    
+    // Mark as "in flight" immediately so this effect can't re-fire the same
+    // payload again before the request resolves.
+    lastSavedRef.current = payloadString;
+
     setSaveStatus("saving");
-    
+
     const entriesToSave = dirtyEntries.map(({ _isDirty, _originalHours, _requireOverrideReason, ...rest }) => rest);
-    
-    saveMutation.mutate({ id: sessionId, data: { entries: entriesToSave } }, {
+
+    saveMutate({ id: sessionId, data: { entries: entriesToSave } }, {
       onSuccess: () => {
         setSaveStatus("saved");
-        lastSavedRef.current = payloadString;
         setTimeout(() => setSaveStatus("idle"), 2000);
-        
-        // Mark as clean locally
+
+        // Mark as clean locally (copy entries instead of mutating them in place,
+        // since the mutated objects are also referenced by debouncedDrafts)
         setDrafts(prev => {
           const next = { ...prev };
           dirtyEntries.forEach(d => {
-            if (next[d.learnerId]) next[d.learnerId]._isDirty = false;
+            const existing = next[d.learnerId];
+            if (existing) next[d.learnerId] = { ...existing, _isDirty: false };
           });
           return next;
         });
@@ -108,9 +116,14 @@ export default function RegisterPage() {
           });
           return { ...old, entries: newEntries };
         });
+      },
+      onError: () => {
+        // Allow retry on the next debounce tick instead of getting stuck.
+        lastSavedRef.current = "";
+        setSaveStatus("idle");
       }
     });
-  }, [debouncedDrafts, sessionId, saveMutation, register, queryClient]);
+  }, [debouncedDrafts, sessionId, saveMutate, queryClient]);
 
   const updateDraft = (learnerId: number, field: keyof DraftEntry, value: any) => {
     setDrafts(prev => {
