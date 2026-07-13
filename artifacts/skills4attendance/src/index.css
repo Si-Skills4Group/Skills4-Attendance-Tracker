@@ -68,7 +68,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* LIGHT MODE - Authoritative Indigo/Navy Education Theme */
+/* LIGHT MODE - Skills4Group brand theme (vivid indigo-violet on near-black navy sidebar) */
 :root {
   --button-outline: rgba(0, 0, 0, 0.1);
   --badge-outline: rgba(0, 0, 0, 0.05);
@@ -76,58 +76,58 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
-  /* Deep slate/blue-gray background for reduced eye strain during long use */
-  --background: 210 40% 98%; 
-  --foreground: 222 47% 15%;
+  /* Cool, faintly violet-tinted off-white background */
+  --background: 250 40% 98.5%;
+  --foreground: 252 35% 12%;
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 222 47% 25%;
+  --border: 248 25% 91%;
+  --input: 248 25% 91%;
+  --ring: 244 72% 56%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 15%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 252 35% 12%;
+  --card-border: 248 25% 91%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 15%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 252 35% 12%;
+  --popover-border: 248 25% 91%;
 
-  /* Primary: Deep Authoritative Indigo */
-  --primary: 226 50% 28%;
+  /* Primary: Skills4Group indigo-violet (from brand site's CTA/link colour) */
+  --primary: 244 72% 56%;
   --primary-foreground: 0 0% 100%;
 
-  /* Secondary: Soft Slate Blue */
-  --secondary: 214 32% 91%;
-  --secondary-foreground: 222 47% 15%;
+  /* Secondary: Soft violet-gray */
+  --secondary: 248 25% 93%;
+  --secondary-foreground: 252 35% 12%;
 
-  /* Muted: Very soft gray for subtle backgrounds */
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  /* Muted: Very soft violet-gray for subtle backgrounds */
+  --muted: 250 30% 96%;
+  --muted-foreground: 252 15% 46%;
 
-  /* Accent: Slightly warmer subtle highlight */
-  --accent: 210 40% 96%;
-  --accent-foreground: 222 47% 15%;
+  /* Accent: Light indigo tint highlight */
+  --accent: 244 60% 95%;
+  --accent-foreground: 244 72% 40%;
 
   /* Destructive: Soft but clear Red */
   --destructive: 350 80% 55%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Sidebar: Deep Navy, same as primary roughly */
-  --sidebar: 226 50% 28%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 226 50% 20%;
-  --sidebar-primary: 0 0% 100%;
-  --sidebar-primary-foreground: 226 50% 28%;
-  --sidebar-accent: 226 50% 35%;
+  /* Sidebar: Near-black navy from the brand's dark hero/nav treatment */
+  --sidebar: 252 41% 8%;
+  --sidebar-foreground: 250 40% 96%;
+  --sidebar-border: 252 35% 16%;
+  --sidebar-primary: 244 72% 56%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 251 48% 16%;
   --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-ring: 214 32% 91%;
+  --sidebar-ring: 244 72% 56%;
 
-  /* Charts */
-  --chart-1: 226 50% 28%;
-  --chart-2: 200 40% 45%;
-  --chart-3: 150 40% 45%;
-  --chart-4: 30 60% 55%;
-  --chart-5: 280 40% 50%;
+  /* Charts: indigo, cyan and magenta pull from the brand's neon hero gradient */
+  --chart-1: 244 72% 56%;
+  --chart-2: 197 72% 56%;
+  --chart-3: 305 48% 47%;
+  --chart-4: 150 40% 45%;
+  --chart-5: 30 60% 55%;
 
   --app-font-sans: 'Plus Jakarta Sans', sans-serif;
   --app-font-serif: Georgia, serif;
@@ -135,14 +135,14 @@
   
   --radius: 0.5rem;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(226 50% 28% / 0);
-  --shadow-xs: 0px 2px 0px 0px hsl(226 50% 28% / 0);
-  --shadow-sm: 0px 2px 0px 0px hsl(226 50% 28% / 0), 0px 1px 2px -1px hsl(226 50% 28% / 0);
-  --shadow: 0px 2px 0px 0px hsl(226 50% 28% / 0.05), 0px 1px 2px -1px hsl(226 50% 28% / 0.05);
-  --shadow-md: 0px 2px 0px 0px hsl(226 50% 28% / 0.05), 0px 2px 4px -1px hsl(226 50% 28% / 0.05);
-  --shadow-lg: 0px 2px 0px 0px hsl(226 50% 28% / 0.05), 0px 4px 6px -1px hsl(226 50% 28% / 0.05);
-  --shadow-xl: 0px 2px 0px 0px hsl(226 50% 28% / 0.05), 0px 8px 10px -1px hsl(226 50% 28% / 0.05);
-  --shadow-2xl: 0px 2px 0px 0px hsl(226 50% 28% / 0.05);
+  --shadow-2xs: 0px 2px 0px 0px hsl(244 72% 56% / 0);
+  --shadow-xs: 0px 2px 0px 0px hsl(244 72% 56% / 0);
+  --shadow-sm: 0px 2px 0px 0px hsl(244 72% 56% / 0), 0px 1px 2px -1px hsl(244 72% 56% / 0);
+  --shadow: 0px 2px 0px 0px hsl(244 72% 56% / 0.05), 0px 1px 2px -1px hsl(244 72% 56% / 0.05);
+  --shadow-md: 0px 2px 0px 0px hsl(244 72% 56% / 0.05), 0px 2px 4px -1px hsl(244 72% 56% / 0.05);
+  --shadow-lg: 0px 2px 0px 0px hsl(244 72% 56% / 0.05), 0px 4px 6px -1px hsl(244 72% 56% / 0.05);
+  --shadow-xl: 0px 2px 0px 0px hsl(244 72% 56% / 0.05), 0px 8px 10px -1px hsl(244 72% 56% / 0.05);
+  --shadow-2xl: 0px 2px 0px 0px hsl(244 72% 56% / 0.05);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -163,50 +163,51 @@
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
 
-  --background: 226 50% 10%;
-  --foreground: 210 40% 98%;
+  /* Near-black navy, matching the Skills4Group dark hero treatment */
+  --background: 252 41% 7%;
+  --foreground: 250 40% 96%;
 
-  --border: 226 30% 20%;
-  --input: 226 30% 20%;
-  --ring: 226 50% 45%;
+  --border: 251 35% 18%;
+  --input: 251 35% 18%;
+  --ring: 244 78% 64%;
 
-  --card: 226 40% 14%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 226 30% 20%;
+  --card: 251 48% 12%;
+  --card-foreground: 250 40% 96%;
+  --card-border: 251 35% 18%;
 
-  --popover: 226 40% 14%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 226 30% 20%;
+  --popover: 251 48% 12%;
+  --popover-foreground: 250 40% 96%;
+  --popover-border: 251 35% 18%;
 
-  --primary: 226 50% 45%;
+  --primary: 244 78% 64%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 226 30% 20%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 251 35% 18%;
+  --secondary-foreground: 250 40% 96%;
 
-  --muted: 226 30% 16%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 251 35% 15%;
+  --muted-foreground: 250 15% 65%;
 
-  --accent: 226 30% 20%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 251 35% 18%;
+  --accent-foreground: 250 40% 96%;
 
   --destructive: 350 70% 50%;
   --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 226 40% 12%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 226 30% 16%;
-  --sidebar-primary: 226 50% 45%;
+  --sidebar: 252 45% 5%;
+  --sidebar-foreground: 250 40% 96%;
+  --sidebar-border: 251 35% 14%;
+  --sidebar-primary: 244 78% 64%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 226 30% 20%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 226 50% 45%;
+  --sidebar-accent: 251 40% 14%;
+  --sidebar-accent-foreground: 250 40% 96%;
+  --sidebar-ring: 244 78% 64%;
 
-  --chart-1: 226 50% 45%;
-  --chart-2: 200 40% 55%;
-  --chart-3: 150 40% 50%;
-  --chart-4: 30 60% 60%;
-  --chart-5: 280 40% 60%;
+  --chart-1: 244 78% 64%;
+  --chart-2: 197 72% 60%;
+  --chart-3: 305 55% 60%;
+  --chart-4: 150 40% 55%;
+  --chart-5: 30 60% 60%;
 }
 
 @layer base {
