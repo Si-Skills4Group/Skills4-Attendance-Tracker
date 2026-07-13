@@ -122,11 +122,15 @@ router.get(
 
 router.get(
   "/reports/tutor/:id",
-  requireAdmin,
+  requireAuth,
   async (req, res): Promise<void> => {
     const params = GetTutorReportParams.safeParse(req.params);
     if (!params.success) {
       res.status(400).json({ error: params.error.message });
+      return;
+    }
+    if (req.session.role === "tutor" && req.session.tutorId !== params.data.id) {
+      res.status(403).json({ error: "Not allowed to view this tutor's report" });
       return;
     }
 
@@ -222,7 +226,7 @@ router.get(
 
 router.get(
   "/reports/export",
-  requireAdmin,
+  requireAuth,
   async (req, res): Promise<void> => {
     const parsed = ExportReportQueryParams.safeParse(req.query);
     if (!parsed.success) {
@@ -231,6 +235,39 @@ router.get(
     }
 
     const { reportType, entityId, programme } = parsed.data;
+
+    // Tutors may only export their own tutor report or a cohort/learner that
+    // belongs to them. Organisation-wide and programme exports remain admin-only.
+    if (req.session.role === "tutor") {
+      if (reportType === "tutor") {
+        if (entityId !== req.session.tutorId) {
+          res.status(403).json({ error: "Not allowed to export this tutor's report" });
+          return;
+        }
+      } else if (reportType === "cohort" && entityId) {
+        const [cohort] = await db
+          .select({ tutorId: cohortsTable.tutorId })
+          .from(cohortsTable)
+          .where(eq(cohortsTable.id, entityId));
+        if (!cohort || cohort.tutorId !== req.session.tutorId) {
+          res.status(403).json({ error: "Not allowed to export this cohort's report" });
+          return;
+        }
+      } else if (reportType === "learner" && entityId) {
+        const [learner] = await db
+          .select({ tutorId: learnersTable.tutorId })
+          .from(learnersTable)
+          .where(eq(learnersTable.id, entityId));
+        if (!learner || learner.tutorId !== req.session.tutorId) {
+          res.status(403).json({ error: "Not allowed to export this learner's report" });
+          return;
+        }
+      } else {
+        res.status(403).json({ error: "Administrator access required" });
+        return;
+      }
+    }
+
     const dateFromStr = parsed.data.dateFrom ? toDateOnly(parsed.data.dateFrom) : undefined;
     const dateToStr = parsed.data.dateTo ? toDateOnly(parsed.data.dateTo) : undefined;
     let rows: Record<string, unknown>[] = [];

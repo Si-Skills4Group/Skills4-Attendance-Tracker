@@ -2,6 +2,8 @@ import * as React from "react";
 import { 
   useGetOrganisationReport,
   useGetProgrammeReport,
+  useGetTutorReport,
+  useGetCurrentUser,
   useListCohorts,
   useListTutors,
   exportReport
@@ -54,17 +56,45 @@ export default function ReportsPage() {
   const [dateFrom, setDateFrom] = React.useState<string>("");
   const [dateTo, setDateTo] = React.useState<string>("");
   const [isExporting, setIsExporting] = React.useState(false);
-  
-  // Org Report
-  const { data: orgReport, isLoading: loadOrg } = useGetOrganisationReport({ dateFrom, dateTo });
-  
-  // Programme Report
-  const { data: progReport, isLoading: loadProg } = useGetProgrammeReport({ dateFrom, dateTo });
 
-  const handleExport = async (reportType: "organisation"|"programme", entityId?: number) => {
+  const { data: currentUser } = useGetCurrentUser();
+  const isTutor = currentUser?.role === "tutor";
+  const tutorId = currentUser?.tutorId ?? undefined;
+
+  // Org-wide report: admin only (the backend rejects this for tutors).
+  const { data: orgReport, isLoading: loadOrgReport } = useGetOrganisationReport(
+    { dateFrom, dateTo },
+    { query: { enabled: !!currentUser && !isTutor } as any },
+  );
+
+  // Scoped report for tutors: their own cohorts only.
+  const { data: tutorReport, isLoading: loadTutorReport } = useGetTutorReport(
+    tutorId as number,
+    { query: { enabled: !!tutorId } as any },
+  );
+
+  const loadOrg = isTutor ? loadTutorReport : loadOrgReport;
+  const summaryTotals = isTutor ? tutorReport?.totals : orgReport?.totals;
+  const cohortBreakdown = isTutor ? tutorReport?.cohortBreakdown : orgReport?.cohortBreakdown;
+
+  // Programme Report: admin only (organisation-wide comparison, not relevant per-tutor).
+  const { data: progReport, isLoading: loadProg } = useGetProgrammeReport(
+    { dateFrom, dateTo },
+    { query: { enabled: !isTutor } as any },
+  );
+
+  const handleExport = async (reportType: "organisation"|"programme"|"tutor", entityId?: number) => {
     setIsExporting(true);
     try {
-      const data = await exportReport({ reportType, dateFrom, dateTo, entityId } as any);
+      // Only send dateFrom/dateTo when actually set - the backend's date
+      // query params expect a real date value, not an empty string, and
+      // reject "" with a 400.
+      const data = await exportReport({
+        reportType,
+        entityId,
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
+      } as any);
       const blob = new Blob([data.csv], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -88,7 +118,9 @@ export default function ReportsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 page-transition-enter">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Reporting & Analytics</h1>
-          <p className="text-muted-foreground mt-1">Exportable attendance data across the organisation.</p>
+          <p className="text-muted-foreground mt-1">
+            {isTutor ? "Exportable attendance data for your cohorts." : "Exportable attendance data across the organisation."}
+          </p>
         </div>
       </div>
 
@@ -107,22 +139,29 @@ export default function ReportsPage() {
       </Card>
 
       <Tabs defaultValue="organisation" className="page-transition-enter stagger-2">
-        <TabsList className="grid w-full grid-cols-2 max-w-md mb-6">
-          <TabsTrigger value="organisation">Organisation Summary</TabsTrigger>
-          <TabsTrigger value="programmes">By Programme</TabsTrigger>
+        <TabsList className={`grid w-full max-w-md mb-6 ${isTutor ? "grid-cols-1" : "grid-cols-2"}`}>
+          <TabsTrigger value="organisation">{isTutor ? "My Cohorts Summary" : "Organisation Summary"}</TabsTrigger>
+          {!isTutor && <TabsTrigger value="programmes">By Programme</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="organisation" className="space-y-6">
           {loadOrg ? <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div> : (
             <>
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold flex items-center gap-2"><Building2 className="w-5 h-5" /> Organisation Totals</h2>
-                <Button variant="outline" size="sm" onClick={() => handleExport("organisation")} disabled={isExporting}>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Building2 className="w-5 h-5" /> {isTutor ? "My Totals" : "Organisation Totals"}
+                </h2>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => isTutor ? handleExport("tutor", tutorId) : handleExport("organisation")}
+                  disabled={isExporting || (isTutor && !tutorId)}
+                >
                   {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />} Export CSV
                 </Button>
               </div>
               
-              <TotalsCards totals={orgReport?.totals} />
+              <TotalsCards totals={summaryTotals} />
               
               <Card className="shadow-sm">
                 <CardHeader>
@@ -141,7 +180,7 @@ export default function ReportsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {orgReport?.cohortBreakdown.map(c => (
+                      {cohortBreakdown?.map(c => (
                         <TableRow key={c.cohortId}>
                           <TableCell className="font-medium">{c.cohortName}</TableCell>
                           <TableCell className="text-right">{c.totals.sessionCount}</TableCell>
@@ -151,6 +190,9 @@ export default function ReportsPage() {
                           <TableCell className="text-right font-bold font-mono">{c.totals.attendancePercentage.toFixed(1)}%</TableCell>
                         </TableRow>
                       ))}
+                      {cohortBreakdown?.length === 0 && (
+                        <TableRow><TableCell colSpan={6} className="text-center p-8 text-muted-foreground">No data available for this range.</TableCell></TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -159,7 +201,7 @@ export default function ReportsPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="programmes" className="space-y-6">
+        {!isTutor && <TabsContent value="programmes" className="space-y-6">
           {loadProg ? <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div> : (
             <>
               <div className="flex justify-between items-center">
@@ -198,7 +240,7 @@ export default function ReportsPage() {
               </Card>
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );
