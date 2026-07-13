@@ -99,8 +99,8 @@ async function main() {
 
   const cohortSeeds = [
     {
-      name: "Digital Marketing L3 - Cohort A",
-      programme: "Digital Marketing",
+      name: "Pharmacy Technician L3 - Cohort A",
+      programme: "Pharmacy Technician",
       level: "Level 3",
       deliveryDay: "monday" as const,
       sessionStartTime: "09:00",
@@ -108,9 +108,9 @@ async function main() {
       tutorId: tutors[0]!.id,
     },
     {
-      name: "Business Admin L2 - Cohort B",
-      programme: "Business Administration",
-      level: "Level 2",
+      name: "Dental Assistant L3 - Cohort B",
+      programme: "Dental Assistant",
+      level: "Level 3",
       deliveryDay: "wednesday" as const,
       sessionStartTime: "13:00",
       sessionEndTime: "16:00",
