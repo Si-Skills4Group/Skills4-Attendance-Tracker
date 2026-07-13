@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import {
   db,
   learnersTable,
@@ -58,7 +58,9 @@ const getLowAttendanceLearners = async (
 };
 
 const getSessionsAwaitingCompletion = async (scopeTutorId?: number) => {
-  const filters = [];
+  // Only sessions today or in the past can be "awaiting completion" - future
+  // sessions haven't happened yet, so an incomplete register isn't a problem.
+  const filters = [lte(attendanceSessionsTable.sessionDate, isoDaysAgo(0))];
   if (scopeTutorId) filters.push(eq(cohortsTable.tutorId, scopeTutorId));
 
   const sessions = await db
