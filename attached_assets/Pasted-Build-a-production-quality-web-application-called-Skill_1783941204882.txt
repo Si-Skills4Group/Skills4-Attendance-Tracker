@@ -1,0 +1,485 @@
+Build a production-quality web application called **Skills4Attendance** for Skills4Group.
+
+The application will replace spreadsheets currently used to record apprentice attendance and allocate learners to tutors and cohorts.
+
+## Technology
+
+Use the following stack:
+
+* React with TypeScript
+* Tailwind CSS
+* Node.js and Express with TypeScript
+* PostgreSQL
+* Prisma ORM
+* React Query or an equivalent structured data-fetching approach
+* Zod for server-side and client-side validation
+* Secure session-based authentication
+* Vitest for unit and integration testing
+* Playwright for end-to-end testing
+
+Use a clear separation between:
+
+* Frontend components
+* Backend routes and services
+* Database access
+* Authentication and permissions
+* Business logic
+* Reporting calculations
+
+The application must be capable of being migrated from Replit to Microsoft Azure without major redevelopment.
+
+## Users and permissions
+
+Create two initial roles:
+
+### Administrator
+
+Administrators can:
+
+* View all tutors, learners and cohorts
+* Create and edit tutors
+* Create and edit learners
+* Create and edit cohorts
+* Allocate learners to tutors and cohorts
+* Transfer learners between cohorts
+* Upload learners using CSV
+* View all attendance records
+* Edit historical attendance
+* View reports for all tutors, cohorts and learners
+* View the audit trail
+
+### Tutor
+
+Tutors can:
+
+* View only cohorts assigned to them
+* View only learners within their assigned cohorts
+* Record attendance for their own cohorts
+* Edit attendance for their own cohorts
+* View reports for their own cohorts and learners
+* Search and filter learners within their allocated cohorts
+
+Tutors must not be able to access another tutor’s cohorts or learners by changing a URL, API request or record identifier.
+
+All permissions must be enforced on the backend, not only hidden in the frontend.
+
+## Core data model
+
+Create database models for:
+
+### User
+
+Include:
+
+* ID
+* First name
+* Last name
+* Email
+* Password hash
+* Role
+* Active status
+* Created date
+* Updated date
+
+Design authentication so that local authentication can later be replaced by or extended with Microsoft Entra ID.
+
+### Tutor
+
+Include:
+
+* ID
+* User ID
+* Employee reference
+* Active status
+* Created date
+* Updated date
+
+### Learner
+
+Include:
+
+* ID
+* Learner reference
+* ULN where available
+* First name
+* Last name
+* Email
+* Employer
+* Apprenticeship programme
+* Apprenticeship level
+* Start date
+* Planned end date
+* Active, withdrawn, completed or paused status
+* Current tutor
+* Current cohort
+* Created date
+* Updated date
+
+### Cohort
+
+Include:
+
+* ID
+* Cohort name
+* Apprenticeship programme
+* Apprenticeship level
+* Tutor
+* Delivery day
+* Session start time
+* Session end time
+* Cohort start date
+* Cohort end date where known
+* Active status
+* Created date
+* Updated date
+
+### Learner allocation history
+
+Include:
+
+* ID
+* Learner
+* Previous tutor
+* New tutor
+* Previous cohort
+* New cohort
+* Effective date
+* Transfer reason
+* Changed by
+* Changed date
+
+Do not overwrite allocation history when a learner changes cohort or tutor.
+
+### Attendance session
+
+Include:
+
+* ID
+* Cohort
+* Tutor
+* Session date
+* Planned start time
+* Planned end time
+* Planned duration in hours
+* Session title or module
+* Session notes
+* Created by
+* Created date
+* Updated date
+
+Prevent duplicate sessions for the same cohort, date and scheduled time unless explicitly confirmed by an administrator.
+
+### Attendance record
+
+Include:
+
+* ID
+* Attendance session
+* Learner
+* Attendance status
+* Hours attended
+* Minutes late
+* Attendance notes
+* Last edited by
+* Created date
+* Updated date
+
+Attendance statuses must include:
+
+* Present
+* Absent – authorised
+* Absent – unauthorised
+* Late
+* Not expected
+* Withdrawn
+
+Store attendance status as controlled values rather than unrestricted text.
+
+### Audit log
+
+Include:
+
+* ID
+* User
+* Action
+* Entity type
+* Entity ID
+* Previous value
+* New value
+* Timestamp
+* IP address where available
+
+Audit important actions including:
+
+* Attendance creation
+* Attendance editing
+* Learner allocation
+* Learner transfer
+* Cohort changes
+* User changes
+* CSV uploads
+
+## Application pages
+
+Create:
+
+1. Login page
+2. Dashboard
+3. My Cohorts page
+4. Cohort detail page
+5. Attendance register page
+6. Learner management page
+7. Learner detail page
+8. Tutor management page
+9. Cohort management page
+10. Learner allocation page
+11. CSV learner upload page
+12. Reports page
+13. Audit log page
+14. Administration settings page
+
+## Dashboard
+
+The administrator dashboard must show:
+
+* Total active learners
+* Total active tutors
+* Total active cohorts
+* Attendance percentage for the current week
+* Attendance percentage for the current month
+* Sessions awaiting attendance completion
+* Recently edited attendance
+* Learners with low attendance
+
+The tutor dashboard must show:
+
+* Tutor’s assigned cohorts
+* Number of learners in each cohort
+* Next scheduled session
+* Sessions awaiting attendance completion
+* Attendance percentage for each cohort
+* Learners with attendance below a configurable threshold
+
+## Attendance workflow
+
+A tutor must be able to:
+
+1. Select one of their cohorts
+2. Select or create a session date
+3. See all learners expected in that cohort on that date
+4. Mark each learner as present, authorised absence, unauthorised absence, late, not expected or withdrawn
+5. Enter hours attended
+6. Enter minutes late where relevant
+7. Add optional notes
+8. Apply a status to multiple learners
+9. Save the entire register in one action
+10. Return later and edit the register
+
+Provide a “Mark all present” action, but require the tutor to confirm before applying it.
+
+Hours attended must:
+
+* Accept decimal hours to two decimal places
+* Not be negative
+* Not normally exceed the planned session duration
+* Display a warning if they exceed the planned duration
+* Require a reason if an administrator chooses to override the warning
+
+When a learner is marked absent, hours attended should default to zero.
+
+When a learner is marked late, minutes late must be captured.
+
+Display a clear unsaved-changes warning before leaving an edited register.
+
+## Attendance calculations
+
+Create reusable backend services for calculating attendance.
+
+Calculate:
+
+* Attendance percentage by learner
+* Attendance percentage by cohort
+* Attendance percentage by tutor
+* Attendance percentage for a selected date range
+* Total scheduled hours
+* Total attended hours
+* Authorised absence hours
+* Unauthorised absence hours
+* Number of late sessions
+
+Use the primary hours-based formula:
+
+Attendance percentage =
+total attended hours divided by total expected hours multiplied by 100.
+
+Exclude “Not expected” and sessions occurring after a learner’s withdrawal date from expected hours.
+
+Do not count authorised absence as attended time, but report it separately.
+
+Keep all calculation logic in central backend services so it can be reused by future Power BI integration.
+
+## Learner allocation
+
+Create an administrator-only allocation page.
+
+The page must:
+
+* Display unallocated learners
+* Display learners grouped by tutor and cohort
+* Support learner search and filtering
+* Allow allocation using dropdown selection
+* Optionally support drag and drop where accessible
+* Allow multiple learners to be allocated in bulk
+* Record every change in allocation history
+* Require an effective date
+* Require a transfer reason when moving an existing learner
+* Warn if the destination cohort is inactive
+* Prevent allocation to an inactive tutor
+
+Do not make drag and drop the only method because the application must remain accessible.
+
+## CSV upload
+
+Create a guided learner CSV upload process.
+
+The process must:
+
+1. Allow an administrator to download a template
+2. Accept CSV files only
+3. Preview records before import
+4. Validate required columns
+5. Display row-level validation errors
+6. Identify possible duplicates
+7. Allow valid rows to be imported while invalid rows are rejected
+8. Display an import summary
+9. Record the import in the audit log
+
+Use learner reference as the primary matching field. Use email and ULN as secondary duplicate indicators.
+
+Do not silently overwrite existing learners.
+
+## Reports
+
+Create reports for:
+
+* Individual learner attendance
+* Cohort attendance
+* Tutor attendance
+* Organisation-wide attendance
+* Attendance by apprenticeship programme
+* Authorised and unauthorised absence
+* Late attendance
+* Attendance hours
+* Learner allocation history
+
+Reports must support:
+
+* Date filtering
+* Tutor filtering
+* Cohort filtering
+* Programme filtering
+* Learner status filtering
+* On-screen totals
+* CSV export
+
+Design reporting services so that Power BI can later consume equivalent data from the database or an API.
+
+## Security
+
+Implement:
+
+* Password hashing using a recognised secure hashing library
+* Secure HTTP-only cookies
+* Protection against common injection attacks
+* Server-side validation
+* Role-based permissions on every protected API route
+* Rate limiting on login
+* Generic login error messages
+* Environment variables for secrets
+* No secrets committed to source control
+* CSRF protection where applicable
+* Safe file-upload limits
+* Audit logging
+
+Create seed accounts for development only.
+
+Development credentials must be clearly identified and must not be used in production.
+
+## User interface
+
+The interface should:
+
+* Be modern, professional and appropriate for an apprenticeship training organisation
+* Use Skills4Group branding placeholders
+* Work on desktop, tablet and mobile
+* Meet WCAG 2.1 AA principles where practical
+* Use clear status badges
+* Use readable tables
+* Include loading, empty and error states
+* Include confirmation dialogs for destructive actions
+* Avoid information-dense screens
+* Use progressive disclosure for secondary information
+
+Do not use placeholder buttons that do nothing.
+
+## Performance
+
+Aim for a typical page load below three seconds.
+
+Use:
+
+* Pagination for large learner lists
+* Indexed database fields
+* Efficient API queries
+* Server-side filtering where appropriate
+* Loading states
+* Avoid unnecessary repeated requests
+
+## Future integration preparation
+
+Do not build Bud integration or Entra ID integration in this phase.
+
+However:
+
+* Add an external system ID field to relevant records
+* Keep integration logic separate from application logic
+* Create an integration service interface
+* Document where Bud synchronisation will connect
+* Document how Entra ID authentication will replace or extend local login
+* Avoid tightly coupling authentication to local passwords
+* Use environment variables for future integration settings
+
+Also prepare the architecture for:
+
+* Automated learner synchronisation
+* Attendance notifications and escalation
+* Shutdown-week calendars
+* Off-the-Job integration
+* Employer access
+* Learner self-service
+* Power BI dashboards
+
+## Development process
+
+Work incrementally.
+
+Before writing large amounts of code:
+
+1. Produce the proposed folder structure
+2. Produce the database entity relationship summary
+3. Produce the main user journeys
+4. Produce a delivery checklist
+5. Identify any assumptions
+
+Then implement the application in phases.
+
+After each phase:
+
+* Run the application
+* Fix TypeScript errors
+* Run tests
+* Confirm existing functionality still works
+* Summarise what was added
+* List anything still incomplete
+
+Do not replace functioning modules unnecessarily when adding new features.

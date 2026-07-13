@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Skills4Attendance API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: dashboard
+  - name: tutors
+  - name: learners
+  - name: cohorts
+  - name: allocation
+  - name: attendance
+  - name: reports
+  - name: audit
+  - name: settings
 paths:
   /healthz:
     get:
@@ -24,13 +33,1617 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ---------- Auth ----------
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      responses:
+        "204":
+          description: Logged out
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---------- Dashboard ----------
+  /dashboard/admin:
+    get:
+      operationId: getAdminDashboard
+      tags: [dashboard]
+      responses:
+        "200":
+          description: Admin dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDashboard"
+  /dashboard/tutor:
+    get:
+      operationId: getTutorDashboard
+      tags: [dashboard]
+      responses:
+        "200":
+          description: Tutor dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorDashboard"
+
+  # ---------- Tutors ----------
+  /tutors:
+    get:
+      operationId: listTutors
+      tags: [tutors]
+      parameters:
+        - name: active
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: List of tutors
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tutor" }
+    post:
+      operationId: createTutor
+      tags: [tutors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TutorInput"
+      responses:
+        "201":
+          description: Tutor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tutor"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tutors/{id}:
+    get:
+      operationId: getTutor
+      tags: [tutors]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Tutor detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tutor"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateTutor
+      tags: [tutors]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TutorUpdate"
+      responses:
+        "200":
+          description: Tutor updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tutor"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ---------- Learners ----------
+  /learners:
+    get:
+      operationId: listLearners
+      tags: [learners]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/LearnerStatus" }
+        - name: programme
+          in: query
+          schema: { type: string }
+        - name: tutorId
+          in: query
+          schema: { type: integer }
+        - name: cohortId
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated learner list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerListResponse"
+    post:
+      operationId: createLearner
+      tags: [learners]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearnerInput"
+      responses:
+        "201":
+          description: Learner created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Learner"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learners/csv-template:
+    get:
+      operationId: getLearnerCsvTemplate
+      tags: [learners]
+      responses:
+        "200":
+          description: CSV template content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvContent"
+  /learners/csv-preview:
+    post:
+      operationId: previewLearnerCsv
+      tags: [learners]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvContent"
+      responses:
+        "200":
+          description: Preview of CSV validation results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvPreviewResult"
+  /learners/csv-import:
+    post:
+      operationId: importLearnerCsv
+      tags: [learners]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvImportInput"
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvImportResult"
+  /learners/{id}:
+    get:
+      operationId: getLearner
+      tags: [learners]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Learner detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Learner"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateLearner
+      tags: [learners]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearnerUpdate"
+      responses:
+        "200":
+          description: Learner updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Learner"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learners/{id}/allocation-history:
+    get:
+      operationId: getLearnerAllocationHistory
+      tags: [learners]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Allocation history for a learner
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AllocationHistoryEntry" }
+
+  # ---------- Cohorts ----------
+  /cohorts:
+    get:
+      operationId: listCohorts
+      tags: [cohorts]
+      parameters:
+        - name: tutorId
+          in: query
+          schema: { type: integer }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - name: programme
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of cohorts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Cohort" }
+    post:
+      operationId: createCohort
+      tags: [cohorts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CohortInput"
+      responses:
+        "201":
+          description: Cohort created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}:
+    get:
+      operationId: getCohort
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cohort detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CohortDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateCohort
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CohortUpdate"
+      responses:
+        "200":
+          description: Cohort updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/learners:
+    get:
+      operationId: getCohortLearners
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Learners in a cohort
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Learner" }
+
+  # ---------- Allocation ----------
+  /allocation/unallocated-learners:
+    get:
+      operationId: listUnallocatedLearners
+      tags: [allocation]
+      responses:
+        "200":
+          description: Learners without a tutor or cohort
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Learner" }
+  /allocation/by-tutor:
+    get:
+      operationId: getAllocationByTutor
+      tags: [allocation]
+      responses:
+        "200":
+          description: Learners grouped by tutor and cohort
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TutorAllocationGroup" }
+  /allocation/allocate:
+    post:
+      operationId: allocateLearners
+      tags: [allocation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AllocationInput"
+      responses:
+        "200":
+          description: Allocation applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllocationResult"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /allocation/history:
+    get:
+      operationId: listAllocationHistory
+      tags: [allocation]
+      parameters:
+        - name: learnerId
+          in: query
+          schema: { type: integer }
+        - name: cohortId
+          in: query
+          schema: { type: integer }
+        - name: tutorId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Allocation history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AllocationHistoryEntry" }
+
+  # ---------- Attendance ----------
+  /attendance/sessions:
+    get:
+      operationId: listAttendanceSessions
+      tags: [attendance]
+      parameters:
+        - name: cohortId
+          in: query
+          schema: { type: integer }
+        - name: tutorId
+          in: query
+          schema: { type: integer }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Attendance sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AttendanceSession" }
+    post:
+      operationId: createAttendanceSession
+      tags: [attendance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceSessionInput"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "409":
+          description: Duplicate session exists, confirm to override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}:
+    get:
+      operationId: getAttendanceSession
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Attendance register for a session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRegister"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateAttendanceSession
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceSessionUpdate"
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/register:
+    put:
+      operationId: saveAttendanceRegister
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceRegisterInput"
+      responses:
+        "200":
+          description: Register saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRegister"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/mark-all-present:
+    post:
+      operationId: markAllPresent
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: All learners marked present
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRegister"
+
+  # ---------- Reports ----------
+  /reports/learner/{id}:
+    get:
+      operationId: getLearnerReport
+      tags: [reports]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Learner attendance report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerReport"
+  /reports/cohort/{id}:
+    get:
+      operationId: getCohortReport
+      tags: [reports]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cohort attendance report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CohortReport"
+  /reports/tutor/{id}:
+    get:
+      operationId: getTutorReport
+      tags: [reports]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Tutor attendance report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorReport"
+  /reports/organisation:
+    get:
+      operationId: getOrganisationReport
+      tags: [reports]
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: programme
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Organisation-wide attendance report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganisationReport"
+  /reports/programme:
+    get:
+      operationId: getProgrammeReport
+      tags: [reports]
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Attendance breakdown by programme
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProgrammeAttendanceRow" }
+  /reports/export:
+    get:
+      operationId: exportReport
+      tags: [reports]
+      parameters:
+        - name: reportType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [learner, cohort, tutor, organisation, programme, allocation-history]
+        - name: entityId
+          in: query
+          schema: { type: integer }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: tutorId
+          in: query
+          schema: { type: integer }
+        - name: cohortId
+          in: query
+          schema: { type: integer }
+        - name: programme
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/LearnerStatus" }
+      responses:
+        "200":
+          description: CSV export content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvContent"
+
+  # ---------- Audit ----------
+  /audit-log:
+    get:
+      operationId: listAuditLog
+      tags: [audit]
+      parameters:
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - name: userId
+          in: query
+          schema: { type: integer }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated audit log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+
+  # ---------- Settings ----------
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      responses:
+        "200":
+          description: Application settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+      required: [status]
 
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    UserRole:
+      type: string
+      enum: [admin, tutor]
+
+    LearnerStatus:
+      type: string
+      enum: [active, withdrawn, completed, paused]
+
+    AttendanceStatus:
+      type: string
+      enum:
+        - present
+        - absent_authorised
+        - absent_unauthorised
+        - late
+        - not_expected
+        - withdrawn
+
+    DeliveryDay:
+      type: string
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+
+    AuthUser:
+      type: object
+      required: [id, firstName, lastName, email, role]
+      properties:
+        id: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/UserRole" }
+        tutorId: { type: ["integer", "null"] }
+
+    Tutor:
+      type: object
+      required:
+        [
+          id,
+          userId,
+          firstName,
+          lastName,
+          email,
+          employeeRef,
+          active,
+          externalSystemId,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: integer }
+        userId: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        employeeRef: { type: string }
+        active: { type: boolean }
+        externalSystemId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TutorInput:
+      type: object
+      required: [firstName, lastName, email, password, employeeRef]
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: string, minLength: 1 }
+        password: { type: string, minLength: 8 }
+        employeeRef: { type: string, minLength: 1 }
+        active: { type: boolean, default: true }
+        externalSystemId: { type: string }
+
+    TutorUpdate:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: string, minLength: 1 }
+        password: { type: string, minLength: 8 }
+        employeeRef: { type: string, minLength: 1 }
+        active: { type: boolean }
+        externalSystemId: { type: string }
+
+    Learner:
+      type: object
+      required:
+        [
+          id,
+          learnerRef,
+          uln,
+          firstName,
+          lastName,
+          email,
+          employer,
+          programme,
+          level,
+          startDate,
+          plannedEndDate,
+          status,
+          tutorId,
+          cohortId,
+          tutorName,
+          cohortName,
+          externalSystemId,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: integer }
+        learnerRef: { type: string }
+        uln: { type: ["string", "null"] }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: ["string", "null"] }
+        employer: { type: ["string", "null"] }
+        programme: { type: string }
+        level: { type: string }
+        startDate: { type: string, format: date }
+        plannedEndDate: { type: ["string", "null"], format: date }
+        status: { $ref: "#/components/schemas/LearnerStatus" }
+        tutorId: { type: ["integer", "null"] }
+        cohortId: { type: ["integer", "null"] }
+        tutorName: { type: ["string", "null"] }
+        cohortName: { type: ["string", "null"] }
+        externalSystemId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LearnerInput:
+      type: object
+      required: [learnerRef, firstName, lastName, programme, level, startDate]
+      properties:
+        learnerRef: { type: string, minLength: 1 }
+        uln: { type: string }
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: string, minLength: 1 }
+        employer: { type: string }
+        programme: { type: string, minLength: 1 }
+        level: { type: string, minLength: 1 }
+        startDate: { type: string, format: date }
+        plannedEndDate: { type: string, format: date }
+        status: { $ref: "#/components/schemas/LearnerStatus" }
+        tutorId: { type: "integer" }
+        cohortId: { type: "integer" }
+        externalSystemId: { type: string }
+
+    LearnerUpdate:
+      type: object
+      properties:
+        learnerRef: { type: string, minLength: 1 }
+        uln: { type: ["string", "null"] }
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string, minLength: 1 }
+        email: { type: ["string", "null"] }
+        employer: { type: ["string", "null"] }
+        programme: { type: string, minLength: 1 }
+        level: { type: string, minLength: 1 }
+        startDate: { type: string, format: date }
+        plannedEndDate: { type: ["string", "null"], format: date }
+        status: { $ref: "#/components/schemas/LearnerStatus" }
+        tutorId: { type: ["integer", "null"] }
+        cohortId: { type: ["integer", "null"] }
+        externalSystemId: { type: ["string", "null"] }
+
+    LearnerListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Learner" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    CsvContent:
+      type: object
+      required: [csv]
+      properties:
+        csv: { type: string }
+        filename: { type: string }
+
+    CsvRowError:
+      type: object
+      required: [rowNumber, message]
+      properties:
+        rowNumber: { type: integer }
+        field: { type: ["string", "null"] }
+        message: { type: string }
+
+    CsvPreviewRow:
+      type: object
+      required: [rowNumber, data, isDuplicate, errors]
+      properties:
+        rowNumber: { type: integer }
+        data:
+          type: object
+          additionalProperties: { type: string }
+        isDuplicate: { type: boolean }
+        duplicateReason: { type: ["string", "null"] }
+        errors:
+          type: array
+          items: { type: string }
+
+    CsvPreviewResult:
+      type: object
+      required: [totalRows, validRows, invalidRows, duplicateRows, rows]
+      properties:
+        totalRows: { type: integer }
+        validRows: { type: integer }
+        invalidRows: { type: integer }
+        duplicateRows: { type: integer }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/CsvPreviewRow" }
+
+    CsvImportInput:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: { type: string }
+
+    CsvImportResult:
+      type: object
+      required: [imported, skipped, errors]
+      properties:
+        imported: { type: integer }
+        skipped: { type: integer }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/CsvRowError" }
+
+    Cohort:
+      type: object
+      required:
+        [
+          id,
+          name,
+          programme,
+          level,
+          tutorId,
+          tutorName,
+          deliveryDay,
+          sessionStartTime,
+          sessionEndTime,
+          startDate,
+          endDate,
+          active,
+          externalSystemId,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        programme: { type: string }
+        level: { type: string }
+        tutorId: { type: ["integer", "null"] }
+        tutorName: { type: ["string", "null"] }
+        deliveryDay: { $ref: "#/components/schemas/DeliveryDay" }
+        sessionStartTime: { type: string }
+        sessionEndTime: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: ["string", "null"], format: date }
+        active: { type: boolean }
+        externalSystemId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CohortDetail:
+      allOf:
+        - $ref: "#/components/schemas/Cohort"
+        - type: object
+          required: [learnerCount]
+          properties:
+            learnerCount: { type: integer }
+
+    CohortInput:
+      type: object
+      required:
+        [
+          name,
+          programme,
+          level,
+          deliveryDay,
+          sessionStartTime,
+          sessionEndTime,
+          startDate,
+        ]
+      properties:
+        name: { type: string, minLength: 1 }
+        programme: { type: string, minLength: 1 }
+        level: { type: string, minLength: 1 }
+        tutorId: { type: integer }
+        deliveryDay: { $ref: "#/components/schemas/DeliveryDay" }
+        sessionStartTime: { type: string, minLength: 1 }
+        sessionEndTime: { type: string, minLength: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        active: { type: boolean, default: true }
+        externalSystemId: { type: string }
+
+    CohortUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        programme: { type: string, minLength: 1 }
+        level: { type: string, minLength: 1 }
+        tutorId: { type: ["integer", "null"] }
+        deliveryDay: { $ref: "#/components/schemas/DeliveryDay" }
+        sessionStartTime: { type: string, minLength: 1 }
+        sessionEndTime: { type: string, minLength: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: ["string", "null"], format: date }
+        active: { type: boolean }
+        externalSystemId: { type: ["string", "null"] }
+
+    AllocationHistoryEntry:
+      type: object
+      required:
+        [
+          id,
+          learnerId,
+          learnerName,
+          previousTutorId,
+          previousTutorName,
+          newTutorId,
+          newTutorName,
+          previousCohortId,
+          previousCohortName,
+          newCohortId,
+          newCohortName,
+          effectiveDate,
+          transferReason,
+          changedBy,
+          changedByName,
+          changedDate,
+        ]
+      properties:
+        id: { type: integer }
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        previousTutorId: { type: ["integer", "null"] }
+        previousTutorName: { type: ["string", "null"] }
+        newTutorId: { type: ["integer", "null"] }
+        newTutorName: { type: ["string", "null"] }
+        previousCohortId: { type: ["integer", "null"] }
+        previousCohortName: { type: ["string", "null"] }
+        newCohortId: { type: ["integer", "null"] }
+        newCohortName: { type: ["string", "null"] }
+        effectiveDate: { type: string, format: date }
+        transferReason: { type: ["string", "null"] }
+        changedBy: { type: integer }
+        changedByName: { type: string }
+        changedDate: { type: string, format: date-time }
+
+    TutorAllocationGroup:
+      type: object
+      required: [tutorId, tutorName, cohorts]
+      properties:
+        tutorId: { type: integer }
+        tutorName: { type: string }
+        cohorts:
+          type: array
+          items: { $ref: "#/components/schemas/CohortAllocationGroup" }
+
+    CohortAllocationGroup:
+      type: object
+      required: [cohortId, cohortName, learners]
+      properties:
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        learners:
+          type: array
+          items: { $ref: "#/components/schemas/Learner" }
+
+    AllocationInput:
+      type: object
+      required: [learnerIds, effectiveDate]
+      properties:
+        learnerIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+        tutorId: { type: integer }
+        cohortId: { type: integer }
+        effectiveDate: { type: string, format: date }
+        transferReason: { type: string }
+
+    AllocationResult:
+      type: object
+      required: [updated]
+      properties:
+        updated: { type: integer }
+
+    AttendanceSession:
+      type: object
+      required:
+        [
+          id,
+          cohortId,
+          cohortName,
+          tutorId,
+          tutorName,
+          sessionDate,
+          plannedStartTime,
+          plannedEndTime,
+          plannedDurationHours,
+          title,
+          notes,
+          recordedCount,
+          expectedCount,
+          createdBy,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: integer }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        tutorId: { type: integer }
+        tutorName: { type: string }
+        sessionDate: { type: string, format: date }
+        plannedStartTime: { type: string }
+        plannedEndTime: { type: string }
+        plannedDurationHours: { type: number }
+        title: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        recordedCount: { type: integer }
+        expectedCount: { type: integer }
+        createdBy: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AttendanceSessionInput:
+      type: object
+      required:
+        [
+          cohortId,
+          sessionDate,
+          plannedStartTime,
+          plannedEndTime,
+          plannedDurationHours,
+        ]
+      properties:
+        cohortId: { type: integer }
+        sessionDate: { type: string, format: date }
+        plannedStartTime: { type: string, minLength: 1 }
+        plannedEndTime: { type: string, minLength: 1 }
+        plannedDurationHours: { type: number, minimum: 0 }
+        title: { type: string }
+        notes: { type: string }
+        force: { type: boolean, default: false }
+
+    AttendanceSessionUpdate:
+      type: object
+      properties:
+        sessionDate: { type: string, format: date }
+        plannedStartTime: { type: string, minLength: 1 }
+        plannedEndTime: { type: string, minLength: 1 }
+        plannedDurationHours: { type: number, minimum: 0 }
+        title: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+
+    RegisterEntry:
+      type: object
+      required:
+        [
+          learnerId,
+          learnerName,
+          learnerRef,
+          status,
+          hoursAttended,
+          minutesLate,
+          notes,
+          overrideReason,
+          recordId,
+          lastEditedBy,
+          lastEditedByName,
+        ]
+      properties:
+        recordId: { type: ["integer", "null"] }
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+        status: { $ref: "#/components/schemas/AttendanceStatus" }
+        hoursAttended: { type: number }
+        minutesLate: { type: integer }
+        notes: { type: ["string", "null"] }
+        overrideReason: { type: ["string", "null"] }
+        lastEditedBy: { type: ["integer", "null"] }
+        lastEditedByName: { type: ["string", "null"] }
+
+    RegisterEntryInput:
+      type: object
+      required: [learnerId, status, hoursAttended, minutesLate]
+      properties:
+        learnerId: { type: integer }
+        status: { $ref: "#/components/schemas/AttendanceStatus" }
+        hoursAttended: { type: number, minimum: 0 }
+        minutesLate: { type: integer, minimum: 0 }
+        notes: { type: string }
+        overrideReason: { type: string }
+
+    AttendanceRegisterInput:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/RegisterEntryInput" }
+
+    AttendanceRegister:
+      type: object
+      required: [session, entries]
+      properties:
+        session: { $ref: "#/components/schemas/AttendanceSession" }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/RegisterEntry" }
+
+    AttendanceTotals:
+      type: object
+      required:
+        [
+          scheduledHours,
+          attendedHours,
+          authorisedAbsenceHours,
+          unauthorisedAbsenceHours,
+          lateCount,
+          sessionCount,
+          attendancePercentage,
+        ]
+      properties:
+        scheduledHours: { type: number }
+        attendedHours: { type: number }
+        authorisedAbsenceHours: { type: number }
+        unauthorisedAbsenceHours: { type: number }
+        lateCount: { type: integer }
+        sessionCount: { type: integer }
+        attendancePercentage: { type: number }
+
+    LearnerAttendanceRow:
+      type: object
+      required: [learnerId, learnerName, learnerRef, totals]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+
+    CohortAttendanceRow:
+      type: object
+      required: [cohortId, cohortName, totals]
+      properties:
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+
+    ProgrammeAttendanceRow:
+      type: object
+      required: [programme, totals]
+      properties:
+        programme: { type: string }
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+
+    LearnerReport:
+      type: object
+      required: [learner, totals]
+      properties:
+        learner: { $ref: "#/components/schemas/Learner" }
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+
+    CohortReport:
+      type: object
+      required: [cohort, totals, learnerBreakdown]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+        learnerBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerAttendanceRow" }
+
+    TutorReport:
+      type: object
+      required: [tutor, totals, cohortBreakdown]
+      properties:
+        tutor: { $ref: "#/components/schemas/Tutor" }
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+        cohortBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/CohortAttendanceRow" }
+
+    OrganisationReport:
+      type: object
+      required: [totals, programmeBreakdown, cohortBreakdown]
+      properties:
+        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+        programmeBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/ProgrammeAttendanceRow" }
+        cohortBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/CohortAttendanceRow" }
+
+    SessionSummary:
+      type: object
+      required: [id, cohortId, cohortName, sessionDate, tutorName]
+      properties:
+        id: { type: integer }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        sessionDate: { type: string, format: date }
+        tutorName: { type: string }
+
+    RecentEdit:
+      type: object
+      required:
+        [id, sessionId, cohortName, learnerName, status, editedBy, editedAt]
+      properties:
+        id: { type: integer }
+        sessionId: { type: integer }
+        cohortName: { type: string }
+        learnerName: { type: string }
+        status: { $ref: "#/components/schemas/AttendanceStatus" }
+        editedBy: { type: string }
+        editedAt: { type: string, format: date-time }
+
+    CohortSummary:
+      type: object
+      required: [cohort, learnerCount, attendancePercentage]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        learnerCount: { type: integer }
+        attendancePercentage: { type: number }
+
+    AdminDashboard:
+      type: object
+      required:
+        [
+          activeLearners,
+          activeTutors,
+          activeCohorts,
+          attendancePercentageWeek,
+          attendancePercentageMonth,
+          sessionsAwaitingCompletion,
+          recentlyEditedAttendance,
+          lowAttendanceLearners,
+        ]
+      properties:
+        activeLearners: { type: integer }
+        activeTutors: { type: integer }
+        activeCohorts: { type: integer }
+        attendancePercentageWeek: { type: number }
+        attendancePercentageMonth: { type: number }
+        sessionsAwaitingCompletion:
+          type: array
+          items: { $ref: "#/components/schemas/SessionSummary" }
+        recentlyEditedAttendance:
+          type: array
+          items: { $ref: "#/components/schemas/RecentEdit" }
+        lowAttendanceLearners:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerAttendanceRow" }
+
+    TutorDashboard:
+      type: object
+      required:
+        [
+          cohorts,
+          nextSession,
+          sessionsAwaitingCompletion,
+          lowAttendanceLearners,
+        ]
+      properties:
+        cohorts:
+          type: array
+          items: { $ref: "#/components/schemas/CohortSummary" }
+        nextSession:
+          oneOf:
+            - $ref: "#/components/schemas/SessionSummary"
+            - type: "null"
+        sessionsAwaitingCompletion:
+          type: array
+          items: { $ref: "#/components/schemas/SessionSummary" }
+        lowAttendanceLearners:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerAttendanceRow" }
+
+    AuditLogEntry:
+      type: object
+      required:
+        [
+          id,
+          userId,
+          userName,
+          action,
+          entityType,
+          entityId,
+          previousValue,
+          newValue,
+          timestamp,
+          ipAddress,
+        ]
+      properties:
+        id: { type: integer }
+        userId: { type: ["integer", "null"] }
+        userName: { type: ["string", "null"] }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: ["integer", "null"] }
+        previousValue: { type: ["string", "null"] }
+        newValue: { type: ["string", "null"] }
+        timestamp: { type: string, format: date-time }
+        ipAddress: { type: ["string", "null"] }
+
+    AuditLogListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AuditLogEntry" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    AppSettings:
+      type: object
+      required: [organisationName, lowAttendanceThreshold]
+      properties:
+        organisationName: { type: string }
+        lowAttendanceThreshold: { type: number }
+
+    SettingsUpdate:
+      type: object
+      properties:
+        organisationName: { type: string, minLength: 1 }
+        lowAttendanceThreshold: { type: number, minimum: 0, maximum: 100 }

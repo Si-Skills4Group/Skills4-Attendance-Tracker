@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Skills4Attendance"
+version = "1.0.0"
+id = "artifacts/skills4attendance"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20030
+
+[services.development]
+run = "pnpm --filter @workspace/skills4attendance run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/skills4attendance", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/skills4attendance/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20030"
+BASE_PATH = "/"
