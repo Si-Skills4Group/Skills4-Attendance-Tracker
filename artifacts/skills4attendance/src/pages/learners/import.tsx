@@ -11,6 +11,15 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
 export default function LearnerImportPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -49,26 +58,18 @@ export default function LearnerImportPage() {
     }
   };
 
-  const handlePreview = () => {
+  const handlePreview = async () => {
     if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    // We have to use raw fetch since Orval multipart form-data might need specific setup 
-    // or we use the mutation if it supports it directly.
-    // The generated API client typing expects BodyType which for multipart is FormData.
-    previewMutation.mutate({ data: formData as any }, {
+    const csv = await readFileAsText(file);
+    previewMutation.mutate({ data: { csv, filename: file.name } }, {
       onSuccess: (data) => setPreviewResult(data),
       onError: (err: any) => toast({ title: "Preview Failed", description: err.error, variant: "destructive" })
     });
   };
 
   const handleImport = () => {
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    importMutation.mutate({ data: formData as any }, {
+    if (!previewResult) return;
+    importMutation.mutate({ data: { rows: previewResult.rows.map((row) => row.data) } }, {
       onSuccess: (data) => {
         toast({
           title: "Import Complete",
