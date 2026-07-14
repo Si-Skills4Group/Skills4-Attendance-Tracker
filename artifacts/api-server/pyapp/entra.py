@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +11,8 @@ import jwt
 from jwt import PyJWKClient
 
 from .config import AuthSettings, get_auth_settings
+
+logger = logging.getLogger("skills4attendance-api")
 
 
 class TokenValidationError(Exception):
@@ -80,29 +83,67 @@ def validate_entra_access_token(token: str) -> EntraIdentity:
             token,
             signing_key,
             algorithms=["RS256"],
-            audience=settings.entra_expected_audience,
             issuer=settings.issuer,
-            options={"require": ["exp", "iat", "aud", "iss"]},
+            options={"require": ["exp", "iat", "aud", "iss"], "verify_aud": False},
             leeway=60,
         )
     except Exception as exc:
+        try:
+            unverified = jwt.decode(token, options={"verify_signature": False})
+        except Exception:
+            unverified = {}
+        logger.warning(
+            "Entra token decode failed: %s: %s (expected_audience=%r issuer=%r) "
+            "actual_aud=%r actual_iss=%r actual_scp=%r actual_ver=%r actual_appid=%r",
+            type(exc).__name__,
+            exc,
+            settings.entra_expected_audience,
+            settings.issuer,
+            unverified.get("aud"),
+            unverified.get("iss"),
+            unverified.get("scp"),
+            unverified.get("ver"),
+            unverified.get("appid") or unverified.get("azp"),
+        )
         raise TokenValidationError("Invalid access token") from exc
+
+    aud = claims.get("aud")
+    acceptable_audiences = {settings.entra_expected_audience, settings.entra_api_client_id}
+    if aud not in acceptable_audiences:
+        logger.warning(
+            "Entra token audience mismatch: actual_aud=%r acceptable=%r",
+            aud,
+            acceptable_audiences,
+        )
+        raise TokenValidationError("Unexpected token audience")
 
     tenant_id = _claim_text(claims, "tid")
     if not tenant_id or tenant_id != settings.entra_allowed_tenant_id:
+        logger.warning(
+            "Entra token tenant mismatch: token_tid=%r allowed=%r",
+            tenant_id,
+            settings.entra_allowed_tenant_id,
+        )
         raise TokenValidationError("Unexpected token tenant")
 
     token_version = claims.get("ver")
     if token_version and token_version != "2.0":
+        logger.warning("Entra token unsupported version: %r", token_version)
         raise TokenValidationError("Unsupported token version")
 
     scopes = set((_claim_text(claims, "scp") or "").split())
     if settings.entra_required_scope not in scopes:
+        logger.warning(
+            "Entra token missing required scope: scopes=%r required=%r",
+            scopes,
+            settings.entra_required_scope,
+        )
         raise TokenValidationError("Token lacks required delegated scope")
 
     object_id = _claim_text(claims, "oid")
     subject = _claim_text(claims, "sub")
     if not object_id or not subject:
+        logger.warning("Entra token missing stable subject: oid=%r sub=%r", object_id, subject)
         raise TokenValidationError("Token lacks a stable subject")
 
     return EntraIdentity(

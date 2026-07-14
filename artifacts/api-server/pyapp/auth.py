@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import bcrypt
@@ -9,6 +10,8 @@ from .audit import write_audit_log
 from .config import get_auth_settings
 from .db import get_cursor
 from .entra import EntraIdentity, TokenValidationError, validate_entra_access_token
+
+logger = logging.getLogger("skills4attendance-api")
 
 
 def hash_password(password: str) -> str:
@@ -177,10 +180,12 @@ def _load_entra_user(identity: EntraIdentity, request: Request) -> dict[str, Any
 def get_current_identity(request: Request) -> EntraIdentity:
     token = _bearer_token(request)
     if not token:
+        logger.warning("Entra auth failed: no bearer token on %s", request.url.path)
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
         identity = validate_entra_access_token(token)
-    except TokenValidationError:
+    except TokenValidationError as exc:
+        logger.warning("Entra auth failed: %s on %s", exc, request.url.path)
         raise HTTPException(status_code=401, detail="Authentication required")
     request.state.current_identity = identity
     return identity
