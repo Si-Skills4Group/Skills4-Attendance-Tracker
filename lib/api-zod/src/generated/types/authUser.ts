@@ -11,8 +11,17 @@ export interface AuthUser {
   id: number;
   firstName: string;
   lastName: string;
+  /** @nullable */
+  displayName?: string | null;
   email: string;
   role: UserRole;
+  active: boolean;
   /** @nullable */
   tutorId?: number | null;
+  /** @nullable */
+  entraObjectId?: string | null;
+  /** @nullable */
+  entraTenantId?: string | null;
+  /** @nullable */
+  lastLoginAt?: Date | null;
 }

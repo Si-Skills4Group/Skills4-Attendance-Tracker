@@ -5,7 +5,13 @@ from pydantic import BaseModel, Field
 
 from ..auth import require_admin, require_auth, require_learner_access
 from ..audit import write_audit_log
-from ..csv_utils import LEARNER_CSV_COLUMNS, parse_csv_to_rows, stringify_rows_to_csv
+from ..csv_utils import (
+    LEARNER_CSV_COLUMNS,
+    ImportCsvInput,
+    PreviewCsvInput,
+    parse_csv_to_rows,
+    stringify_rows_to_csv,
+)
 from ..db import get_cursor
 from ..learners_query import LEARNERS_WITH_NAMES_SELECT
 
@@ -44,14 +50,6 @@ class LearnerUpdate(BaseModel):
     tutorId: int | None = None
     cohortId: int | None = None
     externalSystemId: str | None = None
-
-
-class PreviewCsvInput(BaseModel):
-    csv: str
-
-
-class ImportCsvInput(BaseModel):
-    rows: list[dict[str, str]]
 
 
 @router.get("/learners")

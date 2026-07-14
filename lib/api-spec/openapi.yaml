@@ -147,6 +147,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /tutors/csv-template:
+    get:
+      operationId: getTutorCsvTemplate
+      tags: [tutors]
+      responses:
+        "200":
+          description: CSV template content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvContent"
+  /tutors/csv-preview:
+    post:
+      operationId: previewTutorCsv
+      tags: [tutors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvContent"
+      responses:
+        "200":
+          description: Preview of CSV validation results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvPreviewResult"
+  /tutors/csv-import:
+    post:
+      operationId: importTutorCsv
+      tags: [tutors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvImportInput"
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvImportResult"
   /tutors/{id}:
     get:
       operationId: getTutor

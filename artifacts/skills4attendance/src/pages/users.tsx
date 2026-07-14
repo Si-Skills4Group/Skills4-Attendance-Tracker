@@ -41,10 +41,12 @@ export default function UsersPage() {
   const provision = () => {
     provisionMutation.mutate(
       {
-        ...form,
-        displayName: form.displayName || null,
-        tutorId: form.role === "tutor" && form.tutorId !== noTutor ? Number(form.tutorId) : null,
-        active: true,
+        data: {
+          ...form,
+          displayName: form.displayName || undefined,
+          tutorId: form.role === "tutor" && form.tutorId !== noTutor ? Number(form.tutorId) : null,
+          active: true,
+        },
       },
       {
         onSuccess: () => {

@@ -75,6 +75,27 @@ def _load_entra_user(identity: EntraIdentity, request: Request) -> dict[str, Any
         )
         user = cur.fetchone()
 
+        if not user and identity.email:
+            cur.execute(
+                f"{USER_SELECT} WHERE entra_object_id IS NULL AND email = %s",
+                (identity.email.lower(),),
+            )
+            unlinked = cur.fetchone()
+            if unlinked:
+                cur.execute(
+                    "UPDATE users SET entra_object_id = %s, entra_tenant_id = %s, updated_at = now() WHERE id = %s",
+                    (identity.object_id, identity.tenant_id, unlinked["id"]),
+                )
+                write_audit_log(
+                    request,
+                    action="entra_auto_linked",
+                    entity_type="user",
+                    entity_id=unlinked["id"],
+                    new_value={"entraObjectId": identity.object_id, "entraTenantId": identity.tenant_id, "email": identity.email},
+                )
+                cur.execute(f"{USER_SELECT} WHERE id = %s", (unlinked["id"],))
+                user = cur.fetchone()
+
         if not user:
             write_audit_log(
                 request,

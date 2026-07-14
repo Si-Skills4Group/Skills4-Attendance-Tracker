@@ -3,6 +3,13 @@ from pydantic import BaseModel, Field
 
 from ..auth import hash_password, require_admin
 from ..audit import write_audit_log
+from ..csv_utils import (
+    TUTOR_CSV_COLUMNS,
+    ImportCsvInput,
+    PreviewCsvInput,
+    parse_csv_to_rows,
+    stringify_rows_to_csv,
+)
 from ..db import get_cursor
 
 router = APIRouter(tags=["tutors"])
@@ -55,13 +62,14 @@ def create_tutor(payload: TutorInput, request: Request, _session: dict = Depends
         cur.execute(
             """
             INSERT INTO users (first_name, last_name, email, password_hash, role, active)
-            VALUES (%s, %s, %s, %s, 'tutor', false) RETURNING id
+            VALUES (%s, %s, %s, %s, 'tutor', %s) RETURNING id
             """,
             (
                 payload.firstName,
                 payload.lastName,
                 email,
                 hash_password(payload.password) if payload.password else None,
+                payload.active,
             ),
         )
         user_id = cur.fetchone()["id"]
@@ -90,6 +98,143 @@ def create_tutor(payload: TutorInput, request: Request, _session: dict = Depends
 
     write_audit_log(request, action="create", entity_type="tutor", entity_id=tutor_id, new_value=tutor)
     return tutor
+
+
+def _parse_csv_active(value: str | None) -> bool:
+    if not value:
+        return True
+    return value.strip().lower() not in {"false", "0", "no"}
+
+
+@router.get("/tutors/csv-template")
+def get_tutor_csv_template(_session: dict = Depends(require_admin)):
+    csv_text = stringify_rows_to_csv([], TUTOR_CSV_COLUMNS)
+    return {"csv": csv_text, "filename": "tutor-import-template.csv"}
+
+
+@router.post("/tutors/csv-preview")
+def preview_tutor_csv(payload: PreviewCsvInput, _session: dict = Depends(require_admin)):
+    try:
+        parsed_rows = parse_csv_to_rows(payload.csv)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not parse CSV content")
+
+    with get_cursor() as cur:
+        cur.execute("SELECT email FROM users")
+        email_set = {r["email"] for r in cur.fetchall() if r["email"]}
+
+    seen_emails: set[str] = set()
+    rows = []
+    for index, data in enumerate(parsed_rows):
+        row_number = index + 1
+        errors = []
+        if not data.get("firstName"):
+            errors.append("firstName is required")
+        if not data.get("lastName"):
+            errors.append("lastName is required")
+        if not data.get("email"):
+            errors.append("email is required")
+
+        is_duplicate = False
+        duplicate_reason = None
+        email = (data.get("email") or "").lower()
+        if email and email in email_set:
+            is_duplicate = True
+            duplicate_reason = "email already exists"
+        elif email and email in seen_emails:
+            is_duplicate = True
+            duplicate_reason = "duplicate email within this file"
+        if email:
+            seen_emails.add(email)
+
+        rows.append(
+            {
+                "rowNumber": row_number,
+                "data": data,
+                "isDuplicate": is_duplicate,
+                "duplicateReason": duplicate_reason,
+                "errors": errors,
+            }
+        )
+
+    total_rows = len(rows)
+    invalid_rows = len([r for r in rows if r["errors"]])
+    duplicate_rows = len([r for r in rows if r["isDuplicate"]])
+    valid_rows = len([r for r in rows if not r["errors"] and not r["isDuplicate"]])
+
+    return {
+        "totalRows": total_rows,
+        "validRows": valid_rows,
+        "invalidRows": invalid_rows,
+        "duplicateRows": duplicate_rows,
+        "rows": rows,
+    }
+
+
+@router.post("/tutors/csv-import")
+def import_tutor_csv(payload: ImportCsvInput, request: Request, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        cur.execute("SELECT email FROM users")
+        existing_emails = {r["email"] for r in cur.fetchall() if r["email"]}
+
+        imported = 0
+        skipped = 0
+        errors = []
+
+        for index, row in enumerate(payload.rows):
+            row_number = index + 1
+            required = ["firstName", "lastName", "email"]
+            if not all(row.get(f) for f in required):
+                errors.append({"rowNumber": row_number, "field": None, "message": "Missing required field"})
+                skipped += 1
+                continue
+
+            email = row["email"].lower()
+            if email in existing_emails:
+                errors.append(
+                    {"rowNumber": row_number, "field": "email", "message": "Email already exists -- row skipped"}
+                )
+                skipped += 1
+                continue
+
+            active = _parse_csv_active(row.get("active"))
+
+            cur.execute(
+                """
+                INSERT INTO users (first_name, last_name, email, role, active)
+                VALUES (%s, %s, %s, 'tutor', %s) RETURNING id
+                """,
+                (row["firstName"], row["lastName"], email, active),
+            )
+            user_id = cur.fetchone()["id"]
+
+            cur.execute(
+                """
+                INSERT INTO tutors (user_id, first_name, last_name, email, employee_ref, active, external_system_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                """,
+                (
+                    user_id,
+                    row["firstName"],
+                    row["lastName"],
+                    email,
+                    row.get("employeeRef") or None,
+                    active,
+                    row.get("externalSystemId") or None,
+                ),
+            )
+            tutor_id = cur.fetchone()["id"]
+
+            cur.execute("UPDATE users SET tutor_id = %s WHERE id = %s", (tutor_id, user_id))
+
+            existing_emails.add(email)
+            imported += 1
+
+    write_audit_log(
+        request, action="csv_import", entity_type="tutor", new_value={"imported": imported, "skipped": skipped}
+    )
+
+    return {"imported": imported, "skipped": skipped, "errors": errors}
 
 
 @router.get("/tutors/{tutor_id}")
@@ -140,6 +285,8 @@ def update_tutor(tutor_id: int, payload: TutorUpdate, request: Request, _session
             user_updates["last_name"] = updates["lastName"]
         if "email" in updates:
             user_updates["email"] = updates["email"].lower()
+        if "active" in updates:
+            user_updates["active"] = updates["active"]
         if payload.password:
             user_updates["password_hash"] = hash_password(payload.password)
 

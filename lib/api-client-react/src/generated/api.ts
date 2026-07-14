@@ -30,6 +30,7 @@ import type {
   AttendanceSession,
   AttendanceSessionInput,
   AttendanceSessionUpdate,
+  AuditLogEntry,
   AuditLogListResponse,
   AuthUser,
   Cohort,
@@ -57,6 +58,7 @@ import type {
   ListCohortsParams,
   ListLearnersParams,
   ListTutorsParams,
+  ListUsersParams,
   LoginInput,
   OrganisationReport,
   ProgrammeAttendanceRow,
@@ -66,7 +68,9 @@ import type {
   TutorDashboard,
   TutorInput,
   TutorReport,
-  TutorUpdate
+  TutorUpdate,
+  UserProvisionInput,
+  UserUpdateInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -658,6 +662,207 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateTutorMutationOptions(options));
+    }
+
+export const getGetTutorCsvTemplateUrl = () => {
+
+
+
+
+  return `/api/tutors/csv-template`
+}
+
+export const getTutorCsvTemplate = async ( options?: RequestInit): Promise<CsvContent> => {
+
+  return customFetch<CsvContent>(getGetTutorCsvTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorCsvTemplateQueryKey = () => {
+    return [
+    `/api/tutors/csv-template`
+    ] as const;
+    }
+
+
+export const getGetTutorCsvTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorCsvTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorCsvTemplate>>> = ({ signal }) => getTutorCsvTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorCsvTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorCsvTemplate>>>
+export type GetTutorCsvTemplateQueryError = ErrorType<unknown>
+
+
+
+export function useGetTutorCsvTemplate<TData = Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorCsvTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPreviewTutorCsvUrl = () => {
+
+
+
+
+  return `/api/tutors/csv-preview`
+}
+
+export const previewTutorCsv = async (csvContent: CsvContent, options?: RequestInit): Promise<CsvPreviewResult> => {
+
+  return customFetch<CsvPreviewResult>(getPreviewTutorCsvUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(csvContent)
+  }
+);}
+
+
+
+
+
+export const getPreviewTutorCsvMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewTutorCsv>>, TError,{data: BodyType<CsvContent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewTutorCsv>>, TError,{data: BodyType<CsvContent>}, TContext> => {
+
+const mutationKey = ['previewTutorCsv'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewTutorCsv>>, {data: BodyType<CsvContent>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewTutorCsv(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewTutorCsvMutationResult = NonNullable<Awaited<ReturnType<typeof previewTutorCsv>>>
+    export type PreviewTutorCsvMutationBody = BodyType<CsvContent>
+    export type PreviewTutorCsvMutationError = ErrorType<unknown>
+
+    export const usePreviewTutorCsv = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewTutorCsv>>, TError,{data: BodyType<CsvContent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewTutorCsv>>,
+        TError,
+        {data: BodyType<CsvContent>},
+        TContext
+      > => {
+      return useMutation(getPreviewTutorCsvMutationOptions(options));
+    }
+
+export const getImportTutorCsvUrl = () => {
+
+
+
+
+  return `/api/tutors/csv-import`
+}
+
+export const importTutorCsv = async (csvImportInput: CsvImportInput, options?: RequestInit): Promise<CsvImportResult> => {
+
+  return customFetch<CsvImportResult>(getImportTutorCsvUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(csvImportInput)
+  }
+);}
+
+
+
+
+
+export const getImportTutorCsvMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importTutorCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importTutorCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext> => {
+
+const mutationKey = ['importTutorCsv'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importTutorCsv>>, {data: BodyType<CsvImportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importTutorCsv(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportTutorCsvMutationResult = NonNullable<Awaited<ReturnType<typeof importTutorCsv>>>
+    export type ImportTutorCsvMutationBody = BodyType<CsvImportInput>
+    export type ImportTutorCsvMutationError = ErrorType<unknown>
+
+    export const useImportTutorCsv = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importTutorCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importTutorCsv>>,
+        TError,
+        {data: BodyType<CsvImportInput>},
+        TContext
+      > => {
+      return useMutation(getImportTutorCsvMutationOptions(options));
     }
 
 export const getGetTutorUrl = (id: number,) => {
@@ -2831,6 +3036,357 @@ export function useExportReport<TData = Awaited<ReturnType<typeof exportReport>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListUsersUrl = (params?: ListUsersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/users?${stringifiedParams}` : `/api/users`
+}
+
+export const listUsers = async (params?: ListUsersParams, options?: RequestInit): Promise<AuthUser[]> => {
+
+  return customFetch<AuthUser[]>(getListUsersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUsersQueryKey = (params?: ListUsersParams,) => {
+    return [
+    `/api/users`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListUsersQueryOptions = <TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(params?: ListUsersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUsersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUsers>>> = ({ signal }) => listUsers(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listUsers>>>
+export type ListUsersQueryError = ErrorType<unknown>
+
+
+
+export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(
+ params?: ListUsersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUsersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getProvisionUserUrl = () => {
+
+
+
+
+  return `/api/users`
+}
+
+export const provisionUser = async (userProvisionInput: UserProvisionInput, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getProvisionUserUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(userProvisionInput)
+  }
+);}
+
+
+
+
+
+export const getProvisionUserMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof provisionUser>>, TError,{data: BodyType<UserProvisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof provisionUser>>, TError,{data: BodyType<UserProvisionInput>}, TContext> => {
+
+const mutationKey = ['provisionUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof provisionUser>>, {data: BodyType<UserProvisionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  provisionUser(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProvisionUserMutationResult = NonNullable<Awaited<ReturnType<typeof provisionUser>>>
+    export type ProvisionUserMutationBody = BodyType<UserProvisionInput>
+    export type ProvisionUserMutationError = ErrorType<unknown>
+
+    export const useProvisionUser = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof provisionUser>>, TError,{data: BodyType<UserProvisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof provisionUser>>,
+        TError,
+        {data: BodyType<UserProvisionInput>},
+        TContext
+      > => {
+      return useMutation(getProvisionUserMutationOptions(options));
+    }
+
+export const getGetUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}`
+}
+
+export const getUser = async (id: number, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getGetUserUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserQueryKey = (id: number,) => {
+    return [
+    `/api/users/${id}`
+    ] as const;
+    }
+
+
+export const getGetUserQueryOptions = <TData = Awaited<ReturnType<typeof getUser>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUser>>> = ({ signal }) => getUser(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserQueryResult = NonNullable<Awaited<ReturnType<typeof getUser>>>
+export type GetUserQueryError = ErrorType<unknown>
+
+
+
+export function useGetUser<TData = Awaited<ReturnType<typeof getUser>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUser>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}`
+}
+
+export const updateUser = async (id: number,
+    userUpdateInput: UserUpdateInput, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getUpdateUserUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(userUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateUserMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateUser>>, {id: number;data: BodyType<UserUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateUser(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateUser>>>
+    export type UpdateUserMutationBody = BodyType<UserUpdateInput>
+    export type UpdateUserMutationError = ErrorType<unknown>
+
+    export const useUpdateUser = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUser>>, TError,{id: number;data: BodyType<UserUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateUser>>,
+        TError,
+        {id: number;data: BodyType<UserUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateUserMutationOptions(options));
+    }
+
+export const getGetUserAuditUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}/audit`
+}
+
+export const getUserAudit = async (id: number, options?: RequestInit): Promise<AuditLogEntry[]> => {
+
+  return customFetch<AuditLogEntry[]>(getGetUserAuditUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserAuditQueryKey = (id: number,) => {
+    return [
+    `/api/users/${id}/audit`
+    ] as const;
+    }
+
+
+export const getGetUserAuditQueryOptions = <TData = Awaited<ReturnType<typeof getUserAudit>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserAuditQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserAudit>>> = ({ signal }) => getUserAudit(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserAudit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUserAuditQueryResult = NonNullable<Awaited<ReturnType<typeof getUserAudit>>>
+export type GetUserAuditQueryError = ErrorType<unknown>
+
+
+
+export function useGetUserAudit<TData = Awaited<ReturnType<typeof getUserAudit>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUserAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUserAuditQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

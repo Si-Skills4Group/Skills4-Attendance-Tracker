@@ -82,6 +82,37 @@ export interface AuthUser {
   lastLoginAt?: string | null;
 }
 
+export interface UserProvisionInput {
+  /** @minLength 1 */
+  entraObjectId: string;
+  /** @minLength 1 */
+  entraTenantId: string;
+  /** @minLength 1 */
+  email: string;
+  /** @minLength 1 */
+  firstName: string;
+  lastName?: string;
+  displayName?: string;
+  role: UserRole;
+  /** @nullable */
+  tutorId?: number | null;
+  active?: boolean;
+}
+
+export interface UserUpdateInput {
+  /** @minLength 1 */
+  email?: string;
+  /** @minLength 1 */
+  firstName?: string;
+  lastName?: string;
+  /** @nullable */
+  displayName?: string | null;
+  role?: UserRole;
+  /** @nullable */
+  tutorId?: number | null;
+  active?: boolean;
+}
+
 export interface Tutor {
   id: number;
   userId: number;
@@ -106,6 +137,7 @@ export interface TutorInput {
   email: string;
   /** @minLength 8 */
   password?: string;
+  /** @minLength 1 */
   employeeRef?: string;
   active?: boolean;
   externalSystemId?: string;
@@ -667,6 +699,12 @@ export const ExportReportReportType = {
   programme: 'programme',
   'allocation-history': 'allocation-history',
 } as const;
+
+export type ListUsersParams = {
+search?: string;
+role?: UserRole;
+active?: boolean;
+};
 
 export type ListAuditLogParams = {
 entityType?: string;

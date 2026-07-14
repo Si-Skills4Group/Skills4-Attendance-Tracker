@@ -30,9 +30,14 @@ export const LoginResponse = zod.object({
   "id": zod.number(),
   "firstName": zod.string(),
   "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'tutor']),
-  "tutorId": zod.number().nullish()
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish()
 })
 
 
@@ -43,9 +48,14 @@ export const GetCurrentUserResponse = zod.object({
   "id": zod.number(),
   "firstName": zod.string(),
   "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'tutor']),
-  "tutorId": zod.number().nullish()
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish()
 })
 
 
@@ -172,7 +182,7 @@ export const CreateTutorBody = zod.object({
   "firstName": zod.string().min(1),
   "lastName": zod.string().min(1),
   "email": zod.string().min(1),
-  "password": zod.string().min(createTutorBodyPasswordMin),
+  "password": zod.string().min(createTutorBodyPasswordMin).optional(),
   "employeeRef": zod.string().min(1).optional(),
   "active": zod.boolean().default(createTutorBodyActiveDefault),
   "externalSystemId": zod.string().optional()
@@ -189,6 +199,47 @@ export const CreateTutorResponse = zod.object({
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+export const GetTutorCsvTemplateResponse = zod.object({
+  "csv": zod.string(),
+  "filename": zod.string().optional()
+})
+
+
+export const PreviewTutorCsvBody = zod.object({
+  "csv": zod.string(),
+  "filename": zod.string().optional()
+})
+
+export const PreviewTutorCsvResponse = zod.object({
+  "totalRows": zod.number(),
+  "validRows": zod.number(),
+  "invalidRows": zod.number(),
+  "duplicateRows": zod.number(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "data": zod.record(zod.string(), zod.string()),
+  "isDuplicate": zod.boolean(),
+  "duplicateReason": zod.string().nullish(),
+  "errors": zod.array(zod.string())
+}))
+})
+
+
+export const ImportTutorCsvBody = zod.object({
+  "rows": zod.array(zod.record(zod.string(), zod.string()))
+})
+
+export const ImportTutorCsvResponse = zod.object({
+  "imported": zod.number(),
+  "skipped": zod.number(),
+  "errors": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "field": zod.string().nullish(),
+  "message": zod.string()
+}))
 })
 
 
@@ -1186,6 +1237,132 @@ export const ExportReportResponse = zod.object({
   "csv": zod.string(),
   "filename": zod.string().optional()
 })
+
+
+export const ListUsersQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "role": zod.enum(['admin', 'tutor']).optional(),
+  "active": zod.coerce.boolean().optional()
+})
+
+export const ListUsersResponseItem = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+export const ListUsersResponse = zod.array(ListUsersResponseItem)
+
+
+
+
+
+
+export const provisionUserBodyActiveDefault = true;
+
+export const ProvisionUserBody = zod.object({
+  "entraObjectId": zod.string().min(1),
+  "entraTenantId": zod.string().min(1),
+  "email": zod.string().min(1),
+  "firstName": zod.string().min(1),
+  "lastName": zod.string().optional(),
+  "displayName": zod.string().optional(),
+  "role": zod.enum(['admin', 'tutor']),
+  "tutorId": zod.number().nullish(),
+  "active": zod.boolean().default(provisionUserBodyActiveDefault)
+})
+
+export const ProvisionUserResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+
+
+export const GetUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetUserResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+
+
+export const UpdateUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+
+export const UpdateUserBody = zod.object({
+  "email": zod.string().min(1).optional(),
+  "firstName": zod.string().min(1).optional(),
+  "lastName": zod.string().optional(),
+  "displayName": zod.string().nullish(),
+  "role": zod.enum(['admin', 'tutor']).optional(),
+  "tutorId": zod.number().nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateUserResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+
+
+export const GetUserAuditParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetUserAuditResponseItem = zod.object({
+  "id": zod.number(),
+  "userId": zod.number().nullable(),
+  "userName": zod.string().nullable(),
+  "action": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.number().nullable(),
+  "previousValue": zod.string().nullable(),
+  "newValue": zod.string().nullable(),
+  "timestamp": zod.coerce.date(),
+  "ipAddress": zod.string().nullable()
+})
+export const GetUserAuditResponse = zod.array(GetUserAuditResponseItem)
 
 
 export const listAuditLogQueryPageDefault = 1;

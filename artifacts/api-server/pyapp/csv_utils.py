@@ -1,6 +1,8 @@
 import csv
 import io
 
+from pydantic import BaseModel
+
 LEARNER_CSV_COLUMNS = [
     "learnerRef",
     "uln",
@@ -13,6 +15,23 @@ LEARNER_CSV_COLUMNS = [
     "startDate",
     "plannedEndDate",
 ]
+
+TUTOR_CSV_COLUMNS = [
+    "firstName",
+    "lastName",
+    "email",
+    "employeeRef",
+    "active",
+    "externalSystemId",
+]
+
+
+class PreviewCsvInput(BaseModel):
+    csv: str
+
+
+class ImportCsvInput(BaseModel):
+    rows: list[dict[str, str]]
 
 
 def parse_csv_to_rows(csv_text: str) -> list[dict[str, str]]:

@@ -5,18 +5,21 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { UserRole } from './userRole';
 
-export interface TutorInput {
+export interface UserProvisionInput {
   /** @minLength 1 */
-  firstName: string;
+  entraObjectId: string;
   /** @minLength 1 */
-  lastName: string;
+  entraTenantId: string;
   /** @minLength 1 */
   email: string;
-  /** @minLength 8 */
-  password?: string;
   /** @minLength 1 */
-  employeeRef?: string;
+  firstName: string;
+  lastName?: string;
+  displayName?: string;
+  role: UserRole;
+  /** @nullable */
+  tutorId?: number | null;
   active?: boolean;
-  externalSystemId?: string;
 }

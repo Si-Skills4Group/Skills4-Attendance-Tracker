@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Mail, Building2, User } from "lucide-react";
+import { Search, Plus, Upload, Mail, Building2, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function TutorsPage() {
@@ -53,11 +53,18 @@ export default function TutorsPage() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Tutors</h1>
           <p className="text-muted-foreground mt-1">Manage teaching staff and their system access.</p>
         </div>
-        <Link href="/tutors/new">
-          <Button className="hover-elevate shadow-sm">
-            <Plus className="w-4 h-4 mr-2" /> Add Tutor
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/tutors/import">
+            <Button variant="outline" className="shadow-sm">
+              <Upload className="w-4 h-4 mr-2" /> Import CSV
+            </Button>
+          </Link>
+          <Link href="/tutors/new">
+            <Button className="hover-elevate shadow-sm">
+              <Plus className="w-4 h-4 mr-2" /> Add Tutor
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 page-transition-enter stagger-1">
