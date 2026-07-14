@@ -15,8 +15,7 @@ export interface TutorInput {
   email: string;
   /** @minLength 8 */
   password: string;
-  /** @minLength 1 */
-  employeeRef: string;
+  employeeRef?: string;
   active?: boolean;
   externalSystemId?: string;
 }

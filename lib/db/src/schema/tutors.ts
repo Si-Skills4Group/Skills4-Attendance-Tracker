@@ -15,7 +15,7 @@ export const tutorsTable = pgTable("tutors", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
-  employeeRef: text("employee_ref").notNull().unique(),
+  employeeRef: text("employee_ref").unique(),
   active: boolean("active").notNull().default(true),
   externalSystemId: text("external_system_id"),
   createdAt: timestamp("created_at", { withTimezone: true })

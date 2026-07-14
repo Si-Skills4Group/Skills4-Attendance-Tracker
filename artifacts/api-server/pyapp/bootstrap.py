@@ -89,12 +89,14 @@ CREATE TABLE IF NOT EXISTS tutors (
   first_name text NOT NULL,
   last_name text NOT NULL,
   email text NOT NULL,
-  employee_ref text NOT NULL UNIQUE,
+  employee_ref text UNIQUE,
   active boolean NOT NULL DEFAULT true,
   external_system_id text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE tutors ALTER COLUMN employee_ref DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS cohorts (
   id serial PRIMARY KEY,

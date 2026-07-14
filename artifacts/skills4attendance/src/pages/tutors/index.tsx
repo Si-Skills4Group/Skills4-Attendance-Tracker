@@ -28,7 +28,7 @@ export default function TutorsPage() {
       t.firstName.toLowerCase().includes(lowerQuery) || 
       t.lastName.toLowerCase().includes(lowerQuery) ||
       t.email.toLowerCase().includes(lowerQuery) ||
-      t.employeeRef.toLowerCase().includes(lowerQuery)
+      (t.employeeRef ?? "").toLowerCase().includes(lowerQuery)
     );
   }, [tutors, searchQuery]);
 
@@ -116,7 +116,7 @@ export default function TutorsPage() {
                         </h3>
                       </Link>
                       <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 font-mono">
-                        <Building2 className="w-3 h-3" /> {tutor.employeeRef}
+                        <Building2 className="w-3 h-3" /> {tutor.employeeRef || "—"}
                       </p>
                     </div>
                   </div>

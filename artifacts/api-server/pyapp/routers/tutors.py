@@ -19,7 +19,7 @@ class TutorInput(BaseModel):
     lastName: str = Field(min_length=1)
     email: str = Field(min_length=1)
     password: str | None = Field(default=None, min_length=8)
-    employeeRef: str = Field(min_length=1)
+    employeeRef: str | None = Field(default=None, min_length=1)
     active: bool = True
     externalSystemId: str | None = None
 

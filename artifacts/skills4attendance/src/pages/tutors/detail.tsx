@@ -17,7 +17,7 @@ const baseTutorSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Valid email required"),
-  employeeRef: z.string().min(1, "Employee Reference is required"),
+  employeeRef: z.string().optional(),
   active: z.boolean().default(true),
   externalSystemId: z.string().optional(),
 });
@@ -61,7 +61,7 @@ export default function TutorDetailPage() {
         firstName: tutor.firstName,
         lastName: tutor.lastName,
         email: tutor.email,
-        employeeRef: tutor.employeeRef,
+        employeeRef: tutor.employeeRef || "",
         active: tutor.active,
         externalSystemId: tutor.externalSystemId || "",
       });
@@ -69,7 +69,10 @@ export default function TutorDetailPage() {
   }, [tutor, tutorId, form]);
 
   const onSubmit = (values: z.infer<typeof schema>) => {
-    const payload = values;
+    const payload = {
+      ...values,
+      employeeRef: values.employeeRef?.trim() || undefined,
+    };
 
     if (isNew) {
       createMutation.mutate({ data: payload as any }, {
@@ -147,7 +150,7 @@ export default function TutorDetailPage() {
                 )} />
                 <FormField control={form.control} name="employeeRef" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Employee Reference</FormLabel>
+                    <FormLabel>Employee Reference (Optional)</FormLabel>
                     <FormControl><Input {...field} placeholder="e.g. EMP-1002" /></FormControl>
                     <FormMessage />
                   </FormItem>

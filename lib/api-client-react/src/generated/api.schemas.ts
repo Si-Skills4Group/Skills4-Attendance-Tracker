@@ -88,7 +88,8 @@ export interface Tutor {
   firstName: string;
   lastName: string;
   email: string;
-  employeeRef: string;
+  /** @nullable */
+  employeeRef: string | null;
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;
@@ -105,8 +106,7 @@ export interface TutorInput {
   email: string;
   /** @minLength 8 */
   password?: string;
-  /** @minLength 1 */
-  employeeRef: string;
+  employeeRef?: string;
   active?: boolean;
   externalSystemId?: string;
 }
