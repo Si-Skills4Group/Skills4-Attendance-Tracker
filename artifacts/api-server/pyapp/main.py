@@ -1,14 +1,20 @@
 import logging
+import os
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
+from .bootstrap import bootstrap_database
+from .config import get_auth_settings
 from .session import SessionMiddleware
 from .routers import (
     health,
     auth_routes,
+    users,
     dashboard,
     tutors,
     learners,
@@ -23,15 +29,23 @@ from .routers import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("skills4attendance-api")
 
+auth_settings = get_auth_settings()
+auth_settings.validate_startup()
+bootstrap_database()
+
 app = FastAPI(title="Skills4Attendance API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(SessionMiddleware)
+if auth_settings.allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=auth_settings.allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
+    )
+
+if auth_settings.auth_mode == "local":
+    app.add_middleware(SessionMiddleware)
 
 
 @app.exception_handler(HTTPException)
@@ -50,6 +64,7 @@ api = FastAPI()
 for router in (
     health.router,
     auth_routes.router,
+    users.router,
     dashboard.router,
     tutors.router,
     learners.router,
@@ -61,3 +76,17 @@ for router in (
     settings.router,
 ):
     app.include_router(router, prefix="/api")
+
+
+static_dir = Path(os.environ.get("STATIC_DIR", "")).resolve()
+index_file = static_dir / "index.html"
+
+if index_file.exists():
+    app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        requested = (static_dir / full_path).resolve()
+        if requested.is_file() and static_dir in requested.parents:
+            return FileResponse(requested)
+        return FileResponse(index_file)

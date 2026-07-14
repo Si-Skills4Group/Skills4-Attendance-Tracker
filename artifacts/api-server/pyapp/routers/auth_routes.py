@@ -4,8 +4,9 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from ..auth import verify_password
+from ..auth import USER_SELECT, _user_public, require_auth, verify_password
 from ..audit import write_audit_log
+from ..config import get_auth_settings
 from ..db import get_cursor
 
 router = APIRouter(tags=["auth"])
@@ -29,25 +30,12 @@ class LoginInput(BaseModel):
     password: str
 
 
-def _user_public(user: dict) -> dict:
-    return {
-        "id": user["id"],
-        "firstName": user["firstName"],
-        "lastName": user["lastName"],
-        "email": user["email"],
-        "role": user["role"],
-        "tutorId": user["tutorId"],
-    }
-
-
-USER_SELECT = (
-    'SELECT id, first_name AS "firstName", last_name AS "lastName", email, '
-    'password_hash AS "passwordHash", role, tutor_id AS "tutorId" FROM users'
-)
-
-
 @router.post("/auth/login")
 def login(payload: LoginInput, request: Request):
+    settings = get_auth_settings()
+    if settings.auth_mode != "local":
+        raise HTTPException(status_code=410, detail="Password login has been replaced by Microsoft sign-in")
+
     key = _client_key(request)
     now = time.time()
     attempts = _login_attempts[key]
@@ -64,7 +52,7 @@ def login(payload: LoginInput, request: Request):
         cur.execute(f"{USER_SELECT} WHERE email = %s", (payload.email.lower(),))
         user = cur.fetchone()
 
-    if not user or not verify_password(payload.password, user["passwordHash"]):
+    if not user or not user["active"] or not verify_password(payload.password, user["passwordHash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     request.state.session["userId"] = user["id"]
@@ -78,21 +66,21 @@ def login(payload: LoginInput, request: Request):
 
 @router.post("/auth/logout", status_code=204)
 def logout(request: Request):
-    request.state.destroy_session = True
+    if hasattr(request.state, "destroy_session"):
+        request.state.destroy_session = True
     return None
 
 
 @router.get("/auth/me")
 def get_current_user(request: Request):
+    require_auth(request)
+    user = getattr(request.state, "current_user", None)
+    if user:
+        return user
     user_id = request.state.session.get("userId")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     with get_cursor() as cur:
         cur.execute(f"{USER_SELECT} WHERE id = %s", (user_id,))
-        user = cur.fetchone()
-
-    if not user:
+        row = cur.fetchone()
+    if not row or not row["active"]:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    return _user_public(user)
+    return _user_public(row)

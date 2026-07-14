@@ -29,8 +29,6 @@ COOKIE_NAME = "s4a.sid"
 SESSION_MAX_AGE = timedelta(hours=12)
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET")
-if not SESSION_SECRET:
-    raise RuntimeError("SESSION_SECRET must be set. Did you forget to provision it?")
 
 IS_PRODUCTION = os.environ.get("NODE_ENV") == "production" or os.environ.get("ENV") == "production"
 
@@ -42,6 +40,8 @@ _ENCODE_URI_SAFE = "!'()*-._~"
 
 def _sign(value: str) -> str:
     """Port of the `cookie-signature` npm package's `sign()`."""
+    if not SESSION_SECRET:
+        raise RuntimeError("SESSION_SECRET must be set when local session auth is enabled.")
     mac = hmac.new(SESSION_SECRET.encode(), value.encode(), hashlib.sha256).digest()
     import base64
 

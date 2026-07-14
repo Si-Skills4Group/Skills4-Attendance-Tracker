@@ -1,0 +1,10 @@
+.git
+.agents
+.venv
+.pythonlibs
+__pycache__
+*.pyc
+node_modules
+dist
+artifacts/skills4attendance/dist
+artifacts/mockup-sandbox

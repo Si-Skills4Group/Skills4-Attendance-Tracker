@@ -38,11 +38,7 @@ export default function TutorDetailPage() {
   const updateMutation = useUpdateTutor();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
-  const schema = isNew ? baseTutorSchema.extend({
-    password: z.string().min(8, "Password must be at least 8 characters for new tutors")
-  }) : baseTutorSchema.extend({
-    password: z.string().min(8, "Password must be at least 8 characters").optional().or(z.literal(""))
-  });
+  const schema = baseTutorSchema;
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -51,7 +47,6 @@ export default function TutorDetailPage() {
       lastName: "",
       email: "",
       employeeRef: "",
-      password: "",
       active: true,
       externalSystemId: "",
     }
@@ -69,17 +64,12 @@ export default function TutorDetailPage() {
         employeeRef: tutor.employeeRef,
         active: tutor.active,
         externalSystemId: tutor.externalSystemId || "",
-        password: "", // never populate password
       });
     }
   }, [tutor, tutorId, form]);
 
   const onSubmit = (values: z.infer<typeof schema>) => {
-    const payload = {
-      ...values,
-      // If password is empty string on update, remove it from payload
-      password: values.password === "" ? undefined : values.password,
-    };
+    const payload = values;
 
     if (isNew) {
       createMutation.mutate({ data: payload as any }, {
@@ -120,7 +110,7 @@ export default function TutorDetailPage() {
             {isNew ? "Create Tutor Profile" : "Edit Tutor Profile"}
           </h1>
           <p className="text-muted-foreground mt-1">
-            {isNew ? "Set up a new teaching staff account." : "Update details and access for this tutor."}
+            {isNew ? "Set up a new tutor profile." : "Update details for this tutor."}
           </p>
         </div>
       </div>
@@ -167,18 +157,11 @@ export default function TutorDetailPage() {
 
             <Card className="shadow-sm">
               <CardHeader className="border-b bg-muted/10 pb-4">
-                <CardTitle className="text-lg">System Access</CardTitle>
-                <CardDescription>Authentication and integration settings.</CardDescription>
+                <CardTitle className="text-lg">Status & Integration</CardTitle>
+                <CardDescription>Application status and external-system reference.</CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField control={form.control} name="password" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password {isNew ? "" : "(Leave blank to keep current)"}</FormLabel>
-                      <FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
                   <FormField control={form.control} name="externalSystemId" render={({ field }) => (
                     <FormItem>
                       <FormLabel>External System ID (Optional)</FormLabel>

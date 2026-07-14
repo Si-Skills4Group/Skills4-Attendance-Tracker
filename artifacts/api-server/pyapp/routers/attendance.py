@@ -256,6 +256,15 @@ def save_attendance_register(
                     status_code=400,
                     detail="An override reason is required when hours attended exceeds the planned session duration",
                 )
+        learner_ids = [entry.learnerId for entry in payload.entries]
+        if learner_ids:
+            cur.execute(
+                "SELECT id FROM learners WHERE id = ANY(%s) AND cohort_id = %s",
+                (learner_ids, session_row["cohortId"]),
+            )
+            allowed_ids = {row["id"] for row in cur.fetchall()}
+            if allowed_ids != set(learner_ids):
+                raise HTTPException(status_code=403, detail="Register contains learners outside this session cohort")
 
         for entry in payload.entries:
             cur.execute(

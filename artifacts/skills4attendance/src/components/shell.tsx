@@ -1,6 +1,10 @@
 import * as React from "react";
 import { Link, useLocation } from "wouter";
-import { useGetCurrentUser, useLogout } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMsal } from "@azure/msal-react";
+import { useGetCurrentUser } from "@workspace/api-client-react";
+import { loginRequest } from "@/auth/msal";
+import { useAuthState } from "@/auth/use-auth-state";
 import { 
   LayoutDashboard, 
   Users, 
@@ -18,45 +22,93 @@ import {
 import { Button } from "@/components/ui/button";
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { data: user, isLoading } = useGetCurrentUser();
-  const logoutMutation = useLogout();
+  const { instance } = useMsal();
+  const { isAuthenticated, isResolving } = useAuthState();
+  const queryClient = useQueryClient();
   const [location, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const { data: user, isLoading, error } = useGetCurrentUser({
+    query: {
+      enabled: isAuthenticated,
+      retry: false,
+    },
+  });
 
   // Redirect between login and dashboard based on auth state, as a side
   // effect (not during render) to avoid updating routing state while Shell
   // itself is rendering.
   React.useEffect(() => {
-    if (user && location === '/login') {
-      setLocation('/dashboard');
-    } else if (!isLoading && !user && location !== '/login') {
+    if (!isResolving && !isAuthenticated && location !== '/login') {
       setLocation('/login');
+    } else if (user && location === '/login') {
+      setLocation('/dashboard');
     }
-  }, [user, isLoading, location, setLocation]);
+  }, [user, isResolving, isAuthenticated, location, setLocation]);
 
-  if (isLoading) {
+  if (isResolving || (isAuthenticated && isLoading)) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
     </div>;
   }
 
   // Allow rendering just the content for unauthenticated users on login
-  if (!user) {
+  if (!isAuthenticated) {
     if (location !== '/login') {
       return null;
     }
     return <>{children}</>;
   }
 
+  if (error && (error as any).status === 403) {
+    const data = (error as any).data || {};
+    const identity = data.identity || {};
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="w-full max-w-lg border border-border bg-card p-8 rounded-md shadow-sm">
+          <h1 className="text-2xl font-bold text-foreground mb-3">Access pending</h1>
+          <p className="text-muted-foreground mb-6">
+            Your Microsoft sign-in succeeded, but your Skills4Attendance account has not been provisioned or is inactive.
+            Please contact an administrator.
+          </p>
+          {identity.entraObjectId && (
+            <div className="text-sm bg-muted p-4 rounded-md space-y-1 mb-6">
+              <p><span className="font-medium">Email:</span> {identity.email || "Not supplied"}</p>
+              <p><span className="font-medium">Display name:</span> {identity.displayName || "Not supplied"}</p>
+              <p><span className="font-medium">Object ID:</span> {identity.entraObjectId}</p>
+            </div>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              queryClient.clear();
+              void instance.logoutRedirect();
+            }}
+          >
+            Sign out
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && (error as any).status === 401) {
+    void instance.loginRedirect(loginRequest);
+    return null;
+  }
+
+  if (!user) {
+    return null;
+  }
+
   const handleLogout = () => {
-    logoutMutation.mutate(undefined, {
-      onSuccess: () => setLocation('/login')
-    });
+    queryClient.clear();
+    void instance.logoutRedirect();
   };
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ['admin', 'tutor'] },
     { name: "Tutors", href: "/tutors", icon: Users, roles: ['admin'] },
+    { name: "Users", href: "/users", icon: Users, roles: ['admin'] },
     { name: "Learners", href: "/learners", icon: GraduationCap, roles: ['admin', 'tutor'] },
     { name: "Cohorts", href: "/cohorts", icon: BookOpen, roles: ['admin', 'tutor'] },
     { name: "Allocation", href: "/allocation", icon: UserPlus, roles: ['admin'] },

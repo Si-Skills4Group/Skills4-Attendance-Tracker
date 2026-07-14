@@ -67,10 +67,19 @@ export interface AuthUser {
   id: number;
   firstName: string;
   lastName: string;
+  /** @nullable */
+  displayName?: string | null;
   email: string;
   role: UserRole;
+  active: boolean;
   /** @nullable */
   tutorId?: number | null;
+  /** @nullable */
+  entraObjectId?: string | null;
+  /** @nullable */
+  entraTenantId?: string | null;
+  /** @nullable */
+  lastLoginAt?: string | null;
 }
 
 export interface Tutor {
@@ -95,7 +104,7 @@ export interface TutorInput {
   /** @minLength 1 */
   email: string;
   /** @minLength 8 */
-  password: string;
+  password?: string;
   /** @minLength 1 */
   employeeRef: string;
   active?: boolean;

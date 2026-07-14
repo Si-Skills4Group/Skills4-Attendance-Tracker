@@ -12,6 +12,7 @@ import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import TutorsPage from "@/pages/tutors/index";
 import TutorDetailPage from "@/pages/tutors/detail";
+import UsersPage from "@/pages/users";
 import LearnersPage from "@/pages/learners/index";
 import LearnerDetailPage from "@/pages/learners/detail";
 import LearnerImportPage from "@/pages/learners/import";
@@ -41,6 +42,7 @@ function ProtectedRouter() {
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/tutors" component={TutorsPage} />
         <Route path="/tutors/:id" component={TutorDetailPage} />
+        <Route path="/users" component={UsersPage} />
         <Route path="/learners" component={LearnersPage} />
         <Route path="/learners/import" component={LearnerImportPage} />
         <Route path="/learners/:id" component={LearnerDetailPage} />

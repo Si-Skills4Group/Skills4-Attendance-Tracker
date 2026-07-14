@@ -22,6 +22,7 @@ def write_audit_log(
     new_value: Any = None,
 ) -> None:
     session = getattr(request.state, "session", {}) or {}
+    current_user_id = getattr(request.state, "current_user_id", None)
     with get_cursor() as cur:
         cur.execute(
             """
@@ -29,7 +30,7 @@ def write_audit_log(
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                session.get("userId"),
+                current_user_id or session.get("userId"),
                 action,
                 entity_type,
                 entity_id,

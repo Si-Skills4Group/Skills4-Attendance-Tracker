@@ -10,6 +10,7 @@ servers:
 tags:
   - name: health
   - name: auth
+  - name: users
   - name: dashboard
   - name: tutors
   - name: learners
@@ -818,6 +819,100 @@ paths:
               schema:
                 $ref: "#/components/schemas/CsvContent"
 
+  # ---------- Users ----------
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { $ref: "#/components/schemas/UserRole" }
+        - name: active
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Provisioned application users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuthUser" }
+    post:
+      operationId: provisionUser
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserProvisionInput"
+      responses:
+        "201":
+          description: User provisioned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Provisioned user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateInput"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+  /users/{id}/audit:
+    get:
+      operationId: getUserAudit
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: User audit history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditLogEntry" }
+
   # ---------- Audit ----------
   /audit-log:
     get:
@@ -927,14 +1022,44 @@ components:
 
     AuthUser:
       type: object
-      required: [id, firstName, lastName, email, role]
+      required: [id, firstName, lastName, email, role, active]
       properties:
         id: { type: integer }
         firstName: { type: string }
         lastName: { type: string }
+        displayName: { type: ["string", "null"] }
         email: { type: string }
         role: { $ref: "#/components/schemas/UserRole" }
+        active: { type: boolean }
         tutorId: { type: ["integer", "null"] }
+        entraObjectId: { type: ["string", "null"] }
+        entraTenantId: { type: ["string", "null"] }
+        lastLoginAt: { type: ["string", "null"], format: date-time }
+
+    UserProvisionInput:
+      type: object
+      required: [entraObjectId, entraTenantId, email, firstName, role]
+      properties:
+        entraObjectId: { type: string, minLength: 1 }
+        entraTenantId: { type: string, minLength: 1 }
+        email: { type: string, minLength: 1 }
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string }
+        displayName: { type: string }
+        role: { $ref: "#/components/schemas/UserRole" }
+        tutorId: { type: ["integer", "null"] }
+        active: { type: boolean, default: true }
+
+    UserUpdateInput:
+      type: object
+      properties:
+        email: { type: string, minLength: 1 }
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string }
+        displayName: { type: ["string", "null"] }
+        role: { $ref: "#/components/schemas/UserRole" }
+        tutorId: { type: ["integer", "null"] }
+        active: { type: boolean }
 
     Tutor:
       type: object
@@ -965,7 +1090,7 @@ components:
 
     TutorInput:
       type: object
-      required: [firstName, lastName, email, password, employeeRef]
+      required: [firstName, lastName, email, employeeRef]
       properties:
         firstName: { type: string, minLength: 1 }
         lastName: { type: string, minLength: 1 }

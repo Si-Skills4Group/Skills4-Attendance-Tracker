@@ -18,7 +18,7 @@ class TutorInput(BaseModel):
     firstName: str = Field(min_length=1)
     lastName: str = Field(min_length=1)
     email: str = Field(min_length=1)
-    password: str = Field(min_length=8)
+    password: str | None = Field(default=None, min_length=8)
     employeeRef: str = Field(min_length=1)
     active: bool = True
     externalSystemId: str | None = None
@@ -52,13 +52,17 @@ def create_tutor(payload: TutorInput, request: Request, _session: dict = Depends
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="A user with this email already exists")
 
-        password_hash = hash_password(payload.password)
         cur.execute(
             """
-            INSERT INTO users (first_name, last_name, email, password_hash, role)
-            VALUES (%s, %s, %s, %s, 'tutor') RETURNING id
+            INSERT INTO users (first_name, last_name, email, password_hash, role, active)
+            VALUES (%s, %s, %s, %s, 'tutor', false) RETURNING id
             """,
-            (payload.firstName, payload.lastName, email, password_hash),
+            (
+                payload.firstName,
+                payload.lastName,
+                email,
+                hash_password(payload.password) if payload.password else None,
+            ),
         )
         user_id = cur.fetchone()["id"]
 

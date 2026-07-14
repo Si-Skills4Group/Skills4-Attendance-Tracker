@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ..auth import require_admin, require_auth
+from ..auth import require_admin, require_auth, require_learner_access
 from ..audit import write_audit_log
 from ..csv_utils import LEARNER_CSV_COLUMNS, parse_csv_to_rows, stringify_rows_to_csv
 from ..db import get_cursor
@@ -336,10 +336,11 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _s
 
 
 @router.get("/learners/{learner_id}/allocation-history")
-def get_learner_allocation_history(learner_id: int, _session: dict = Depends(require_auth)):
+def get_learner_allocation_history(learner_id: int, session: dict = Depends(require_auth)):
     from ..allocation_lib import enrich_allocation_history
 
     with get_cursor() as cur:
+        require_learner_access(cur, learner_id, session)
         cur.execute(
             """
             SELECT id, learner_id AS "learnerId", previous_tutor_id AS "previousTutorId",
