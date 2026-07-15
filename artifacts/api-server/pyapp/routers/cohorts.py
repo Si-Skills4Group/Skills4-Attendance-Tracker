@@ -15,10 +15,16 @@ DeliveryDay = Literal["monday", "tuesday", "wednesday", "thursday", "friday", "s
 
 
 def _parse_time(value: str, field: str) -> datetime:
-    try:
-        return datetime.strptime(value, "%H:%M")
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"{field} must be in HH:MM format") from None
+    # Accept both HH:MM and HH:MM:SS -- the frontend normalizes <input
+    # type="time"> values to HH:MM:SS before submitting, and existing rows
+    # may already store either form (session_start_time/end_time are plain
+    # text columns with no format constraint at the DB level).
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    raise HTTPException(status_code=400, detail=f"{field} must be in HH:MM format") from None
 
 
 def _validate_cohort_schedule(

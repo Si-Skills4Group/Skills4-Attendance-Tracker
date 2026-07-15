@@ -133,7 +133,7 @@ export default function CohortDetailPage() {
           toast({ title: "Cohort created" });
           setLocation("/cohorts");
         },
-        onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err: any) => toast({ title: "Error", description: err?.data?.error || err.message, variant: "destructive" })
       });
     } else {
       const { active: _active, ...rest } = payload;
@@ -142,7 +142,7 @@ export default function CohortDetailPage() {
           toast({ title: "Cohort updated" });
           setLocation("/cohorts");
         },
-        onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err: any) => toast({ title: "Error", description: err?.data?.error || err.message, variant: "destructive" })
       });
     }
   };

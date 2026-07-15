@@ -52,6 +52,17 @@ def test_valid_schedule_is_accepted():
     assert payload.sessionEndTime == "16:00"
 
 
+def test_schedule_accepts_hh_mm_ss_matching_frontend_format():
+    """Regression test: the frontend's <input type="time"> normalizes
+    values to HH:MM:SS before submitting, which used to be rejected by a
+    validator that only accepted strict HH:MM -- every cohort create/update
+    with a schedule failed with a 400 the user never saw a useful message
+    for (the frontend's onError handler was also reading the wrong field)."""
+    payload = CohortInput(**_base_cohort_kwargs(sessionStartTime="09:00:00", sessionEndTime="16:00:00"))
+    assert payload.sessionStartTime == "09:00:00"
+    assert payload.sessionEndTime == "16:00:00"
+
+
 def test_inactive_tutor_cannot_be_assigned_on_create(db, request_factory, admin_user, tutor_factory):
     inactive_tutor = tutor_factory(active=False)
     payload = CohortInput(**_base_cohort_kwargs(tutorId=inactive_tutor["tutorId"]))
