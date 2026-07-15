@@ -23,6 +23,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useListCohortSummary: () => mockSummary,
   useListTutors: () => ({ data: [] }),
   getListCohortSummaryQueryKey: (params: unknown) => ['listCohortSummary', params],
+  getListTutorsQueryKey: (params: unknown) => ['listTutors', params],
 }));
 
 function renderAtLocation(searchPath = '') {

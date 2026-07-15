@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -220,21 +221,21 @@ export default function CohortDetailPage() {
                         )} />
                       </div>
                       <FormField control={form.control} name="tutorId" render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                           <FormLabel>Primary Tutor</FormLabel>
-                          <Select 
-                            value={field.value ? String(field.value) : ""} 
-                            onValueChange={field.onChange}
-                            disabled={readOnly}
-                          >
-                            <FormControl><SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="">Unassigned</SelectItem>
-                              {tutors.map(t => (
-                                <SelectItem key={t.id} value={String(t.id)}>{t.firstName} {t.lastName}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <Combobox
+                              options={[
+                                { value: "", label: "Unassigned" },
+                                ...tutors.map(t => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+                              ]}
+                              value={field.value ? String(field.value) : ""}
+                              onValueChange={field.onChange}
+                              placeholder="Unassigned"
+                              searchPlaceholder="Search tutors..."
+                              disabled={readOnly}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />

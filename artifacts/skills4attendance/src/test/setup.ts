@@ -7,3 +7,9 @@ class ResizeObserverStub {
   disconnect() {}
 }
 (globalThis as any).ResizeObserver ??= ResizeObserverStub;
+
+// jsdom doesn't implement scrollIntoView; cmdk (the Command/Combobox search
+// list) calls it when the highlighted item changes.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
