@@ -3,7 +3,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ..auth import require_admin, require_auth
+from ..allocation_lib import learners_expected_in_cohort_as_of
+from ..auth import require_attendance_access, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
 
@@ -61,19 +62,10 @@ def _with_counts(cur, session_row: dict) -> dict:
         "SELECT count(*)::int AS count FROM attendance_records WHERE session_id = %s", (session_row["id"],)
     )
     recorded_count = cur.fetchone()["count"]
-    cur.execute("SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s", (session_row["cohortId"],))
-    expected_count = cur.fetchone()["count"]
+    expected_count = len(
+        learners_expected_in_cohort_as_of(cur, session_row["cohortId"], session_row["sessionDate"])
+    )
     return {**session_row, "recordedCount": recorded_count, "expectedCount": expected_count}
-
-
-def _check_cohort_scope(cur, cohort_id: int, session: dict) -> dict:
-    cur.execute("SELECT id, tutor_id AS \"tutorId\" FROM cohorts WHERE id = %s", (cohort_id,))
-    cohort = cur.fetchone()
-    if not cohort:
-        raise HTTPException(status_code=404, detail="Cohort not found")
-    if session.get("role") == "tutor" and cohort["tutorId"] != session.get("tutorId"):
-        raise HTTPException(status_code=403, detail="Not allowed to access this cohort")
-    return cohort
 
 
 @router.get("/attendance/sessions")
@@ -104,6 +96,13 @@ def list_attendance_sessions(
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with get_cursor() as cur:
+        if cohortId is not None:
+            # Explicit access check independent of the tutor-scoping filter
+            # above -- without this, a tutor passing another tutor's
+            # cohortId just silently gets an empty list (the AND-ed filter
+            # never matches), not a proper 403/404. IDOR probing should get
+            # a real access-denied response, not an empty-but-200 result.
+            require_cohort_access(cur, cohortId, session)
         cur.execute(f"{SESSION_SELECT} {where} ORDER BY s.session_date DESC", params)
         rows = cur.fetchall()
         return [_with_counts(cur, r) for r in rows]
@@ -112,7 +111,7 @@ def list_attendance_sessions(
 @router.post("/attendance/sessions", status_code=201)
 def create_attendance_session(payload: AttendanceSessionInput, request: Request, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
-        _check_cohort_scope(cur, payload.cohortId, session)
+        require_cohort_access(cur, payload.cohortId, session)
 
         if not payload.force:
             cur.execute(
@@ -154,32 +153,33 @@ def create_attendance_session(payload: AttendanceSessionInput, request: Request,
 @router.get("/attendance/sessions/{session_id}")
 def get_attendance_session(session_id: int, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
+        require_attendance_access(cur, session_id, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
-        if not session_row:
-            raise HTTPException(status_code=404, detail="Attendance session not found")
-        if session.get("role") == "tutor" and session_row["tutorId"] != session.get("tutorId"):
-            raise HTTPException(status_code=403, detail="Not allowed to access this session")
 
         full_session = _with_counts(cur, session_row)
 
-        cur.execute(
-            """
-            SELECT l.id AS "learnerId", concat(l.first_name, ' ', l.last_name) AS "learnerName",
-                   l.learner_ref AS "learnerRef",
-                   ar.id AS "recordId", ar.status, ar.hours_attended AS "hoursAttended",
-                   ar.minutes_late AS "minutesLate", ar.notes, ar.override_reason AS "overrideReason",
-                   ar.last_edited_by AS "lastEditedBy",
-                   CASE WHEN u.id IS NULL THEN NULL ELSE concat(u.first_name, ' ', u.last_name) END AS "lastEditedByName"
-            FROM learners l
-            LEFT JOIN attendance_records ar ON ar.learner_id = l.id AND ar.session_id = %s
-            LEFT JOIN users u ON ar.last_edited_by = u.id
-            WHERE l.cohort_id = %s
-            ORDER BY l.last_name, l.first_name
-            """,
-            (session_id, session_row["cohortId"]),
-        )
-        entries = cur.fetchall()
+        expected_ids = learners_expected_in_cohort_as_of(cur, session_row["cohortId"], session_row["sessionDate"])
+        if not expected_ids:
+            entries = []
+        else:
+            cur.execute(
+                """
+                SELECT l.id AS "learnerId", concat(l.first_name, ' ', l.last_name) AS "learnerName",
+                       l.learner_ref AS "learnerRef",
+                       ar.id AS "recordId", ar.status, ar.hours_attended AS "hoursAttended",
+                       ar.minutes_late AS "minutesLate", ar.notes, ar.override_reason AS "overrideReason",
+                       ar.last_edited_by AS "lastEditedBy",
+                       CASE WHEN u.id IS NULL THEN NULL ELSE concat(u.first_name, ' ', u.last_name) END AS "lastEditedByName"
+                FROM learners l
+                LEFT JOIN attendance_records ar ON ar.learner_id = l.id AND ar.session_id = %s
+                LEFT JOIN users u ON ar.last_edited_by = u.id
+                WHERE l.id = ANY(%s)
+                ORDER BY l.last_name, l.first_name
+                """,
+                (session_id, expected_ids),
+            )
+            entries = cur.fetchall()
 
     for e in entries:
         if e["status"] is None:
@@ -197,12 +197,9 @@ def update_attendance_session(
     session_id: int, payload: AttendanceSessionUpdate, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
+        require_attendance_access(cur, session_id, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         existing = cur.fetchone()
-        if not existing:
-            raise HTTPException(status_code=404, detail="Attendance session not found")
-        if session.get("role") == "tutor" and existing["tutorId"] != session.get("tutorId"):
-            raise HTTPException(status_code=403, detail="Not allowed to access this session")
 
         updates = payload.model_dump(exclude_unset=True)
         column_map = {
@@ -242,12 +239,9 @@ def save_attendance_register(
     session_id: int, payload: AttendanceRegisterInput, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
+        require_attendance_access(cur, session_id, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
-        if not session_row:
-            raise HTTPException(status_code=404, detail="Attendance session not found")
-        if session.get("role") == "tutor" and session_row["tutorId"] != session.get("tutorId"):
-            raise HTTPException(status_code=403, detail="Not allowed to access this session")
 
         planned = float(session_row["plannedDurationHours"])
         for entry in payload.entries:
@@ -258,12 +252,11 @@ def save_attendance_register(
                 )
         learner_ids = [entry.learnerId for entry in payload.entries]
         if learner_ids:
-            cur.execute(
-                "SELECT id FROM learners WHERE id = ANY(%s) AND cohort_id = %s",
-                (learner_ids, session_row["cohortId"]),
-            )
-            allowed_ids = {row["id"] for row in cur.fetchall()}
-            if allowed_ids != set(learner_ids):
+            # Membership is resolved as-of the session's date, not the
+            # learner's *current* cohort -- so editing a past session still
+            # works for a learner who has since transferred elsewhere.
+            allowed_ids = set(learners_expected_in_cohort_as_of(cur, session_row["cohortId"], session_row["sessionDate"]))
+            if not set(learner_ids).issubset(allowed_ids):
                 raise HTTPException(status_code=403, detail="Register contains learners outside this session cohort")
 
         for entry in payload.entries:
@@ -306,15 +299,11 @@ def save_attendance_register(
 @router.post("/attendance/sessions/{session_id}/mark-all-present")
 def mark_all_present(session_id: int, request: Request, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
+        require_attendance_access(cur, session_id, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
-        if not session_row:
-            raise HTTPException(status_code=404, detail="Attendance session not found")
-        if session.get("role") == "tutor" and session_row["tutorId"] != session.get("tutorId"):
-            raise HTTPException(status_code=403, detail="Not allowed to access this session")
 
-        cur.execute("SELECT id FROM learners WHERE cohort_id = %s", (session_row["cohortId"],))
-        learner_ids = [r["id"] for r in cur.fetchall()]
+        learner_ids = learners_expected_in_cohort_as_of(cur, session_row["cohortId"], session_row["sessionDate"])
 
         for learner_id in learner_ids:
             cur.execute(

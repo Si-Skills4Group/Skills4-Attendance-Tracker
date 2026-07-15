@@ -551,6 +551,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/summary:
+    get:
+      operationId: listCohortSummary
+      tags: [cohorts]
+      description: >-
+        One row per cohort plus summary aggregates (active learner count,
+        upcoming session count, outstanding register count) for the
+        cohort-cards navigation view.
+      parameters:
+        - name: tutorId
+          in: query
+          schema: { type: integer }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - name: programme
+          in: query
+          schema: { type: string }
+        - name: level
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of cohorts with summary aggregates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CohortCardSummary" }
   /cohorts/{id}:
     get:
       operationId: getCohort
@@ -1661,6 +1690,16 @@ components:
         externalSystemId: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    CohortCardSummary:
+      allOf:
+        - $ref: "#/components/schemas/Cohort"
+        - type: object
+          required: [activeLearnerCount, upcomingSessionCount, outstandingRegisterCount]
+          properties:
+            activeLearnerCount: { type: integer }
+            upcomingSessionCount: { type: integer }
+            outstandingRegisterCount: { type: integer }
 
     CohortDetail:
       allOf:

@@ -4,7 +4,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
-from ..auth import require_admin, require_auth
+from ..allocation_lib import expected_learners_count_sql
+from ..auth import require_admin, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
 
@@ -120,6 +121,95 @@ def list_cohorts(
     with get_cursor() as cur:
         cur.execute(f"{COHORT_SELECT} {where}", params)
         return cur.fetchall()
+
+
+# Registered before /cohorts/{cohort_id} -- FastAPI/Starlette match routes in
+# registration order, and "summary" would otherwise be swallowed as a
+# cohort_id path parameter (and fail int-parsing) if that route came first.
+@router.get("/cohorts/summary")
+def list_cohort_summary(
+    tutorId: int | None = None,
+    active: bool | None = None,
+    programme: str | None = None,
+    level: str | None = None,
+    session: dict = Depends(require_auth),
+):
+    """One row per cohort plus summary aggregates for the cohort-cards
+    ("Level 1") view -- computed as a handful of grouped queries over the
+    filtered cohort_ids, not per-cohort, so this stays O(1) queries
+    regardless of how many cohorts are returned."""
+    clauses = []
+    params: list = []
+    if session.get("role") == "tutor" and session.get("tutorId"):
+        clauses.append("c.tutor_id = %s")
+        params.append(session["tutorId"])
+    elif tutorId is not None:
+        clauses.append("c.tutor_id = %s")
+        params.append(tutorId)
+    if active is not None:
+        clauses.append("c.active = %s")
+        params.append(active)
+    if programme:
+        clauses.append("c.programme = %s")
+        params.append(programme)
+    if level:
+        clauses.append("c.level = %s")
+        params.append(level)
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with get_cursor() as cur:
+        cur.execute(f"{COHORT_SELECT} {where}", params)
+        cohorts = cur.fetchall()
+        cohort_ids = [c["id"] for c in cohorts]
+
+        active_counts: dict[int, int] = {}
+        upcoming_counts: dict[int, int] = {}
+        outstanding_counts: dict[int, int] = {}
+
+        if cohort_ids:
+            cur.execute(
+                """
+                SELECT cohort_id AS "cohortId", count(*)::int AS count
+                FROM learners WHERE cohort_id = ANY(%s) AND status = 'active'
+                GROUP BY cohort_id
+                """,
+                (cohort_ids,),
+            )
+            active_counts = {row["cohortId"]: row["count"] for row in cur.fetchall()}
+
+            cur.execute(
+                """
+                SELECT cohort_id AS "cohortId", count(*)::int AS count
+                FROM attendance_sessions
+                WHERE cohort_id = ANY(%s) AND session_date >= CURRENT_DATE
+                GROUP BY cohort_id
+                """,
+                (cohort_ids,),
+            )
+            upcoming_counts = {row["cohortId"]: row["count"] for row in cur.fetchall()}
+
+            expected_sql = expected_learners_count_sql("s.cohort_id", "s.session_date")
+            cur.execute(
+                f"""
+                SELECT s.cohort_id AS "cohortId", count(*)::int AS count
+                FROM attendance_sessions s
+                WHERE s.cohort_id = ANY(%s) AND s.session_date <= CURRENT_DATE
+                  AND (SELECT count(*) FROM attendance_records WHERE session_id = s.id) < {expected_sql}
+                GROUP BY s.cohort_id
+                """,
+                (cohort_ids,),
+            )
+            outstanding_counts = {row["cohortId"]: row["count"] for row in cur.fetchall()}
+
+    return [
+        {
+            **cohort,
+            "activeLearnerCount": active_counts.get(cohort["id"], 0),
+            "upcomingSessionCount": upcoming_counts.get(cohort["id"], 0),
+            "outstandingRegisterCount": outstanding_counts.get(cohort["id"], 0),
+        }
+        for cohort in cohorts
+    ]
 
 
 @router.post("/cohorts", status_code=201)
@@ -260,12 +350,6 @@ def get_cohort_learners(cohort_id: int, session: dict = Depends(require_auth)):
     from ..learners_query import LEARNERS_WITH_NAMES_SELECT
 
     with get_cursor() as cur:
-        cur.execute("SELECT tutor_id FROM cohorts WHERE id = %s", (cohort_id,))
-        cohort = cur.fetchone()
-        if not cohort:
-            raise HTTPException(status_code=404, detail="Cohort not found")
-        if session.get("role") == "tutor" and cohort["tutor_id"] != session.get("tutorId"):
-            raise HTTPException(status_code=403, detail="Not allowed to view this cohort")
-
+        require_cohort_access(cur, cohort_id, session)
         cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.cohort_id = %s", (cohort_id,))
         return cur.fetchall()

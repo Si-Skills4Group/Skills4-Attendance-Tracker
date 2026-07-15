@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ..allocation_lib import expected_learners_count_sql
 from ..attendance_calc import compute_attendance_totals
 from ..attendance_data import get_records_for_learner
 from ..auth import require_admin, require_auth
@@ -44,6 +45,12 @@ def _sessions_awaiting_completion(cur, cohort_ids: list[int] | None) -> list[dic
         params.append(cohort_ids)
 
     where = " AND ".join(clauses)
+    # Expected learners are resolved as of each session's own date (not the
+    # learner's current cohort) -- otherwise a learner who has since
+    # transferred elsewhere would silently disappear from a past session's
+    # outstanding-count calculation, or a past session could look
+    # "complete" purely because its roster shrank after the fact.
+    expected_sql = expected_learners_count_sql("s.cohort_id", "s.session_date")
     cur.execute(
         f"""
         SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName", s.session_date AS "sessionDate",
@@ -52,12 +59,10 @@ def _sessions_awaiting_completion(cur, cohort_ids: list[int] | None) -> list[dic
         JOIN cohorts c ON s.cohort_id = c.id
         LEFT JOIN tutors t ON c.tutor_id = t.id
         WHERE {where}
-          AND (SELECT count(*) FROM learners l WHERE l.cohort_id = s.cohort_id) > 0
+          AND {expected_sql} > 0
           AND (
               SELECT count(*) FROM attendance_records ar WHERE ar.session_id = s.id
-          ) < (
-              SELECT count(*) FROM learners l WHERE l.cohort_id = s.cohort_id
-          )
+          ) < {expected_sql}
         ORDER BY s.session_date DESC
         """,
         params,

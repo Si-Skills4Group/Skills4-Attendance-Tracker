@@ -74,6 +74,27 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
     return [row["id"] for row in cur.fetchall()]
 
 
+def expected_learners_count_sql(cohort_id_column: str, as_of_date_column: str) -> str:
+    """SQL fragment (a scalar subquery) counting how many learners were
+    allocated to a cohort as of a date -- the multi-row-query counterpart
+    to learners_expected_in_cohort_as_of, for embedding in queries that
+    process many sessions/cohorts at once (e.g. dashboard aggregates),
+    where calling the Python helper per row would mean N+1 queries.
+    cohort_id_column/as_of_date_column must be trusted SQL column
+    references composed by the caller, never raw user input."""
+    return f"""(
+        SELECT count(*) FROM learners exp_l
+        WHERE COALESCE(
+            (SELECT h.new_cohort_id FROM learner_allocation_history h
+             WHERE h.learner_id = exp_l.id AND h.effective_date <= {as_of_date_column}
+             ORDER BY h.effective_date DESC, h.id DESC LIMIT 1),
+            (SELECT h.previous_cohort_id FROM learner_allocation_history h
+             WHERE h.learner_id = exp_l.id ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
+            exp_l.cohort_id
+        ) = {cohort_id_column}
+    )"""
+
+
 def enrich_allocation_history(rows: list[dict]) -> list[dict]:
     if not rows:
         return []
