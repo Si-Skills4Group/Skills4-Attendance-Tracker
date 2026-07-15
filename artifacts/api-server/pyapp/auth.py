@@ -48,6 +48,8 @@ def _user_public(user: dict[str, Any]) -> dict[str, Any]:
         "entraObjectId": user.get("entraObjectId"),
         "entraTenantId": user.get("entraTenantId"),
         "lastLoginAt": user.get("lastLoginAt"),
+        "createdAt": user.get("createdAt"),
+        "updatedAt": user.get("updatedAt"),
     }
 
 

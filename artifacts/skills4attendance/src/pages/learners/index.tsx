@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useListLearners, LearnerStatus, useGetSettings, useGetCurrentUser } from "@workspace/api-client-react";
+import { useListLearners, useListTutors, useListCohorts, LearnerStatus, useGetSettings, useGetCurrentUser } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Input } from "@/components/ui/input";
@@ -11,27 +11,47 @@ import { Search, Plus, Upload, GraduationCap, Building2, User, ChevronLeft, Chev
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { useDebounce } from "@/hooks/use-debounce";
 
+const allValue = "__all__";
+
 export default function LearnersPage() {
   const { data: user } = useGetCurrentUser();
   const isAdmin = user?.role === 'admin';
-  
+
   const [searchQuery, setSearchQuery] = React.useState("");
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter, setStatusFilter] = React.useState<LearnerStatus | "all">("all");
+  const [programmeFilter, setProgrammeFilter] = React.useState("");
+  const debouncedProgramme = useDebounce(programmeFilter, 300);
+  const [levelFilter, setLevelFilter] = React.useState("");
+  const debouncedLevel = useDebounce(levelFilter, 300);
+  const [employerFilter, setEmployerFilter] = React.useState("");
+  const debouncedEmployer = useDebounce(employerFilter, 300);
+  const [tutorFilter, setTutorFilter] = React.useState(allValue);
+  const [cohortFilter, setCohortFilter] = React.useState(allValue);
   const [page, setPage] = React.useState(1);
   const pageSize = 20;
+
+  const { data: tutors = [] } = useListTutors({ active: true });
+  const { data: cohorts = [] } = useListCohorts({ active: true });
 
   const { data: learnersData, isLoading } = useListLearners({
     search: debouncedSearch || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
+    programme: debouncedProgramme || undefined,
+    level: debouncedLevel || undefined,
+    employer: debouncedEmployer || undefined,
+    tutorId: tutorFilter !== allValue ? Number(tutorFilter) : undefined,
+    cohortId: cohortFilter !== allValue ? Number(cohortFilter) : undefined,
     page,
     pageSize
   });
 
+  const resetPage = () => setPage(1);
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
       <Breadcrumbs items={[{ label: "Learners" }]} />
-      
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 page-transition-enter">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Learners</h1>
@@ -54,22 +74,22 @@ export default function LearnersPage() {
       </div>
 
       <Card className="shadow-sm page-transition-enter stagger-1 mb-6">
-        <CardContent className="p-4 flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
+        <CardContent className="p-4 space-y-3">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search learners by name, ref, employer..." 
+            <Input
+              placeholder="Search learners by name, ref, employer..."
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearchQuery(e.target.value); resetPage(); }}
               className="pl-9 h-10 bg-background"
             />
           </div>
-          <div className="w-full sm:w-[200px]">
-            <Select 
-              value={statusFilter} 
-              onValueChange={(val: any) => { setStatusFilter(val); setPage(1); }}
+          <div className="flex flex-wrap gap-3">
+            <Select
+              value={statusFilter}
+              onValueChange={(val: any) => { setStatusFilter(val); resetPage(); }}
             >
-              <SelectTrigger className="h-10 bg-background">
+              <SelectTrigger className="w-40 h-10 bg-background">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -78,6 +98,42 @@ export default function LearnersPage() {
                 <SelectItem value="paused">Paused</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="withdrawn">Withdrawn</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              placeholder="Programme"
+              value={programmeFilter}
+              onChange={(e) => { setProgrammeFilter(e.target.value); resetPage(); }}
+              className="w-40 h-10 bg-background"
+            />
+            <Input
+              placeholder="Level"
+              value={levelFilter}
+              onChange={(e) => { setLevelFilter(e.target.value); resetPage(); }}
+              className="w-28 h-10 bg-background"
+            />
+            <Input
+              placeholder="Employer"
+              value={employerFilter}
+              onChange={(e) => { setEmployerFilter(e.target.value); resetPage(); }}
+              className="w-40 h-10 bg-background"
+            />
+            <Select value={tutorFilter} onValueChange={(v) => { setTutorFilter(v); resetPage(); }}>
+              <SelectTrigger className="w-44 h-10 bg-background"><SelectValue placeholder="Tutor" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All tutors</SelectItem>
+                {tutors.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>{t.firstName} {t.lastName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={cohortFilter} onValueChange={(v) => { setCohortFilter(v); resetPage(); }}>
+              <SelectTrigger className="w-44 h-10 bg-background"><SelectValue placeholder="Cohort" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={allValue}>All cohorts</SelectItem>
+                {cohorts.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -153,7 +209,7 @@ export default function LearnersPage() {
             </TableBody>
           </Table>
         </div>
-        
+
         {/* Pagination */}
         {learnersData && learnersData.total > 0 && (
           <div className="flex items-center justify-between border-t px-4 py-3 bg-muted/10">
@@ -161,18 +217,18 @@ export default function LearnersPage() {
               Showing <span className="font-medium text-foreground">{((page - 1) * pageSize) + 1}</span> to <span className="font-medium text-foreground">{Math.min(page * pageSize, learnersData.total)}</span> of <span className="font-medium text-foreground">{learnersData.total}</span> learners
             </div>
             <div className="flex items-center space-x-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               <div className="text-sm font-medium px-2">{page}</div>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setPage(p => p + 1)}
                 disabled={page * pageSize >= learnersData.total}
               >

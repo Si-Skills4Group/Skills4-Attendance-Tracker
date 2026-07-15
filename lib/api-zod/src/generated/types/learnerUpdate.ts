@@ -27,6 +27,10 @@ export interface LearnerUpdate {
   startDate?: Date;
   /** @nullable */
   plannedEndDate?: Date | null;
+  /** @nullable */
+  actualEndDate?: Date | null;
+  /** @nullable */
+  withdrawalDate?: Date | null;
   status?: LearnerStatus;
   /** @nullable */
   tutorId?: number | null;

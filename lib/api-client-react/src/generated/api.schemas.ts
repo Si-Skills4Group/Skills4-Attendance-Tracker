@@ -80,6 +80,10 @@ export interface AuthUser {
   entraTenantId?: string | null;
   /** @nullable */
   lastLoginAt?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+  /** @nullable */
+  updatedAt?: string | null;
 }
 
 export interface UserProvisionInput {
@@ -113,6 +117,15 @@ export interface UserUpdateInput {
   active?: boolean;
 }
 
+export interface UserRoleInput {
+  role: UserRole;
+}
+
+export interface UserLinkTutorInput {
+  /** @nullable */
+  tutorId?: number | null;
+}
+
 export interface Tutor {
   id: number;
   userId: number;
@@ -121,6 +134,8 @@ export interface Tutor {
   email: string;
   /** @nullable */
   employeeRef: string | null;
+  /** @nullable */
+  phone: string | null;
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;
@@ -139,6 +154,7 @@ export interface TutorInput {
   password?: string;
   /** @minLength 1 */
   employeeRef?: string;
+  phone?: string;
   active?: boolean;
   externalSystemId?: string;
 }
@@ -154,6 +170,7 @@ export interface TutorUpdate {
   password?: string;
   /** @minLength 1 */
   employeeRef?: string;
+  phone?: string;
   active?: boolean;
   externalSystemId?: string;
 }
@@ -174,6 +191,10 @@ export interface Learner {
   startDate: string;
   /** @nullable */
   plannedEndDate: string | null;
+  /** @nullable */
+  actualEndDate: string | null;
+  /** @nullable */
+  withdrawalDate: string | null;
   status: LearnerStatus;
   /** @nullable */
   tutorId: number | null;
@@ -206,6 +227,8 @@ export interface LearnerInput {
   level: string;
   startDate: string;
   plannedEndDate?: string;
+  actualEndDate?: string;
+  withdrawalDate?: string;
   status?: LearnerStatus;
   tutorId?: number;
   cohortId?: number;
@@ -232,6 +255,10 @@ export interface LearnerUpdate {
   startDate?: string;
   /** @nullable */
   plannedEndDate?: string | null;
+  /** @nullable */
+  actualEndDate?: string | null;
+  /** @nullable */
+  withdrawalDate?: string | null;
   status?: LearnerStatus;
   /** @nullable */
   tutorId?: number | null;
@@ -239,6 +266,13 @@ export interface LearnerUpdate {
   cohortId?: number | null;
   /** @nullable */
   externalSystemId?: string | null;
+}
+
+export interface LearnerStatusChangeInput {
+  status: LearnerStatus;
+  actualEndDate?: string;
+  withdrawalDate?: string;
+  reason?: string;
 }
 
 export interface LearnerListResponse {
@@ -637,10 +671,16 @@ export type ListTutorsParams = {
 active?: boolean;
 };
 
+export type DeactivateTutorParams = {
+confirm?: boolean;
+};
+
 export type ListLearnersParams = {
 search?: string;
 status?: LearnerStatus;
 programme?: string;
+level?: string;
+employer?: string;
 tutorId?: number;
 cohortId?: number;
 page?: number;
@@ -651,6 +691,7 @@ export type ListCohortsParams = {
 tutorId?: number;
 active?: boolean;
 programme?: string;
+level?: string;
 };
 
 export type ListAllocationHistoryParams = {

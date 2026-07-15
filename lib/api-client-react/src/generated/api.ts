@@ -42,6 +42,7 @@ import type {
   CsvImportInput,
   CsvImportResult,
   CsvPreviewResult,
+  DeactivateTutorParams,
   ErrorResponse,
   ExportReportParams,
   GetOrganisationReportParams,
@@ -51,6 +52,7 @@ import type {
   LearnerInput,
   LearnerListResponse,
   LearnerReport,
+  LearnerStatusChangeInput,
   LearnerUpdate,
   ListAllocationHistoryParams,
   ListAttendanceSessionsParams,
@@ -69,7 +71,9 @@ import type {
   TutorInput,
   TutorReport,
   TutorUpdate,
+  UserLinkTutorInput,
   UserProvisionInput,
+  UserRoleInput,
   UserUpdateInput
 } from './api.schemas';
 
@@ -1002,6 +1006,145 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getUpdateTutorMutationOptions(options));
     }
 
+export const getActivateTutorUrl = (id: number,) => {
+
+
+
+
+  return `/api/tutors/${id}/activate`
+}
+
+export const activateTutor = async (id: number, options?: RequestInit): Promise<Tutor> => {
+
+  return customFetch<Tutor>(getActivateTutorUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getActivateTutorMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateTutor>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateTutor>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['activateTutor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateTutor>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  activateTutor(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateTutorMutationResult = NonNullable<Awaited<ReturnType<typeof activateTutor>>>
+
+    export type ActivateTutorMutationError = ErrorType<ErrorResponse>
+
+    export const useActivateTutor = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateTutor>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateTutor>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getActivateTutorMutationOptions(options));
+    }
+
+export const getDeactivateTutorUrl = (id: number,
+    params?: DeactivateTutorParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/tutors/${id}/deactivate?${stringifiedParams}` : `/api/tutors/${id}/deactivate`
+}
+
+export const deactivateTutor = async (id: number,
+    params?: DeactivateTutorParams, options?: RequestInit): Promise<Tutor> => {
+
+  return customFetch<Tutor>(getDeactivateTutorUrl(id,params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeactivateTutorMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateTutor>>, TError,{id: number;params?: DeactivateTutorParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deactivateTutor>>, TError,{id: number;params?: DeactivateTutorParams}, TContext> => {
+
+const mutationKey = ['deactivateTutor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deactivateTutor>>, {id: number;params?: DeactivateTutorParams}> = (props) => {
+          const {id,params} = props ?? {};
+
+          return  deactivateTutor(id,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeactivateTutorMutationResult = NonNullable<Awaited<ReturnType<typeof deactivateTutor>>>
+
+    export type DeactivateTutorMutationError = ErrorType<ErrorResponse>
+
+    export const useDeactivateTutor = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateTutor>>, TError,{id: number;params?: DeactivateTutorParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deactivateTutor>>,
+        TError,
+        {id: number;params?: DeactivateTutorParams},
+        TContext
+      > => {
+      return useMutation(getDeactivateTutorMutationOptions(options));
+    }
+
 export const getListLearnersUrl = (params?: ListLearnersParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -1483,6 +1626,72 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getUpdateLearnerMutationOptions(options));
     }
 
+export const getChangeLearnerStatusUrl = (id: number,) => {
+
+
+
+
+  return `/api/learners/${id}/change-status`
+}
+
+export const changeLearnerStatus = async (id: number,
+    learnerStatusChangeInput: LearnerStatusChangeInput, options?: RequestInit): Promise<Learner> => {
+
+  return customFetch<Learner>(getChangeLearnerStatusUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(learnerStatusChangeInput)
+  }
+);}
+
+
+
+
+
+export const getChangeLearnerStatusMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeLearnerStatus>>, TError,{id: number;data: BodyType<LearnerStatusChangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeLearnerStatus>>, TError,{id: number;data: BodyType<LearnerStatusChangeInput>}, TContext> => {
+
+const mutationKey = ['changeLearnerStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeLearnerStatus>>, {id: number;data: BodyType<LearnerStatusChangeInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  changeLearnerStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeLearnerStatusMutationResult = NonNullable<Awaited<ReturnType<typeof changeLearnerStatus>>>
+    export type ChangeLearnerStatusMutationBody = BodyType<LearnerStatusChangeInput>
+    export type ChangeLearnerStatusMutationError = ErrorType<ErrorResponse>
+
+    export const useChangeLearnerStatus = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeLearnerStatus>>, TError,{id: number;data: BodyType<LearnerStatusChangeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeLearnerStatus>>,
+        TError,
+        {id: number;data: BodyType<LearnerStatusChangeInput>},
+        TContext
+      > => {
+      return useMutation(getChangeLearnerStatusMutationOptions(options));
+    }
+
 export const getGetLearnerAllocationHistoryUrl = (id: number,) => {
 
 
@@ -1832,6 +2041,136 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpdateCohortMutationOptions(options));
+    }
+
+export const getActivateCohortUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/activate`
+}
+
+export const activateCohort = async (id: number, options?: RequestInit): Promise<Cohort> => {
+
+  return customFetch<Cohort>(getActivateCohortUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getActivateCohortMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateCohort>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateCohort>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['activateCohort'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateCohort>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  activateCohort(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateCohortMutationResult = NonNullable<Awaited<ReturnType<typeof activateCohort>>>
+
+    export type ActivateCohortMutationError = ErrorType<ErrorResponse>
+
+    export const useActivateCohort = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateCohort>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateCohort>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getActivateCohortMutationOptions(options));
+    }
+
+export const getDeactivateCohortUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/deactivate`
+}
+
+export const deactivateCohort = async (id: number, options?: RequestInit): Promise<Cohort> => {
+
+  return customFetch<Cohort>(getDeactivateCohortUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeactivateCohortMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateCohort>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deactivateCohort>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deactivateCohort'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deactivateCohort>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deactivateCohort(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeactivateCohortMutationResult = NonNullable<Awaited<ReturnType<typeof deactivateCohort>>>
+
+    export type DeactivateCohortMutationError = ErrorType<ErrorResponse>
+
+    export const useDeactivateCohort = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateCohort>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deactivateCohort>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeactivateCohortMutationOptions(options));
     }
 
 export const getGetCohortLearnersUrl = (id: number,) => {
@@ -3326,6 +3665,268 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpdateUserMutationOptions(options));
+    }
+
+export const getActivateUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}/activate`
+}
+
+export const activateUser = async (id: number, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getActivateUserUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getActivateUserMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateUser>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['activateUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateUser>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  activateUser(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateUserMutationResult = NonNullable<Awaited<ReturnType<typeof activateUser>>>
+
+    export type ActivateUserMutationError = ErrorType<unknown>
+
+    export const useActivateUser = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateUser>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getActivateUserMutationOptions(options));
+    }
+
+export const getDeactivateUserUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}/deactivate`
+}
+
+export const deactivateUser = async (id: number, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getDeactivateUserUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeactivateUserMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deactivateUser>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deactivateUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deactivateUser>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deactivateUser(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeactivateUserMutationResult = NonNullable<Awaited<ReturnType<typeof deactivateUser>>>
+
+    export type DeactivateUserMutationError = ErrorType<unknown>
+
+    export const useDeactivateUser = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deactivateUser>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeactivateUserMutationOptions(options));
+    }
+
+export const getChangeUserRoleUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}/role`
+}
+
+export const changeUserRole = async (id: number,
+    userRoleInput: UserRoleInput, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getChangeUserRoleUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(userRoleInput)
+  }
+);}
+
+
+
+
+
+export const getChangeUserRoleMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeUserRole>>, TError,{id: number;data: BodyType<UserRoleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeUserRole>>, TError,{id: number;data: BodyType<UserRoleInput>}, TContext> => {
+
+const mutationKey = ['changeUserRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeUserRole>>, {id: number;data: BodyType<UserRoleInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  changeUserRole(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeUserRoleMutationResult = NonNullable<Awaited<ReturnType<typeof changeUserRole>>>
+    export type ChangeUserRoleMutationBody = BodyType<UserRoleInput>
+    export type ChangeUserRoleMutationError = ErrorType<ErrorResponse>
+
+    export const useChangeUserRole = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeUserRole>>, TError,{id: number;data: BodyType<UserRoleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeUserRole>>,
+        TError,
+        {id: number;data: BodyType<UserRoleInput>},
+        TContext
+      > => {
+      return useMutation(getChangeUserRoleMutationOptions(options));
+    }
+
+export const getLinkUserTutorUrl = (id: number,) => {
+
+
+
+
+  return `/api/users/${id}/link-tutor`
+}
+
+export const linkUserTutor = async (id: number,
+    userLinkTutorInput: UserLinkTutorInput, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getLinkUserTutorUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(userLinkTutorInput)
+  }
+);}
+
+
+
+
+
+export const getLinkUserTutorMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkUserTutor>>, TError,{id: number;data: BodyType<UserLinkTutorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof linkUserTutor>>, TError,{id: number;data: BodyType<UserLinkTutorInput>}, TContext> => {
+
+const mutationKey = ['linkUserTutor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof linkUserTutor>>, {id: number;data: BodyType<UserLinkTutorInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  linkUserTutor(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LinkUserTutorMutationResult = NonNullable<Awaited<ReturnType<typeof linkUserTutor>>>
+    export type LinkUserTutorMutationBody = BodyType<UserLinkTutorInput>
+    export type LinkUserTutorMutationError = ErrorType<ErrorResponse>
+
+    export const useLinkUserTutor = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkUserTutor>>, TError,{id: number;data: BodyType<UserLinkTutorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof linkUserTutor>>,
+        TError,
+        {id: number;data: BodyType<UserLinkTutorInput>},
+        TContext
+      > => {
+      return useMutation(getLinkUserTutorMutationOptions(options));
     }
 
 export const getGetUserAuditUrl = (id: number,) => {

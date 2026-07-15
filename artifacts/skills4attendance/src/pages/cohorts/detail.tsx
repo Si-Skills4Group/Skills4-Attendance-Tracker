@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useGetCohort, useCreateCohort, useUpdateCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, DeliveryDay, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
+import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, DeliveryDay, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
 import { useLocation, useParams, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -30,6 +30,12 @@ const cohortSchema = z.object({
   endDate: z.string().optional(),
   active: z.boolean().default(true),
   externalSystemId: z.string().optional()
+}).refine((data) => data.sessionEndTime > data.sessionStartTime, {
+  message: "End time must be after start time",
+  path: ["sessionEndTime"],
+}).refine((data) => !data.endDate || data.endDate > data.startDate, {
+  message: "End date cannot be before start date",
+  path: ["endDate"],
 });
 
 export default function CohortDetailPage() {
@@ -57,7 +63,17 @@ export default function CohortDetailPage() {
   
   const createMutation = useCreateCohort();
   const updateMutation = useUpdateCohort();
+  const activateMutation = useActivateCohort();
+  const deactivateMutation = useDeactivateCohort();
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  const handleToggleActive = (newActive: boolean) => {
+    const mutation = newActive ? activateMutation : deactivateMutation;
+    mutation.mutate({ id: cohortId }, {
+      onSuccess: () => toast({ title: newActive ? "Cohort activated" : "Cohort deactivated" }),
+      onError: (err: any) => toast({ title: "Update failed", description: err?.data?.error || err.message, variant: "destructive" }),
+    });
+  };
 
   const form = useForm<z.infer<typeof cohortSchema>>({
     resolver: zodResolver(cohortSchema),
@@ -120,7 +136,8 @@ export default function CohortDetailPage() {
         onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
       });
     } else {
-      updateMutation.mutate({ id: cohortId, data: payload }, {
+      const { active: _active, ...rest } = payload;
+      updateMutation.mutate({ id: cohortId, data: rest }, {
         onSuccess: () => {
           toast({ title: "Cohort updated" });
           setLocation("/cohorts");
@@ -221,15 +238,25 @@ export default function CohortDetailPage() {
                           <FormMessage />
                         </FormItem>
                       )} />
-                      <FormField control={form.control} name="active" render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">
+                      {isNew ? (
+                        <FormField control={form.control} name="active" render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">
+                            <div className="space-y-0.5">
+                              <FormLabel className="text-base">Active Cohort</FormLabel>
+                              <FormDescription>Inactive cohorts won't appear in attendance creation.</FormDescription>
+                            </div>
+                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={readOnly} /></FormControl>
+                          </FormItem>
+                        )} />
+                      ) : (
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">
                           <div className="space-y-0.5">
-                            <FormLabel className="text-base">Active Cohort</FormLabel>
-                            <FormDescription>Inactive cohorts won't appear in attendance creation.</FormDescription>
+                            <p className="text-base font-medium">Active Cohort</p>
+                            <p className="text-sm text-muted-foreground">Inactive cohorts won't appear in attendance creation.</p>
                           </div>
-                          <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={readOnly} /></FormControl>
-                        </FormItem>
-                      )} />
+                          <Switch checked={cohort?.active ?? false} onCheckedChange={handleToggleActive} disabled={readOnly} aria-label="Toggle active status" />
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 

@@ -6,9 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListCohortsParams = {
-tutorId?: number;
-active?: boolean;
-programme?: string;
-level?: string;
-};
+export interface UserLinkTutorInput {
+  /** @nullable */
+  tutorId?: number | null;
+}

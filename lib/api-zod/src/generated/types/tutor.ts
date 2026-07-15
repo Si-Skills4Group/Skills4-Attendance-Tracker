@@ -14,6 +14,8 @@ export interface Tutor {
   email: string;
   /** @nullable */
   employeeRef: string | null;
+  /** @nullable */
+  phone: string | null;
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;

@@ -11,6 +11,8 @@ export type ListLearnersParams = {
 search?: string;
 status?: LearnerStatus;
 programme?: string;
+level?: string;
+employer?: string;
 tutorId?: number;
 cohortId?: number;
 page?: number;

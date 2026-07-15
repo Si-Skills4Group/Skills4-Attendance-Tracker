@@ -24,6 +24,8 @@ export interface LearnerInput {
   level: string;
   startDate: Date;
   plannedEndDate?: Date;
+  actualEndDate?: Date;
+  withdrawalDate?: Date;
   status?: LearnerStatus;
   tutorId?: number;
   cohortId?: number;

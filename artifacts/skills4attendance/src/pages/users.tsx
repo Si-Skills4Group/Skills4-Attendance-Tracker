@@ -3,7 +3,10 @@ import {
   useListTutors,
   useListUsers,
   useProvisionUser,
-  useUpdateUser,
+  useActivateUser,
+  useDeactivateUser,
+  useChangeUserRole,
+  useLinkUserTutor,
   type AuthUser,
   type UserRole,
 } from "@workspace/api-client-react";
@@ -16,11 +19,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ShieldCheck, UserPlus } from "lucide-react";
+import { format } from "date-fns";
 
 const noTutor = "__none__";
+const allValue = "__all__";
 
 export default function UsersPage() {
   const [search, setSearch] = React.useState("");
+  const [roleFilter, setRoleFilter] = React.useState<UserRole | typeof allValue>(allValue);
+  const [activeFilter, setActiveFilter] = React.useState(allValue);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [form, setForm] = React.useState({
     entraObjectId: "",
@@ -33,10 +40,17 @@ export default function UsersPage() {
     tutorId: noTutor,
   });
   const { toast } = useToast();
-  const { data: users = [], isLoading } = useListUsers({ search: search || undefined });
+  const { data: users = [], isLoading } = useListUsers({
+    search: search || undefined,
+    role: roleFilter !== allValue ? roleFilter : undefined,
+    active: activeFilter !== allValue ? activeFilter === "active" : undefined,
+  });
   const { data: tutors = [] } = useListTutors();
   const provisionMutation = useProvisionUser();
-  const updateMutation = useUpdateUser();
+  const activateMutation = useActivateUser();
+  const deactivateMutation = useDeactivateUser();
+  const roleMutation = useChangeUserRole();
+  const linkTutorMutation = useLinkUserTutor();
 
   const provision = () => {
     provisionMutation.mutate(
@@ -74,26 +88,25 @@ export default function UsersPage() {
     );
   };
 
-  const updateUser = (user: AuthUser, changes: Partial<AuthUser>) => {
-    updateMutation.mutate(
-      {
-        id: user.id,
-        data: {
-          role: changes.role,
-          active: changes.active,
-          tutorId: changes.tutorId,
-        },
-      },
-      {
-        onError: (error: any) => {
-          toast({
-            variant: "destructive",
-            title: "Could not update user",
-            description: error?.data?.error || error?.message || "The change was not applied.",
-          });
-        },
-      },
-    );
+  const onError = (title: string) => (error: any) => {
+    toast({
+      variant: "destructive",
+      title,
+      description: error?.data?.error || error?.message || "The change was not applied.",
+    });
+  };
+
+  const handleToggleActive = (user: AuthUser) => {
+    const mutation = user.active ? deactivateMutation : activateMutation;
+    mutation.mutate({ id: user.id }, { onError: onError("Could not update user") });
+  };
+
+  const handleRoleChange = (user: AuthUser, role: UserRole) => {
+    roleMutation.mutate({ id: user.id, data: { role } }, { onError: onError("Could not change role") });
+  };
+
+  const handleTutorLink = (user: AuthUser, tutorId: number | null) => {
+    linkTutorMutation.mutate({ id: user.id, data: { tutorId } }, { onError: onError("Could not link tutor") });
   };
 
   return (
@@ -153,12 +166,30 @@ export default function UsersPage() {
         </Dialog>
       </div>
 
-      <Input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search users by name, email, or Entra object ID"
-        className="max-w-md"
-      />
+      <div className="flex flex-wrap gap-3">
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search users by name, email, or Entra object ID"
+          className="max-w-md"
+        />
+        <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Role" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={allValue}>All roles</SelectItem>
+            <SelectItem value="admin">Administrator</SelectItem>
+            <SelectItem value="tutor">Tutor</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={activeFilter} onValueChange={setActiveFilter}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={allValue}>All statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="border border-border rounded-md overflow-hidden bg-card">
         <Table>
@@ -169,14 +200,16 @@ export default function UsersPage() {
               <TableHead>Tutor</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Entra object ID</TableHead>
+              <TableHead>Last Login</TableHead>
+              <TableHead>Created</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6}>Loading users...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8}>Loading users...</TableCell></TableRow>
             ) : users.length === 0 ? (
-              <TableRow><TableCell colSpan={6}>No users found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8}>No users found.</TableCell></TableRow>
             ) : (
               users.map((user) => (
                 <TableRow key={user.id}>
@@ -187,7 +220,7 @@ export default function UsersPage() {
                   <TableCell>
                     <Select
                       value={user.role}
-                      onValueChange={(role: UserRole) => updateUser(user, { role })}
+                      onValueChange={(role: UserRole) => handleRoleChange(user, role)}
                     >
                       <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -199,7 +232,7 @@ export default function UsersPage() {
                   <TableCell>
                     <Select
                       value={user.tutorId ? String(user.tutorId) : noTutor}
-                      onValueChange={(value) => updateUser(user, { tutorId: value === noTutor ? null : Number(value) })}
+                      onValueChange={(value) => handleTutorLink(user, value === noTutor ? null : Number(value))}
                     >
                       <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -218,8 +251,14 @@ export default function UsersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs max-w-56 truncate">{user.entraObjectId || "Not mapped"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {user.lastLoginAt ? format(new Date(user.lastLoginAt), "MMM d, yyyy HH:mm") : "Never"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "—"}
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm" onClick={() => updateUser(user, { active: !user.active })}>
+                    <Button variant="outline" size="sm" onClick={() => handleToggleActive(user)}>
                       <ShieldCheck className="w-4 h-4 mr-2" />
                       {user.active ? "Deactivate" : "Activate"}
                     </Button>

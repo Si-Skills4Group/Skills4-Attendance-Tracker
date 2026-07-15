@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMsal } from "@azure/msal-react";
-import { useGetCurrentUser } from "@workspace/api-client-react";
+import { useGetCurrentUser, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { loginRequest } from "@/auth/msal";
 import { useAuthState } from "@/auth/use-auth-state";
 import { 
@@ -31,6 +31,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     query: {
       enabled: isAuthenticated,
       retry: false,
+      queryKey: getGetCurrentUserQueryKey(),
     },
   });
 

@@ -17,6 +17,7 @@ export interface TutorUpdate {
   password?: string;
   /** @minLength 1 */
   employeeRef?: string;
+  phone?: string;
   active?: boolean;
   externalSystemId?: string;
 }

@@ -241,6 +241,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /tutors/{id}/activate:
+    post:
+      operationId: activateTutor
+      tags: [tutors]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Tutor activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tutor"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tutors/{id}/deactivate:
+    post:
+      operationId: deactivateTutor
+      tags: [tutors]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: confirm
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Tutor deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tutor"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tutor has active cohorts assigned; retry with confirm=true
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ---------- Learners ----------
   /learners:
@@ -255,6 +308,12 @@ paths:
           in: query
           schema: { $ref: "#/components/schemas/LearnerStatus" }
         - name: programme
+          in: query
+          schema: { type: string }
+        - name: level
+          in: query
+          schema: { type: string }
+        - name: employer
           in: query
           schema: { type: string }
         - name: tutorId
@@ -392,6 +451,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /learners/{id}/change-status:
+    post:
+      operationId: changeLearnerStatus
+      tags: [learners]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearnerStatusChangeInput"
+      responses:
+        "200":
+          description: Learner status changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Learner"
+        "400":
+          description: Invalid status transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /learners/{id}/allocation-history:
     get:
       operationId: getLearnerAllocationHistory
@@ -423,6 +516,9 @@ paths:
           in: query
           schema: { type: boolean }
         - name: programme
+          in: query
+          schema: { type: string }
+        - name: level
           in: query
           schema: { type: string }
       responses:
@@ -494,6 +590,50 @@ paths:
       responses:
         "200":
           description: Cohort updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/activate:
+    post:
+      operationId: activateCohort
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cohort activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/deactivate:
+    post:
+      operationId: deactivateCohort
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cohort deactivated
           content:
             application/json:
               schema:
@@ -940,6 +1080,94 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthUser"
+  /users/{id}/activate:
+    post:
+      operationId: activateUser
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: User activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+  /users/{id}/deactivate:
+    post:
+      operationId: deactivateUser
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: User deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+  /users/{id}/role:
+    post:
+      operationId: changeUserRole
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRoleInput"
+      responses:
+        "200":
+          description: User role changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Invalid role change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /users/{id}/link-tutor:
+    post:
+      operationId: linkUserTutor
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserLinkTutorInput"
+      responses:
+        "200":
+          description: User linked to tutor record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Invalid tutor link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /users/{id}/audit:
     get:
       operationId: getUserAudit
@@ -1080,6 +1308,8 @@ components:
         entraObjectId: { type: ["string", "null"] }
         entraTenantId: { type: ["string", "null"] }
         lastLoginAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: ["string", "null"], format: date-time }
+        updatedAt: { type: ["string", "null"], format: date-time }
 
     UserProvisionInput:
       type: object
@@ -1106,6 +1336,17 @@ components:
         tutorId: { type: ["integer", "null"] }
         active: { type: boolean }
 
+    UserRoleInput:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/UserRole" }
+
+    UserLinkTutorInput:
+      type: object
+      properties:
+        tutorId: { type: ["integer", "null"] }
+
     Tutor:
       type: object
       required:
@@ -1116,6 +1357,7 @@ components:
           lastName,
           email,
           employeeRef,
+          phone,
           active,
           externalSystemId,
           createdAt,
@@ -1128,6 +1370,7 @@ components:
         lastName: { type: string }
         email: { type: string }
         employeeRef: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
         active: { type: boolean }
         externalSystemId: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
@@ -1142,6 +1385,7 @@ components:
         email: { type: string, minLength: 1 }
         password: { type: string, minLength: 8 }
         employeeRef: { type: string, minLength: 1 }
+        phone: { type: string }
         active: { type: boolean, default: true }
         externalSystemId: { type: string }
 
@@ -1153,6 +1397,7 @@ components:
         email: { type: string, minLength: 1 }
         password: { type: string, minLength: 8 }
         employeeRef: { type: string, minLength: 1 }
+        phone: { type: string }
         active: { type: boolean }
         externalSystemId: { type: string }
 
@@ -1171,6 +1416,8 @@ components:
           level,
           startDate,
           plannedEndDate,
+          actualEndDate,
+          withdrawalDate,
           status,
           tutorId,
           cohortId,
@@ -1192,6 +1439,8 @@ components:
         level: { type: string }
         startDate: { type: string, format: date }
         plannedEndDate: { type: ["string", "null"], format: date }
+        actualEndDate: { type: ["string", "null"], format: date }
+        withdrawalDate: { type: ["string", "null"], format: date }
         status: { $ref: "#/components/schemas/LearnerStatus" }
         tutorId: { type: ["integer", "null"] }
         cohortId: { type: ["integer", "null"] }
@@ -1215,6 +1464,8 @@ components:
         level: { type: string, minLength: 1 }
         startDate: { type: string, format: date }
         plannedEndDate: { type: string, format: date }
+        actualEndDate: { type: string, format: date }
+        withdrawalDate: { type: string, format: date }
         status: { $ref: "#/components/schemas/LearnerStatus" }
         tutorId: { type: "integer" }
         cohortId: { type: "integer" }
@@ -1233,10 +1484,21 @@ components:
         level: { type: string, minLength: 1 }
         startDate: { type: string, format: date }
         plannedEndDate: { type: ["string", "null"], format: date }
+        actualEndDate: { type: ["string", "null"], format: date }
+        withdrawalDate: { type: ["string", "null"], format: date }
         status: { $ref: "#/components/schemas/LearnerStatus" }
         tutorId: { type: ["integer", "null"] }
         cohortId: { type: ["integer", "null"] }
         externalSystemId: { type: ["string", "null"] }
+
+    LearnerStatusChangeInput:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/LearnerStatus" }
+        actualEndDate: { type: string, format: date }
+        withdrawalDate: { type: string, format: date }
+        reason: { type: string }
 
     LearnerListResponse:
       type: object

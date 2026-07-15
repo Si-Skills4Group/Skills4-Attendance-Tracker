@@ -5,10 +5,8 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { UserRole } from './userRole';
 
-export type ListCohortsParams = {
-tutorId?: number;
-active?: boolean;
-programme?: string;
-level?: string;
-};
+export interface UserRoleInput {
+  role: UserRole;
+}

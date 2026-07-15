@@ -1,6 +1,6 @@
 import * as React from "react";
-import { useGetTutor, useCreateTutor, useUpdateTutor, getGetTutorQueryKey } from "@workspace/api-client-react";
-import { useLocation, useParams } from "wouter";
+import { useGetTutor, useCreateTutor, useUpdateTutor, useActivateTutor, useDeactivateTutor, useListCohorts, getGetTutorQueryKey, getListCohortsQueryKey } from "@workspace/api-client-react";
+import { useLocation, useParams, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -10,14 +10,26 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, ArrowLeft } from "lucide-react";
+import { Loader2, Save, ArrowLeft, BookOpen } from "lucide-react";
 
 const baseTutorSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Valid email required"),
   employeeRef: z.string().optional(),
+  phone: z.string().optional(),
   active: z.boolean().default(true),
   externalSystemId: z.string().optional(),
 });
@@ -26,16 +38,22 @@ export default function TutorDetailPage() {
   const params = useParams();
   const isNew = !params.id || params.id === "new";
   const tutorId = isNew ? 0 : Number(params.id);
-  
+
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  
+  const [pendingDeactivation, setPendingDeactivation] = React.useState<{ id: number; name: string }[] | null>(null);
+
   const { data: tutor, isLoading: isLoadingTutor } = useGetTutor(tutorId, {
     query: { enabled: !isNew, queryKey: getGetTutorQueryKey(tutorId) }
   });
-  
+  const { data: assignedCohorts = [] } = useListCohorts({ tutorId }, {
+    query: { enabled: !isNew, queryKey: getListCohortsQueryKey({ tutorId }) },
+  });
+
   const createMutation = useCreateTutor();
   const updateMutation = useUpdateTutor();
+  const activateMutation = useActivateTutor();
+  const deactivateMutation = useDeactivateTutor();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const schema = baseTutorSchema;
@@ -47,6 +65,7 @@ export default function TutorDetailPage() {
       lastName: "",
       email: "",
       employeeRef: "",
+      phone: "",
       active: true,
       externalSystemId: "",
     }
@@ -62,6 +81,7 @@ export default function TutorDetailPage() {
         lastName: tutor.lastName,
         email: tutor.email,
         employeeRef: tutor.employeeRef || "",
+        phone: tutor.phone || "",
         active: tutor.active,
         externalSystemId: tutor.externalSystemId || "",
       });
@@ -72,6 +92,7 @@ export default function TutorDetailPage() {
     const payload = {
       ...values,
       employeeRef: values.employeeRef?.trim() || undefined,
+      phone: values.phone?.trim() || undefined,
     };
 
     if (isNew) {
@@ -83,7 +104,8 @@ export default function TutorDetailPage() {
         onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
       });
     } else {
-      updateMutation.mutate({ id: tutorId, data: payload }, {
+      const { active: _active, ...rest } = payload;
+      updateMutation.mutate({ id: tutorId, data: rest }, {
         onSuccess: () => {
           toast({ title: "Tutor updated", description: "Changes saved successfully." });
           setLocation("/tutors");
@@ -91,6 +113,33 @@ export default function TutorDetailPage() {
         onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
       });
     }
+  };
+
+  const handleToggleActive = (newActive: boolean, confirm = false) => {
+    if (newActive) {
+      activateMutation.mutate({ id: tutorId }, {
+        onSuccess: () => {
+          toast({ title: "Tutor activated" });
+        },
+        onError: (err: any) => toast({ title: "Activation failed", description: err?.data?.error || err.message, variant: "destructive" }),
+      });
+      return;
+    }
+
+    deactivateMutation.mutate({ id: tutorId, params: { confirm } }, {
+      onSuccess: () => {
+        setPendingDeactivation(null);
+        toast({ title: "Tutor deactivated" });
+      },
+      onError: (err: any) => {
+        const data = err?.data;
+        if (err?.status === 409 && data?.cohorts) {
+          setPendingDeactivation(data.cohorts);
+          return;
+        }
+        toast({ title: "Deactivation failed", description: data?.error || err.message, variant: "destructive" });
+      },
+    });
   };
 
   if (!isNew && isLoadingTutor) {
@@ -103,7 +152,7 @@ export default function TutorDetailPage() {
         { label: "Tutors", href: "/tutors" },
         { label: isNew ? "New Tutor" : `${tutor?.firstName} ${tutor?.lastName}` }
       ]} />
-      
+
       <div className="flex items-center gap-4 mb-8 page-transition-enter">
         <Button variant="outline" size="icon" onClick={() => setLocation("/tutors")}>
           <ArrowLeft className="w-4 h-4" />
@@ -118,7 +167,7 @@ export default function TutorDetailPage() {
         </div>
       </div>
 
-      <div className="page-transition-enter stagger-1">
+      <div className="page-transition-enter stagger-1 space-y-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Card className="shadow-sm">
@@ -148,6 +197,13 @@ export default function TutorDetailPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                <FormField control={form.control} name="phone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telephone (Optional)</FormLabel>
+                    <FormControl><Input {...field} placeholder="e.g. 07700 900123" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="employeeRef" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Employee Reference (Optional)</FormLabel>
@@ -173,22 +229,70 @@ export default function TutorDetailPage() {
                     </FormItem>
                   )} />
                 </div>
-                
-                <FormField control={form.control} name="active" render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card">
+
+                {isNew ? (
+                  <FormField control={form.control} name="active" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base">Active Account</FormLabel>
+                        <FormDescription>
+                          Inactive tutors cannot log in or be assigned new cohorts.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                ) : (
+                  <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Active Account</FormLabel>
-                      <FormDescription>
+                      <p className="text-base font-medium">Active Account</p>
+                      <p className="text-sm text-muted-foreground">
                         Inactive tutors cannot log in or be assigned new cohorts.
-                      </FormDescription>
+                      </p>
                     </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )} />
+                    <Switch
+                      checked={tutor?.active ?? false}
+                      onCheckedChange={handleToggleActive}
+                      aria-label="Toggle active status"
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
+
+            {!isNew && (
+              <Card className="shadow-sm">
+                <CardHeader className="border-b bg-muted/10 pb-4">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" /> Assigned Cohorts
+                  </CardTitle>
+                  <CardDescription>Cohorts this tutor currently delivers.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {assignedCohorts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No cohorts assigned yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {assignedCohorts.map((cohort) => (
+                        <Link key={cohort.id} href={`/cohorts/${cohort.id}`}>
+                          <div className="flex items-center justify-between p-3 rounded-md border hover:border-primary/30 hover:bg-muted/20 cursor-pointer">
+                            <div>
+                              <p className="font-medium text-sm">{cohort.name}</p>
+                              <p className="text-xs text-muted-foreground">{cohort.programme} &middot; {cohort.level}</p>
+                            </div>
+                            <Badge variant={cohort.active ? "default" : "secondary"}>
+                              {cohort.active ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="flex justify-end gap-4">
               <Button type="button" variant="outline" onClick={() => setLocation("/tutors")}>
@@ -202,6 +306,27 @@ export default function TutorDetailPage() {
           </form>
         </Form>
       </div>
+
+      <AlertDialog open={!!pendingDeactivation} onOpenChange={(open) => !open && setPendingDeactivation(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate this tutor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This tutor has {pendingDeactivation?.length} active cohort{pendingDeactivation?.length === 1 ? "" : "s"} assigned:
+              <span className="block mt-2 font-medium text-foreground">
+                {pendingDeactivation?.map((c) => c.name).join(", ")}
+              </span>
+              These cohorts will keep their tutor assignment even though the tutor becomes inactive. Continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleToggleActive(false, true)}>
+              Deactivate anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

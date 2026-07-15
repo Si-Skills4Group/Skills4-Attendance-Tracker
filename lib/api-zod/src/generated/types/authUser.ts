@@ -24,4 +24,8 @@ export interface AuthUser {
   entraTenantId?: string | null;
   /** @nullable */
   lastLoginAt?: Date | null;
+  /** @nullable */
+  createdAt?: Date | null;
+  /** @nullable */
+  updatedAt?: Date | null;
 }

@@ -37,7 +37,9 @@ export const LoginResponse = zod.object({
   "tutorId": zod.number().nullish(),
   "entraObjectId": zod.string().nullish(),
   "entraTenantId": zod.string().nullish(),
-  "lastLoginAt": zod.coerce.date().nullish()
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
 })
 
 
@@ -55,7 +57,9 @@ export const GetCurrentUserResponse = zod.object({
   "tutorId": zod.number().nullish(),
   "entraObjectId": zod.string().nullish(),
   "entraTenantId": zod.string().nullish(),
-  "lastLoginAt": zod.coerce.date().nullish()
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
 })
 
 
@@ -162,6 +166,7 @@ export const ListTutorsResponseItem = zod.object({
   "lastName": zod.string(),
   "email": zod.string(),
   "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
@@ -184,6 +189,7 @@ export const CreateTutorBody = zod.object({
   "email": zod.string().min(1),
   "password": zod.string().min(createTutorBodyPasswordMin).optional(),
   "employeeRef": zod.string().min(1).optional(),
+  "phone": zod.string().optional(),
   "active": zod.boolean().default(createTutorBodyActiveDefault),
   "externalSystemId": zod.string().optional()
 })
@@ -195,6 +201,7 @@ export const CreateTutorResponse = zod.object({
   "lastName": zod.string(),
   "email": zod.string(),
   "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
@@ -254,6 +261,7 @@ export const GetTutorResponse = zod.object({
   "lastName": zod.string(),
   "email": zod.string(),
   "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
@@ -279,6 +287,7 @@ export const UpdateTutorBody = zod.object({
   "email": zod.string().min(1).optional(),
   "password": zod.string().min(updateTutorBodyPasswordMin).optional(),
   "employeeRef": zod.string().min(1).optional(),
+  "phone": zod.string().optional(),
   "active": zod.boolean().optional(),
   "externalSystemId": zod.string().optional()
 })
@@ -290,6 +299,51 @@ export const UpdateTutorResponse = zod.object({
   "lastName": zod.string(),
   "email": zod.string(),
   "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const ActivateTutorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ActivateTutorResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const DeactivateTutorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const deactivateTutorQueryConfirmDefault = false;
+
+export const DeactivateTutorQueryParams = zod.object({
+  "confirm": zod.coerce.boolean().default(deactivateTutorQueryConfirmDefault)
+})
+
+export const DeactivateTutorResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
@@ -304,6 +358,8 @@ export const ListLearnersQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional(),
   "programme": zod.coerce.string().optional(),
+  "level": zod.coerce.string().optional(),
+  "employer": zod.coerce.string().optional(),
   "tutorId": zod.coerce.number().optional(),
   "cohortId": zod.coerce.number().optional(),
   "page": zod.coerce.number().default(listLearnersQueryPageDefault),
@@ -323,6 +379,8 @@ export const ListLearnersResponse = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -357,6 +415,8 @@ export const CreateLearnerBody = zod.object({
   "level": zod.string().min(1),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().optional(),
+  "actualEndDate": zod.coerce.date().optional(),
+  "withdrawalDate": zod.coerce.date().optional(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional(),
   "tutorId": zod.number().optional(),
   "cohortId": zod.number().optional(),
@@ -375,6 +435,8 @@ export const CreateLearnerResponse = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -443,6 +505,8 @@ export const GetLearnerResponse = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -476,6 +540,8 @@ export const UpdateLearnerBody = zod.object({
   "level": zod.string().min(1).optional(),
   "startDate": zod.coerce.date().optional(),
   "plannedEndDate": zod.coerce.date().nullish(),
+  "actualEndDate": zod.coerce.date().nullish(),
+  "withdrawalDate": zod.coerce.date().nullish(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional(),
   "tutorId": zod.number().nullish(),
   "cohortId": zod.number().nullish(),
@@ -494,6 +560,44 @@ export const UpdateLearnerResponse = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
+  "tutorId": zod.number().nullable(),
+  "cohortId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "cohortName": zod.string().nullable(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const ChangeLearnerStatusParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ChangeLearnerStatusBody = zod.object({
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
+  "actualEndDate": zod.coerce.date().optional(),
+  "withdrawalDate": zod.coerce.date().optional(),
+  "reason": zod.string().optional()
+})
+
+export const ChangeLearnerStatusResponse = zod.object({
+  "id": zod.number(),
+  "learnerRef": zod.string(),
+  "uln": zod.string().nullable(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string().nullable(),
+  "employer": zod.string().nullable(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "startDate": zod.coerce.date(),
+  "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -533,7 +637,8 @@ export const GetLearnerAllocationHistoryResponse = zod.array(GetLearnerAllocatio
 export const ListCohortsQueryParams = zod.object({
   "tutorId": zod.coerce.number().optional(),
   "active": zod.coerce.boolean().optional(),
-  "programme": zod.coerce.string().optional()
+  "programme": zod.coerce.string().optional(),
+  "level": zod.coerce.string().optional()
 })
 
 export const ListCohortsResponseItem = zod.object({
@@ -665,6 +770,52 @@ export const UpdateCohortResponse = zod.object({
 })
 
 
+export const ActivateCohortParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ActivateCohortResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const DeactivateCohortParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeactivateCohortResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
 export const GetCohortLearnersParams = zod.object({
   "id": zod.coerce.number()
 })
@@ -681,6 +832,8 @@ export const GetCohortLearnersResponseItem = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -705,6 +858,8 @@ export const ListUnallocatedLearnersResponseItem = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -735,6 +890,8 @@ export const GetAllocationByTutorResponseItem = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -1047,6 +1204,8 @@ export const GetLearnerReportResponse = zod.object({
   "level": zod.string(),
   "startDate": zod.coerce.date(),
   "plannedEndDate": zod.coerce.date().nullable(),
+  "actualEndDate": zod.coerce.date().nullable(),
+  "withdrawalDate": zod.coerce.date().nullable(),
   "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
   "tutorId": zod.number().nullable(),
   "cohortId": zod.number().nullable(),
@@ -1128,6 +1287,7 @@ export const GetTutorReportResponse = zod.object({
   "lastName": zod.string(),
   "email": zod.string(),
   "employeeRef": zod.string().nullable(),
+  "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
@@ -1256,7 +1416,9 @@ export const ListUsersResponseItem = zod.object({
   "tutorId": zod.number().nullish(),
   "entraObjectId": zod.string().nullish(),
   "entraTenantId": zod.string().nullish(),
-  "lastLoginAt": zod.coerce.date().nullish()
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
@@ -1290,7 +1452,9 @@ export const ProvisionUserResponse = zod.object({
   "tutorId": zod.number().nullish(),
   "entraObjectId": zod.string().nullish(),
   "entraTenantId": zod.string().nullish(),
-  "lastLoginAt": zod.coerce.date().nullish()
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
 })
 
 
@@ -1309,7 +1473,9 @@ export const GetUserResponse = zod.object({
   "tutorId": zod.number().nullish(),
   "entraObjectId": zod.string().nullish(),
   "entraTenantId": zod.string().nullish(),
-  "lastLoginAt": zod.coerce.date().nullish()
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
 })
 
 
@@ -1342,7 +1508,101 @@ export const UpdateUserResponse = zod.object({
   "tutorId": zod.number().nullish(),
   "entraObjectId": zod.string().nullish(),
   "entraTenantId": zod.string().nullish(),
-  "lastLoginAt": zod.coerce.date().nullish()
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
+})
+
+
+export const ActivateUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ActivateUserResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
+})
+
+
+export const DeactivateUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeactivateUserResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
+})
+
+
+export const ChangeUserRoleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ChangeUserRoleBody = zod.object({
+  "role": zod.enum(['admin', 'tutor'])
+})
+
+export const ChangeUserRoleResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
+})
+
+
+export const LinkUserTutorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const LinkUserTutorBody = zod.object({
+  "tutorId": zod.number().nullish()
+})
+
+export const LinkUserTutorResponse = zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string(),
+  "role": zod.enum(['admin', 'tutor']),
+  "active": zod.boolean(),
+  "tutorId": zod.number().nullish(),
+  "entraObjectId": zod.string().nullish(),
+  "entraTenantId": zod.string().nullish(),
+  "lastLoginAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date().nullish(),
+  "updatedAt": zod.coerce.date().nullish()
 })
 
 

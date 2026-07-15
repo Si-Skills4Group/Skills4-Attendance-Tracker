@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useListTutors, useUpdateTutor, Tutor } from "@workspace/api-client-react";
+import { useListTutors, useListCohorts, useActivateTutor, useDeactivateTutor, Tutor } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Input } from "@/components/ui/input";
@@ -7,47 +7,86 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Upload, Mail, Building2, User } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Search, Plus, Upload, Mail, BookOpen, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function TutorsPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showActiveOnly, setShowActiveOnly] = React.useState(true);
-  
-  const { data: tutors = [], isLoading, refetch } = useListTutors({ 
-    active: showActiveOnly ? true : undefined 
+  const [pendingDeactivation, setPendingDeactivation] = React.useState<{ tutor: Tutor; cohorts: { id: number; name: string }[] } | null>(null);
+
+  const { data: tutors = [], isLoading, refetch } = useListTutors({
+    active: showActiveOnly ? true : undefined
   });
-  
-  const updateTutor = useUpdateTutor();
+  const { data: cohorts = [] } = useListCohorts({ active: true });
+
+  const activateTutor = useActivateTutor();
+  const deactivateTutor = useDeactivateTutor();
   const { toast } = useToast();
+
+  const cohortCountByTutor = React.useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const cohort of cohorts) {
+      if (cohort.tutorId != null) {
+        counts.set(cohort.tutorId, (counts.get(cohort.tutorId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [cohorts]);
 
   const filteredTutors = React.useMemo(() => {
     if (!searchQuery) return tutors;
     const lowerQuery = searchQuery.toLowerCase();
-    return tutors.filter(t => 
-      t.firstName.toLowerCase().includes(lowerQuery) || 
+    return tutors.filter(t =>
+      t.firstName.toLowerCase().includes(lowerQuery) ||
       t.lastName.toLowerCase().includes(lowerQuery) ||
-      t.email.toLowerCase().includes(lowerQuery) ||
-      (t.employeeRef ?? "").toLowerCase().includes(lowerQuery)
+      t.email.toLowerCase().includes(lowerQuery)
     );
   }, [tutors, searchQuery]);
 
-  const handleToggleActive = (tutor: Tutor, newActive: boolean) => {
-    updateTutor.mutate({ id: tutor.id, data: { active: newActive } }, {
+  const handleToggleActive = (tutor: Tutor, newActive: boolean, confirm = false) => {
+    if (newActive) {
+      activateTutor.mutate({ id: tutor.id }, {
+        onSuccess: () => {
+          toast({ title: "Tutor activated", description: `${tutor.firstName} is now active.` });
+          refetch();
+        },
+        onError: (err: any) => toast({ title: "Activation failed", description: err?.data?.error || err.message, variant: "destructive" }),
+      });
+      return;
+    }
+
+    deactivateTutor.mutate({ id: tutor.id, params: { confirm } }, {
       onSuccess: () => {
-        toast({ title: "Tutor updated", description: `${tutor.firstName} is now ${newActive ? 'active' : 'inactive'}.` });
+        setPendingDeactivation(null);
+        toast({ title: "Tutor deactivated", description: `${tutor.firstName} is now inactive.` });
         refetch();
       },
       onError: (err: any) => {
-        toast({ title: "Update failed", description: err.error, variant: "destructive" });
-      }
+        const data = err?.data;
+        if (err?.status === 409 && data?.cohorts) {
+          setPendingDeactivation({ tutor, cohorts: data.cohorts });
+          return;
+        }
+        toast({ title: "Deactivation failed", description: data?.error || err.message, variant: "destructive" });
+      },
     });
   };
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
       <Breadcrumbs items={[{ label: "Tutors" }]} />
-      
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 page-transition-enter">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Tutors</h1>
@@ -70,18 +109,18 @@ export default function TutorsPage() {
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 page-transition-enter stagger-1">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search tutors by name, email or ref..." 
+          <Input
+            placeholder="Search tutors by name or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-10 bg-card"
           />
         </div>
         <div className="flex items-center space-x-2 shrink-0">
-          <Switch 
-            id="active-only" 
-            checked={showActiveOnly} 
-            onCheckedChange={setShowActiveOnly} 
+          <Switch
+            id="active-only"
+            checked={showActiveOnly}
+            onCheckedChange={setShowActiveOnly}
           />
           <Label htmlFor="active-only" className="cursor-pointer">Active Only</Label>
         </div>
@@ -122,18 +161,18 @@ export default function TutorsPage() {
                           {tutor.firstName} {tutor.lastName}
                         </h3>
                       </Link>
-                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 font-mono">
-                        <Building2 className="w-3 h-3" /> {tutor.employeeRef || "—"}
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <BookOpen className="w-3 h-3" /> {cohortCountByTutor.get(tutor.id) ?? 0} cohort{(cohortCountByTutor.get(tutor.id) ?? 0) === 1 ? "" : "s"}
                       </p>
                     </div>
                   </div>
-                  <Switch 
-                    checked={tutor.active} 
+                  <Switch
+                    checked={tutor.active}
                     onCheckedChange={(v) => handleToggleActive(tutor, v)}
                     aria-label="Toggle active status"
                   />
                 </div>
-                
+
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail className="w-4 h-4 shrink-0" />
                   <a href={`mailto:${tutor.email}`} className="hover:text-foreground truncate">{tutor.email}</a>
@@ -151,6 +190,27 @@ export default function TutorsPage() {
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!pendingDeactivation} onOpenChange={(open) => !open && setPendingDeactivation(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate {pendingDeactivation?.tutor.firstName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This tutor has {pendingDeactivation?.cohorts.length} active cohort{pendingDeactivation?.cohorts.length === 1 ? "" : "s"} assigned:
+              <span className="block mt-2 font-medium text-foreground">
+                {pendingDeactivation?.cohorts.map((c) => c.name).join(", ")}
+              </span>
+              These cohorts will keep their tutor assignment even though the tutor becomes inactive. Continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pendingDeactivation && handleToggleActive(pendingDeactivation.tutor, false, true)}>
+              Deactivate anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
