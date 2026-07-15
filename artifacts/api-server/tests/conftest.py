@@ -192,4 +192,49 @@ def learner_factory(db):
     yield make
 
     for learner_id in created_ids:
+        # No FK constraints exist in this schema (confirmed in bootstrap.py),
+        # so these rows would otherwise silently survive the learner's
+        # deletion and contaminate later test runs -- as happened once
+        # before with a stray ULN row created outside a factory.
+        db.execute("DELETE FROM attendance_records WHERE learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM scheduled_allocations WHERE learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM learner_allocation_history WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learners WHERE id = %s", (learner_id,))
+
+
+@pytest.fixture
+def attendance_session_factory(db):
+    created_ids = []
+
+    def make(**overrides) -> dict:
+        defaults = dict(
+            cohort_id=None,
+            session_date="2026-01-01",
+            planned_start_time="09:00",
+            planned_end_time="16:00",
+            planned_duration_hours=7,
+            title=None,
+            notes=None,
+            created_by=None,
+        )
+        defaults.update(overrides)
+        db.execute(
+            """
+            INSERT INTO attendance_sessions
+                (cohort_id, session_date, planned_start_time, planned_end_time, planned_duration_hours,
+                 title, notes, created_by)
+            VALUES (%(cohort_id)s, %(session_date)s, %(planned_start_time)s, %(planned_end_time)s,
+                    %(planned_duration_hours)s, %(title)s, %(notes)s, %(created_by)s)
+            RETURNING id
+            """,
+            defaults,
+        )
+        session_id = db.fetchone()["id"]
+        created_ids.append(session_id)
+        return {"id": session_id, **defaults}
+
+    yield make
+
+    for session_id in created_ids:
+        db.execute("DELETE FROM attendance_records WHERE session_id = %s", (session_id,))
+        db.execute("DELETE FROM attendance_sessions WHERE id = %s", (session_id,))
