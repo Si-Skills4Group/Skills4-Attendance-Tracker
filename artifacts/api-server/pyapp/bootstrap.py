@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS tutors (
 );
 
 ALTER TABLE tutors ALTER COLUMN employee_ref DROP NOT NULL;
+ALTER TABLE tutors ADD COLUMN IF NOT EXISTS phone text;
 
 CREATE TABLE IF NOT EXISTS cohorts (
   id serial PRIMARY KEY,
@@ -114,6 +115,10 @@ CREATE TABLE IF NOT EXISTS cohorts (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_cohorts_tutor_id ON cohorts (tutor_id);
+CREATE INDEX IF NOT EXISTS idx_cohorts_programme ON cohorts (programme);
+CREATE INDEX IF NOT EXISTS idx_cohorts_active ON cohorts (active);
 
 CREATE TABLE IF NOT EXISTS learners (
   id serial PRIMARY KEY,
@@ -135,6 +140,15 @@ CREATE TABLE IF NOT EXISTS learners (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS actual_end_date date;
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS withdrawal_date date;
+
+CREATE UNIQUE INDEX IF NOT EXISTS learners_uln_unique
+  ON learners (uln)
+  WHERE uln IS NOT NULL AND uln <> '';
+CREATE INDEX IF NOT EXISTS idx_learners_status ON learners (status);
+CREATE INDEX IF NOT EXISTS idx_learners_programme ON learners (programme);
+
 CREATE TABLE IF NOT EXISTS learner_allocation_history (
   id serial PRIMARY KEY,
   learner_id integer NOT NULL,
@@ -147,6 +161,9 @@ CREATE TABLE IF NOT EXISTS learner_allocation_history (
   changed_by integer NOT NULL,
   changed_date timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_allocation_history_learner_effective
+  ON learner_allocation_history (learner_id, effective_date);
 
 CREATE TABLE IF NOT EXISTS attendance_sessions (
   id serial PRIMARY KEY,

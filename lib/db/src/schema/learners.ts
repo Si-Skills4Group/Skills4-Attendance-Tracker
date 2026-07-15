@@ -22,6 +22,8 @@ export const learnersTable = pgTable("learners", {
   level: text("level").notNull(),
   startDate: date("start_date", { mode: "string" }).notNull(),
   plannedEndDate: date("planned_end_date", { mode: "string" }),
+  actualEndDate: date("actual_end_date", { mode: "string" }),
+  withdrawalDate: date("withdrawal_date", { mode: "string" }),
   status: learnerStatusEnum("status").notNull().default("active"),
   tutorId: integer("tutor_id"),
   cohortId: integer("cohort_id"),
