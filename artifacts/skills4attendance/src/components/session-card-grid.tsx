@@ -65,11 +65,11 @@ export function SessionCardGrid({
           : needsAttention
             ? 'border-l-4 border-l-amber-500'
             : 'border-l-4 border-l-muted';
-        const completionTextClass = isComplete
-          ? "text-emerald-600 font-bold font-mono"
+        const completionLabelClass = isComplete
+          ? "text-emerald-600"
           : needsAttention
-            ? "text-amber-600 font-bold font-mono"
-            : "text-muted-foreground font-bold font-mono";
+            ? "text-amber-600"
+            : "text-muted-foreground";
         const completionBarClass = isComplete
           ? 'bg-emerald-500'
           : needsAttention
@@ -105,12 +105,12 @@ export function SessionCardGrid({
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-muted/50">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-foreground">Completion</span>
-                    <span className={completionTextClass}>
-                      {session.recordedCount} / {session.expectedCount}
-                    </span>
+                  <div className={`text-sm font-semibold ${completionLabelClass}`}>
+                    {isComplete ? "Register complete" : "Register incomplete"}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {session.recordedCount} of {session.expectedCount} learner{session.expectedCount === 1 ? "" : "s"} recorded
+                  </p>
                   <div className="w-full bg-muted/30 h-1.5 rounded-full mt-2 overflow-hidden">
                     <div
                       className={`h-full ${completionBarClass}`}

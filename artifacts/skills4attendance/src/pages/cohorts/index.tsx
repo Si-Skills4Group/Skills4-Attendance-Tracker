@@ -224,9 +224,9 @@ export default function CohortsPage() {
                   </div>
                 </div>
               </div>
-              <Link href={`/cohorts/${cohort.id}/sessions`}>
+              <Link href={`/cohorts/${cohort.id}`}>
                 <div className="bg-primary/5 border-t border-primary/10 px-5 py-3 text-xs font-medium text-primary flex items-center justify-between group-hover:bg-primary/10 transition-colors cursor-pointer">
-                  View Sessions & Registers
+                  Manage Cohort
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </Link>

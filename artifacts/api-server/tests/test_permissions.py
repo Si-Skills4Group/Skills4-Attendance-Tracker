@@ -182,3 +182,41 @@ class TestEndpointsRejectTutorsOverHttp:
         _as_admin(monkeypatch)
         response = client.get("/api/users")
         assert response.status_code == 200
+
+    def _as_tutor_via_dependency_override(self, client, tutor_id):
+        """require_auth is wired directly as Depends(require_auth) on
+        GET /cohorts/{id} and GET /attendance/sessions (unlike
+        Depends(require_admin), which calls require_auth as a plain
+        function call internally) -- FastAPI captures that dependency
+        callable at route-registration time, so monkeypatching
+        auth_module.require_auth afterwards has no effect on routes wired
+        this way. app.dependency_overrides is the correct override
+        mechanism for a dependency referenced directly like this."""
+        fake_session = {"userId": 1, "role": "tutor", "tutorId": tutor_id}
+        client.app.dependency_overrides[auth_module.require_auth] = lambda: fake_session
+
+    def test_tutor_cannot_open_another_tutors_cohort_over_http(self, client, tutor_factory, cohort_factory):
+        """A frontend route guard is not sufficient -- this proves the real
+        ASGI route for GET /cohorts/{id} (what the corrected attendance
+        cohort-sessions page calls for cohort details) rejects a tutor
+        attempting to reach another tutor's cohort by URL manipulation."""
+        owner = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        self._as_tutor_via_dependency_override(client, owner["tutorId"] + 999_999)
+        try:
+            response = client.get(f"/api/cohorts/{cohort['id']}")
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 403
+
+    def test_tutor_cannot_list_another_tutors_cohort_sessions_over_http(self, client, tutor_factory, cohort_factory):
+        """Same as above for GET /attendance/sessions?cohortId= -- the API
+        the corrected cohort-sessions page calls for the session list."""
+        owner = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        self._as_tutor_via_dependency_override(client, owner["tutorId"] + 999_999)
+        try:
+            response = client.get(f"/api/attendance/sessions?cohortId={cohort['id']}")
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 403

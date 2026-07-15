@@ -56,12 +56,15 @@ describe('CohortsPage filter state', () => {
     expect(location.history?.at(-1)).toContain('q=Cohort');
   });
 
-  it('renders cohort summary stats and links to the sessions page', () => {
+  it('renders cohort summary stats and links to the cohort edit form, not a sessions page', () => {
+    // This admin list's job is cohort administration -- clicking through must
+    // land on the edit form (/cohorts/:id), never on attendance/session
+    // navigation, which lives under /attendance now.
     renderAtLocation('');
 
     expect(screen.getByText('Cohort One')).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument(); // activeLearnerCount
-    const sessionsLink = screen.getByText('View Sessions & Registers').closest('a');
-    expect(sessionsLink).toHaveAttribute('href', '/cohorts/1/sessions');
+    const manageLink = screen.getByText('Manage Cohort').closest('a');
+    expect(manageLink).toHaveAttribute('href', '/cohorts/1');
   });
 });

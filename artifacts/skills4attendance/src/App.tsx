@@ -19,9 +19,9 @@ import LearnerDetailPage from "@/pages/learners/detail";
 import LearnerImportPage from "@/pages/learners/import";
 import CohortsPage from "@/pages/cohorts/index";
 import CohortDetailPage from "@/pages/cohorts/detail";
-import CohortSessionsPage from "@/pages/cohorts/sessions";
 import AllocationPage from "@/pages/allocation";
 import AttendancePage from "@/pages/attendance/index";
+import CohortSessionsPage from "@/pages/attendance/cohort-sessions";
 import RegisterPage from "@/pages/attendance/register";
 import ReportsPage from "@/pages/reports";
 import AuditLogPage from "@/pages/audit-log";
@@ -50,10 +50,10 @@ function ProtectedRouter() {
         <Route path="/learners/import" component={LearnerImportPage} />
         <Route path="/learners/:id" component={LearnerDetailPage} />
         <Route path="/cohorts" component={CohortsPage} />
-        <Route path="/cohorts/:id/sessions" component={CohortSessionsPage} />
         <Route path="/cohorts/:id" component={CohortDetailPage} />
         <Route path="/allocation" component={AllocationPage} />
         <Route path="/attendance" component={AttendancePage} />
+        <Route path="/attendance/cohorts/:id" component={CohortSessionsPage} />
         <Route path="/attendance/:id" component={RegisterPage} />
         <Route path="/reports" component={ReportsPage} />
         <Route path="/audit-log" component={AuditLogPage} />
