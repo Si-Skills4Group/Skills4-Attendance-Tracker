@@ -32,6 +32,14 @@ class UserUpdateInput(BaseModel):
     active: bool | None = None
 
 
+class UserRoleInput(BaseModel):
+    role: str
+
+
+class UserLinkTutorInput(BaseModel):
+    tutorId: int | None = None
+
+
 def _validate_role_mapping(role: str, tutor_id: int | None) -> None:
     if role not in {"admin", "tutor"}:
         raise HTTPException(status_code=400, detail="role must be admin or tutor")
@@ -45,6 +53,17 @@ def _ensure_tutor_exists(cur, tutor_id: int | None) -> None:
     cur.execute("SELECT id FROM tutors WHERE id = %s", (tutor_id,))
     if not cur.fetchone():
         raise HTTPException(status_code=400, detail="Tutor record not found")
+
+
+def _ensure_tutor_not_linked_elsewhere(cur, tutor_id: int | None, exclude_user_id: int | None) -> None:
+    if tutor_id is None:
+        return
+    cur.execute(
+        "SELECT id FROM users WHERE tutor_id = %s AND active = true AND id != %s",
+        (tutor_id, exclude_user_id or 0),
+    )
+    if cur.fetchone():
+        raise HTTPException(status_code=400, detail="This tutor record is already linked to another active user")
 
 
 def _active_admin_count(cur) -> int:
@@ -95,6 +114,11 @@ def provision_user(payload: UserProvisionInput, request: Request, _session: dict
         existing_by_email = cur.fetchone()
         if existing_by_email and existing_by_email["entraObjectId"]:
             raise HTTPException(status_code=400, detail="A user with this email is already mapped to Entra")
+
+        _ensure_tutor_not_linked_elsewhere(
+            cur, payload.tutorId, existing_by_email["id"] if existing_by_email else None
+        )
+
         if existing_by_email:
             cur.execute(
                 """
@@ -154,50 +178,124 @@ def get_user(user_id: int, _session: dict = Depends(require_admin)):
     return _user_public(user)
 
 
+def _apply_user_updates(cur, session: dict, user_id: int, updates: dict) -> tuple[dict, dict]:
+    """Core user-mutation logic shared by PATCH and the dedicated action endpoints."""
+    cur.execute(f"{USER_SELECT} WHERE id = %s", (user_id,))
+    existing = cur.fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    next_role = updates.get("role", existing["role"])
+    next_tutor_id = updates.get("tutorId", existing["tutorId"])
+    _validate_role_mapping(next_role, next_tutor_id)
+    _ensure_tutor_exists(cur, next_tutor_id)
+    if "tutorId" in updates:
+        _ensure_tutor_not_linked_elsewhere(cur, updates["tutorId"], user_id)
+
+    if user_id == session.get("userId") and "role" in updates and updates["role"] != existing["role"]:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+    if existing["role"] == "admin" and existing["active"] and (
+        updates.get("role") == "tutor" or updates.get("active") is False
+    ):
+        if _active_admin_count(cur) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the final active administrator")
+
+    column_map = {
+        "email": "email",
+        "firstName": "first_name",
+        "lastName": "last_name",
+        "displayName": "display_name",
+        "role": "role",
+        "tutorId": "tutor_id",
+        "active": "active",
+    }
+    set_clauses = [f"{column_map[key]} = %s" for key in updates]
+    params = [value.lower() if key == "email" and isinstance(value, str) else value for key, value in updates.items()]
+    if set_clauses:
+        cur.execute(
+            f"UPDATE users SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s",
+            [*params, user_id],
+        )
+    cur.execute(f"{USER_SELECT} WHERE id = %s", (user_id,))
+    updated = cur.fetchone()
+    return existing, updated
+
+
 @router.patch("/users/{user_id}")
 def update_user(user_id: int, payload: UserUpdateInput, request: Request, session: dict = Depends(require_admin)):
+    updates = payload.model_dump(exclude_unset=True)
     with get_cursor() as cur:
-        cur.execute(f"{USER_SELECT} WHERE id = %s", (user_id,))
-        existing = cur.fetchone()
-        if not existing:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        updates = payload.model_dump(exclude_unset=True)
-        next_role = updates.get("role", existing["role"])
-        next_tutor_id = updates.get("tutorId", existing["tutorId"])
-        _validate_role_mapping(next_role, next_tutor_id)
-        _ensure_tutor_exists(cur, next_tutor_id)
-
-        if user_id == session.get("userId") and "role" in updates and updates["role"] != existing["role"]:
-            raise HTTPException(status_code=400, detail="You cannot change your own role")
-        if existing["role"] == "admin" and existing["active"] and (
-            updates.get("role") == "tutor" or updates.get("active") is False
-        ):
-            if _active_admin_count(cur) <= 1:
-                raise HTTPException(status_code=400, detail="Cannot remove the final active administrator")
-
-        column_map = {
-            "email": "email",
-            "firstName": "first_name",
-            "lastName": "last_name",
-            "displayName": "display_name",
-            "role": "role",
-            "tutorId": "tutor_id",
-            "active": "active",
-        }
-        set_clauses = [f"{column_map[key]} = %s" for key in updates]
-        params = [value.lower() if key == "email" and isinstance(value, str) else value for key, value in updates.items()]
-        if set_clauses:
-            cur.execute(
-                f"UPDATE users SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s",
-                [*params, user_id],
-            )
-        cur.execute(f"{USER_SELECT} WHERE id = %s", (user_id,))
-        updated = cur.fetchone()
+        existing, updated = _apply_user_updates(cur, session, user_id, updates)
 
     write_audit_log(
         request,
         action="update",
+        entity_type="user",
+        entity_id=user_id,
+        previous_value=_user_public(existing),
+        new_value=_user_public(updated),
+    )
+    return _user_public(updated)
+
+
+@router.post("/users/{user_id}/activate")
+def activate_user(user_id: int, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        existing, updated = _apply_user_updates(cur, session, user_id, {"active": True})
+
+    write_audit_log(
+        request,
+        action="activate",
+        entity_type="user",
+        entity_id=user_id,
+        previous_value=_user_public(existing),
+        new_value=_user_public(updated),
+    )
+    return _user_public(updated)
+
+
+@router.post("/users/{user_id}/deactivate")
+def deactivate_user(user_id: int, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        existing, updated = _apply_user_updates(cur, session, user_id, {"active": False})
+
+    write_audit_log(
+        request,
+        action="deactivate",
+        entity_type="user",
+        entity_id=user_id,
+        previous_value=_user_public(existing),
+        new_value=_user_public(updated),
+    )
+    return _user_public(updated)
+
+
+@router.post("/users/{user_id}/role")
+def change_user_role(user_id: int, payload: UserRoleInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        existing, updated = _apply_user_updates(cur, session, user_id, {"role": payload.role})
+
+    write_audit_log(
+        request,
+        action="role_change",
+        entity_type="user",
+        entity_id=user_id,
+        previous_value=_user_public(existing),
+        new_value=_user_public(updated),
+    )
+    return _user_public(updated)
+
+
+@router.post("/users/{user_id}/link-tutor")
+def link_user_tutor(
+    user_id: int, payload: UserLinkTutorInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        existing, updated = _apply_user_updates(cur, session, user_id, {"tutorId": payload.tutorId})
+
+    write_audit_log(
+        request,
+        action="link_tutor",
         entity_type="user",
         entity_id=user_id,
         previous_value=_user_public(existing),

@@ -1,13 +1,49 @@
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..auth import require_admin, require_auth
 from ..audit import write_audit_log
 from ..db import get_cursor
 
 router = APIRouter(tags=["cohorts"])
+
+DeliveryDay = Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def _parse_time(value: str, field: str) -> datetime:
+    try:
+        return datetime.strptime(value, "%H:%M")
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{field} must be in HH:MM format") from None
+
+
+def _validate_cohort_schedule(
+    session_start_time: str | None,
+    session_end_time: str | None,
+    start_date: date | None,
+    end_date: date | None,
+) -> None:
+    if session_start_time and session_end_time:
+        start = _parse_time(session_start_time, "sessionStartTime")
+        end = _parse_time(session_end_time, "sessionEndTime")
+        if end <= start:
+            raise HTTPException(status_code=400, detail="sessionEndTime must be after sessionStartTime")
+    if start_date and end_date and end_date < start_date:
+        raise HTTPException(status_code=400, detail="endDate cannot be before startDate")
+
+
+def _ensure_tutor_active(cur, tutor_id: int | None) -> None:
+    if tutor_id is None:
+        return
+    cur.execute("SELECT active FROM tutors WHERE id = %s", (tutor_id,))
+    tutor = cur.fetchone()
+    if not tutor:
+        raise HTTPException(status_code=400, detail="Tutor not found")
+    if not tutor["active"]:
+        raise HTTPException(status_code=400, detail="Cannot assign an inactive tutor to a cohort")
 
 COHORT_SELECT = """
     SELECT c.id, c.name, c.programme, c.level, c.tutor_id AS "tutorId",
@@ -26,7 +62,7 @@ class CohortInput(BaseModel):
     programme: str = Field(min_length=1)
     level: str = Field(min_length=1)
     tutorId: int | None = None
-    deliveryDay: str
+    deliveryDay: DeliveryDay
     sessionStartTime: str = Field(min_length=1)
     sessionEndTime: str = Field(min_length=1)
     startDate: date
@@ -34,13 +70,18 @@ class CohortInput(BaseModel):
     active: bool = True
     externalSystemId: str | None = None
 
+    @model_validator(mode="after")
+    def _check_schedule(self) -> "CohortInput":
+        _validate_cohort_schedule(self.sessionStartTime, self.sessionEndTime, self.startDate, self.endDate)
+        return self
+
 
 class CohortUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     programme: str | None = Field(default=None, min_length=1)
     level: str | None = Field(default=None, min_length=1)
     tutorId: int | None = None
-    deliveryDay: str | None = None
+    deliveryDay: DeliveryDay | None = None
     sessionStartTime: str | None = Field(default=None, min_length=1)
     sessionEndTime: str | None = Field(default=None, min_length=1)
     startDate: date | None = None
@@ -54,6 +95,7 @@ def list_cohorts(
     tutorId: int | None = None,
     active: bool | None = None,
     programme: str | None = None,
+    level: str | None = None,
     session: dict = Depends(require_auth),
 ):
     clauses = []
@@ -70,6 +112,9 @@ def list_cohorts(
     if programme:
         clauses.append("c.programme = %s")
         params.append(programme)
+    if level:
+        clauses.append("c.level = %s")
+        params.append(level)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with get_cursor() as cur:
@@ -80,6 +125,7 @@ def list_cohorts(
 @router.post("/cohorts", status_code=201)
 def create_cohort(payload: CohortInput, request: Request, _session: dict = Depends(require_admin)):
     with get_cursor() as cur:
+        _ensure_tutor_active(cur, payload.tutorId)
         cur.execute(
             """
             INSERT INTO cohorts (name, programme, level, tutor_id, delivery_day, session_start_time,
@@ -133,6 +179,16 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, _sess
             raise HTTPException(status_code=404, detail="Cohort not found")
 
         updates = payload.model_dump(exclude_unset=True)
+
+        _validate_cohort_schedule(
+            updates.get("sessionStartTime", existing["session_start_time"]),
+            updates.get("sessionEndTime", existing["session_end_time"]),
+            updates.get("startDate", existing["start_date"]),
+            updates.get("endDate", existing["end_date"]),
+        )
+        if "tutorId" in updates:
+            _ensure_tutor_active(cur, updates["tutorId"])
+
         column_map = {
             "name": "name",
             "programme": "programme",
@@ -150,7 +206,7 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, _sess
         params = list(updates.values())
         if set_clauses:
             cur.execute(
-                f"UPDATE cohorts SET {', '.join(set_clauses)} WHERE id = %s RETURNING id",
+                f"UPDATE cohorts SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s RETURNING id",
                 [*params, cohort_id],
             )
             if not cur.fetchone():
@@ -161,6 +217,40 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, _sess
 
     write_audit_log(
         request, action="update", entity_type="cohort", entity_id=cohort_id, previous_value=existing, new_value=full
+    )
+    return full
+
+
+@router.post("/cohorts/{cohort_id}/activate")
+def activate_cohort(cohort_id: int, request: Request, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM cohorts WHERE id = %s", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        cur.execute("UPDATE cohorts SET active = true, updated_at = now() WHERE id = %s", (cohort_id,))
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        full = cur.fetchone()
+
+    write_audit_log(
+        request, action="activate", entity_type="cohort", entity_id=cohort_id, previous_value=existing, new_value=full
+    )
+    return full
+
+
+@router.post("/cohorts/{cohort_id}/deactivate")
+def deactivate_cohort(cohort_id: int, request: Request, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM cohorts WHERE id = %s", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        cur.execute("UPDATE cohorts SET active = false, updated_at = now() WHERE id = %s", (cohort_id,))
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        full = cur.fetchone()
+
+    write_audit_log(
+        request, action="deactivate", entity_type="cohort", entity_id=cohort_id, previous_value=existing, new_value=full
     )
     return full
 

@@ -1,7 +1,8 @@
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..auth import require_admin, require_auth, require_learner_access
 from ..audit import write_audit_log
@@ -17,6 +18,22 @@ from ..learners_query import LEARNERS_WITH_NAMES_SELECT
 
 router = APIRouter(tags=["learners"])
 
+LearnerStatus = Literal["active", "paused", "withdrawn", "completed"]
+
+
+def _validate_learner_dates(
+    start_date: date | None,
+    planned_end_date: date | None,
+    actual_end_date: date | None,
+    withdrawal_date: date | None,
+) -> None:
+    if start_date and planned_end_date and planned_end_date < start_date:
+        raise HTTPException(status_code=400, detail="plannedEndDate cannot be before startDate")
+    if start_date and withdrawal_date and withdrawal_date < start_date:
+        raise HTTPException(status_code=400, detail="withdrawalDate cannot be before startDate")
+    if start_date and actual_end_date and actual_end_date < start_date:
+        raise HTTPException(status_code=400, detail="actualEndDate cannot be before startDate")
+
 
 class LearnerInput(BaseModel):
     learnerRef: str = Field(min_length=1)
@@ -29,10 +46,17 @@ class LearnerInput(BaseModel):
     level: str = Field(min_length=1)
     startDate: date
     plannedEndDate: date | None = None
-    status: str | None = None
+    actualEndDate: date | None = None
+    withdrawalDate: date | None = None
+    status: LearnerStatus | None = None
     tutorId: int | None = None
     cohortId: int | None = None
     externalSystemId: str | None = None
+
+    @model_validator(mode="after")
+    def _check_dates(self) -> "LearnerInput":
+        _validate_learner_dates(self.startDate, self.plannedEndDate, self.actualEndDate, self.withdrawalDate)
+        return self
 
 
 class LearnerUpdate(BaseModel):
@@ -46,10 +70,19 @@ class LearnerUpdate(BaseModel):
     level: str | None = Field(default=None, min_length=1)
     startDate: date | None = None
     plannedEndDate: date | None = None
-    status: str | None = None
+    actualEndDate: date | None = None
+    withdrawalDate: date | None = None
+    status: LearnerStatus | None = None
     tutorId: int | None = None
     cohortId: int | None = None
     externalSystemId: str | None = None
+
+
+class LearnerStatusChangeInput(BaseModel):
+    status: LearnerStatus
+    actualEndDate: date | None = None
+    withdrawalDate: date | None = None
+    reason: str | None = None
 
 
 @router.get("/learners")
@@ -57,6 +90,8 @@ def list_learners(
     search: str | None = None,
     status: str | None = None,
     programme: str | None = None,
+    level: str | None = None,
+    employer: str | None = None,
     tutorId: int | None = None,
     cohortId: int | None = None,
     page: int = 1,
@@ -78,6 +113,12 @@ def list_learners(
     if programme:
         clauses.append("l.programme = %s")
         params.append(programme)
+    if level:
+        clauses.append("l.level = %s")
+        params.append(level)
+    if employer:
+        clauses.append("l.employer ILIKE %s")
+        params.append(f"%{employer}%")
     if tutorId is not None:
         clauses.append("l.tutor_id = %s")
         params.append(tutorId)
@@ -108,8 +149,9 @@ def create_learner(payload: LearnerInput, request: Request, _session: dict = Dep
         cur.execute(
             """
             INSERT INTO learners (learner_ref, uln, first_name, last_name, email, employer, programme, level,
-                                   start_date, planned_end_date, status, tutor_id, cohort_id, external_system_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
+                                   start_date, planned_end_date, actual_end_date, withdrawal_date, status,
+                                   tutor_id, cohort_id, external_system_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
             """,
             (
                 payload.learnerRef,
@@ -122,6 +164,8 @@ def create_learner(payload: LearnerInput, request: Request, _session: dict = Dep
                 payload.level,
                 payload.startDate,
                 payload.plannedEndDate,
+                payload.actualEndDate,
+                payload.withdrawalDate,
                 payload.status or "active",
                 payload.tutorId,
                 payload.cohortId,
@@ -298,6 +342,14 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _s
             raise HTTPException(status_code=404, detail="Learner not found")
 
         updates = payload.model_dump(exclude_unset=True)
+
+        _validate_learner_dates(
+            updates.get("startDate", existing["start_date"]),
+            updates.get("plannedEndDate", existing["planned_end_date"]),
+            updates.get("actualEndDate", existing["actual_end_date"]),
+            updates.get("withdrawalDate", existing["withdrawal_date"]),
+        )
+
         column_map = {
             "learnerRef": "learner_ref",
             "uln": "uln",
@@ -309,6 +361,8 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _s
             "level": "level",
             "startDate": "start_date",
             "plannedEndDate": "planned_end_date",
+            "actualEndDate": "actual_end_date",
+            "withdrawalDate": "withdrawal_date",
             "status": "status",
             "tutorId": "tutor_id",
             "cohortId": "cohort_id",
@@ -318,7 +372,7 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _s
         params = list(updates.values())
         if set_clauses:
             cur.execute(
-                f"UPDATE learners SET {', '.join(set_clauses)} WHERE id = %s RETURNING id",
+                f"UPDATE learners SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s RETURNING id",
                 [*params, learner_id],
             )
             if not cur.fetchone():
@@ -329,6 +383,48 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _s
 
     write_audit_log(
         request, action="update", entity_type="learner", entity_id=learner_id, previous_value=existing, new_value=full
+    )
+    return full
+
+
+@router.post("/learners/{learner_id}/change-status")
+def change_learner_status(
+    learner_id: int, payload: LearnerStatusChangeInput, request: Request, _session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM learners WHERE id = %s", (learner_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Learner not found")
+
+        actual_end_date = payload.actualEndDate or existing["actual_end_date"]
+        withdrawal_date = payload.withdrawalDate or existing["withdrawal_date"]
+
+        if payload.status == "withdrawn" and not withdrawal_date:
+            raise HTTPException(status_code=400, detail="withdrawalDate is required when withdrawing a learner")
+        if payload.status == "completed" and not actual_end_date:
+            raise HTTPException(status_code=400, detail="actualEndDate is required when completing a learner")
+
+        _validate_learner_dates(existing["start_date"], existing["planned_end_date"], actual_end_date, withdrawal_date)
+
+        cur.execute(
+            """
+            UPDATE learners
+            SET status = %s, actual_end_date = %s, withdrawal_date = %s, updated_at = now()
+            WHERE id = %s
+            """,
+            (payload.status, actual_end_date, withdrawal_date, learner_id),
+        )
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
+        full = cur.fetchone()
+
+    write_audit_log(
+        request,
+        action="change_status",
+        entity_type="learner",
+        entity_id=learner_id,
+        previous_value={"status": existing["status"], "reason": None},
+        new_value={"status": payload.status, "reason": payload.reason},
     )
     return full
 
