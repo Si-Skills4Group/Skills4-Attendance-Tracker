@@ -206,6 +206,28 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   ip_address text
 );
 
+CREATE TABLE IF NOT EXISTS scheduled_allocations (
+  id serial PRIMARY KEY,
+  learner_id integer NOT NULL,
+  new_tutor_id integer,
+  new_cohort_id integer,
+  effective_date date NOT NULL,
+  transfer_reason text,
+  created_by integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'pending',
+  applied_at timestamptz,
+  cancelled_at timestamptz,
+  cancelled_by integer
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_allocations_one_pending_per_learner
+  ON scheduled_allocations (learner_id)
+  WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_scheduled_allocations_due
+  ON scheduled_allocations (effective_date)
+  WHERE status = 'pending';
+
 CREATE TABLE IF NOT EXISTS app_settings (
   id serial PRIMARY KEY,
   organisation_name text NOT NULL DEFAULT 'Skills4Group',
