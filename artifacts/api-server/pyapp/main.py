@@ -14,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .bootstrap import bootstrap_database
 from .config import get_auth_settings
+from .db import get_cursor
+from .scheduled_allocations_lib import apply_due_scheduled_allocations
 from .session import SessionMiddleware
 from .routers import (
     health,
@@ -36,6 +38,12 @@ logger = logging.getLogger("skills4attendance-api")
 auth_settings = get_auth_settings()
 auth_settings.validate_startup()
 bootstrap_database()
+
+# Catch up on any prospective transfers that became due while the app was
+# down (e.g. over a weekend) -- see scheduled_allocations_lib for why this
+# is a lazy check rather than a cron job.
+with get_cursor() as _cur:
+    apply_due_scheduled_allocations(_cur)
 
 app = FastAPI(title="Skills4Attendance API")
 

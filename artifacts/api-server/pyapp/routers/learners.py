@@ -15,6 +15,7 @@ from ..csv_utils import (
 )
 from ..db import get_cursor
 from ..learners_query import LEARNERS_WITH_NAMES_SELECT
+from ..scheduled_allocations_lib import apply_due_scheduled_allocations
 
 router = APIRouter(tags=["learners"])
 
@@ -128,6 +129,7 @@ def list_learners(
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with get_cursor() as cur:
+        apply_due_scheduled_allocations(cur)
         cur.execute(
             f"{LEARNERS_WITH_NAMES_SELECT} {where} LIMIT %s OFFSET %s",
             [*params, pageSize, (page - 1) * pageSize],
@@ -329,6 +331,7 @@ def import_csv(payload: ImportCsvInput, request: Request, _session: dict = Depen
 @router.get("/learners/{learner_id}")
 def get_learner(learner_id: int, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
+        apply_due_scheduled_allocations(cur)
         cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
         learner = cur.fetchone()
     if not learner:

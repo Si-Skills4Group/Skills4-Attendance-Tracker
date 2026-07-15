@@ -710,6 +710,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: One or more learners already have a pending scheduled transfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /allocation/history:
     get:
       operationId: listAllocationHistory
@@ -732,6 +738,53 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AllocationHistoryEntry" }
+  /allocation/scheduled:
+    get:
+      operationId: listScheduledAllocations
+      tags: [allocation]
+      description: >-
+        Pending prospective transfers (effective date in the future) that
+        have not yet been applied to the learner's tutor/cohort.
+      parameters:
+        - name: learnerId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pending scheduled transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AllocationHistoryEntry" }
+  /allocation/scheduled/{id}/cancel:
+    post:
+      operationId: cancelScheduledAllocation
+      tags: [allocation]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Scheduled transfer cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelScheduledAllocationResult"
+        "400":
+          description: Not a pending scheduled transfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Scheduled transfer not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ---------- Attendance ----------
   /attendance/sessions:
@@ -1731,9 +1784,16 @@ components:
 
     AllocationResult:
       type: object
-      required: [updated]
+      required: [updated, scheduled]
       properties:
         updated: { type: integer }
+        scheduled: { type: integer }
+
+    CancelScheduledAllocationResult:
+      type: object
+      required: [cancelled]
+      properties:
+        cancelled: { type: boolean }
 
     AttendanceSession:
       type: object
