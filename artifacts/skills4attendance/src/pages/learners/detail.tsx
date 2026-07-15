@@ -8,6 +8,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -293,7 +294,9 @@ export default function LearnerDetailPage() {
                       )} />
                     ) : (
                       <div>
-                        <FormLabel>Status</FormLabel>
+                        {/* Read-only, not a form field -- FormLabel requires a
+                            <FormField>/<FormItem> context it doesn't have here. */}
+                        <Label>Status</Label>
                         <p className="text-sm text-muted-foreground mt-2">
                           Use the "Change Status" action above to update this learner's status.
                         </p>
