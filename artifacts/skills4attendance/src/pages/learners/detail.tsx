@@ -207,17 +207,17 @@ export default function LearnerDetailPage() {
             </p>
           </div>
         </div>
-        {!isNew && (
-          <div className="hidden sm:flex gap-2">
+        <div className="hidden sm:flex gap-2">
+          {!isNew && (
             <Button variant="outline" onClick={() => setStatusDialogOpen(true)}>
               <RefreshCw className="w-4 h-4 mr-2" /> Change Status
             </Button>
-            <Button onClick={() => form.handleSubmit(onSubmit)()} disabled={isSaving} className="hover-elevate shadow-sm">
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save Changes
-            </Button>
-          </div>
-        )}
+          )}
+          <Button onClick={() => form.handleSubmit(onSubmit)()} disabled={isSaving} className="hover-elevate shadow-sm">
+            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            {isNew ? "Create Learner" : "Save Changes"}
+          </Button>
+        </div>
       </div>
 
       <div className="page-transition-enter stagger-1">
