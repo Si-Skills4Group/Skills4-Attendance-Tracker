@@ -1,10 +1,12 @@
 import * as React from "react";
-import { 
-  useListUnallocatedLearners, 
-  useGetAllocationByTutor, 
+import {
+  useListUnallocatedLearners,
+  useGetAllocationByTutor,
   useListTutors,
   useListCohorts,
-  useAllocateLearners 
+  useAllocateLearners,
+  useListScheduledAllocations,
+  useCancelScheduledAllocation,
 } from "@workspace/api-client-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRightLeft, UserPlus, Calendar } from "lucide-react";
+import { Loader2, ArrowRightLeft, UserPlus, Calendar, Clock3, X, Info } from "lucide-react";
 import { format } from "date-fns";
 
 export default function AllocationPage() {
@@ -24,8 +26,10 @@ export default function AllocationPage() {
   const { data: allocations = [], isLoading: loadAlloc, refetch: refetchAllocations } = useGetAllocationByTutor();
   const { data: tutors = [] } = useListTutors({ active: true });
   const { data: cohorts = [] } = useListCohorts({ active: true });
-  
+  const { data: scheduledTransfers = [], isLoading: loadScheduled, refetch: refetchScheduled } = useListScheduledAllocations();
+
   const allocateMutation = useAllocateLearners();
+  const cancelScheduledMutation = useCancelScheduledAllocation();
 
   const [selectedLearnerIds, setSelectedLearnerIds] = React.useState<number[]>([]);
   
@@ -66,17 +70,40 @@ export default function AllocationPage() {
       }
     }, {
       onSuccess: (res) => {
-        toast({ title: "Allocation Complete", description: `Updated ${res.updated} learners.` });
+        if (res.scheduled > 0) {
+          toast({ title: "Transfer scheduled", description: `${res.scheduled} learner(s) will move on ${effectiveDate}.` });
+        } else {
+          toast({ title: "Allocation Complete", description: `Updated ${res.updated} learners.` });
+        }
         setSelectedLearnerIds([]);
         setTransferReason("");
         refetchUnallocated();
         refetchAllocations();
+        refetchScheduled();
       },
-      onError: (err: any) => toast({ title: "Allocation Failed", description: err.error, variant: "destructive" })
+      onError: (err: any) => {
+        if (err?.status === 409) {
+          toast({ title: "Learner(s) already have a pending transfer", description: "Cancel the existing scheduled transfer first.", variant: "destructive" });
+        } else {
+          toast({ title: "Allocation Failed", description: err?.data?.error || err.error, variant: "destructive" });
+        }
+      }
+    });
+  };
+
+  const handleCancelScheduled = (id: number) => {
+    cancelScheduledMutation.mutate({ id }, {
+      onSuccess: () => {
+        toast({ title: "Scheduled transfer cancelled" });
+        refetchScheduled();
+      },
+      onError: (err: any) => toast({ title: "Cancel failed", description: err?.data?.error || err.message, variant: "destructive" }),
     });
   };
 
   const isSaving = allocateMutation.isPending;
+  const today = format(new Date(), "yyyy-MM-dd");
+  const isFutureDated = effectiveDate > today;
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col h-[calc(100vh-64px)]">
@@ -89,9 +116,35 @@ export default function AllocationPage() {
       </div>
 
       <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-6 min-h-0">
-        
+
         {/* Left Col: Lists */}
         <div className="xl:col-span-8 flex flex-col gap-6 min-h-0 page-transition-enter stagger-1">
+          {!loadScheduled && scheduledTransfers.length > 0 && (
+            <Card className="shrink-0 shadow-sm border-amber-200 dark:border-amber-800">
+              <CardHeader className="bg-amber-50 dark:bg-amber-900/20 border-b py-3">
+                <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-500">
+                  <Clock3 className="w-4 h-4" /> Pending Transfers
+                  <span className="bg-amber-200/60 dark:bg-amber-800/40 text-xs px-2 py-0.5 rounded-full ml-auto">{scheduledTransfers.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 divide-y max-h-48 overflow-auto">
+                {scheduledTransfers.map((s) => (
+                  <div key={s.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-medium text-foreground">{s.learnerName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.newCohortName && `→ ${s.newCohortName}`}{s.newTutorName && ` (${s.newTutorName})`} on {format(new Date(s.effectiveDate), "d MMM yyyy")}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleCancelScheduled(s.id)} title="Cancel scheduled transfer">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="flex flex-col flex-1 shadow-sm min-h-0">
             <CardHeader className="bg-muted/10 border-b py-3 shrink-0">
               <CardTitle className="text-base flex items-center justify-between">
@@ -222,6 +275,12 @@ export default function AllocationPage() {
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input type="date" className="pl-9" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
                 </div>
+                {isFutureDated && (
+                  <p className="text-xs text-amber-700 dark:text-amber-500 flex items-start gap-1.5 pt-1">
+                    <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    This will be scheduled and applied automatically on {effectiveDate}, not immediately. You can cancel it before then from Pending Transfers.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -236,7 +295,7 @@ export default function AllocationPage() {
                   disabled={selectedLearnerIds.length === 0 || (!targetTutorId && !targetCohortId) || isSaving}
                   onClick={handleAllocate}
                 >
-                  {isSaving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : "Apply Allocation"}
+                  {isSaving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : isFutureDated ? "Schedule Transfer" : "Apply Allocation"}
                 </Button>
                 {selectedLearnerIds.length === 0 && (
                   <p className="text-xs text-center text-muted-foreground mt-2">Select learners from the lists to enable.</p>

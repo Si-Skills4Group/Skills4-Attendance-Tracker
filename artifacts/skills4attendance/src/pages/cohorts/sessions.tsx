@@ -1,84 +1,74 @@
 import * as React from "react";
-import { 
-  useListAttendanceSessions, 
+import {
+  useGetCohort,
+  useListAttendanceSessions,
   useCreateAttendanceSession,
-  useListCohorts,
-  useGetCurrentUser
+  getGetCohortQueryKey,
+  getListAttendanceSessionsQueryKey,
 } from "@workspace/api-client-react";
-import { Link, useLocation } from "wouter";
+import { useParams } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { SessionCardGrid } from "@/components/session-card-grid";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Plus, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, CalendarDays, Clock, User, Users } from "lucide-react";
 
-export default function AttendancePage() {
-  const { data: user } = useGetCurrentUser();
-  const [, setLocation] = useLocation();
+export default function CohortSessionsPage() {
+  const params = useParams();
+  const cohortId = Number(params.id);
   const { toast } = useToast();
-  
-  const [dateFrom, setDateFrom] = React.useState<string>("");
-  const [dateTo, setDateTo] = React.useState<string>("");
-  const [createModalOpen, setCreateModalOpen] = React.useState(false);
-  const [duplicateConfirmMode, setDuplicateConfirmMode] = React.useState(false);
-  
-  const { data: sessions = [], isLoading, refetch } = useListAttendanceSessions({
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined
+
+  const { data: cohort, isLoading: isLoadingCohort } = useGetCohort(cohortId, {
+    query: { queryKey: getGetCohortQueryKey(cohortId) },
   });
 
-  const { data: activeCohorts = [] } = useListCohorts({ active: true });
+  const sessionsParams = { cohortId };
+  const { data: sessions = [], isLoading: isLoadingSessions } = useListAttendanceSessions(sessionsParams, {
+    query: { queryKey: getListAttendanceSessionsQueryKey(sessionsParams) },
+  });
 
   const createMutation = useCreateAttendanceSession();
-
-  // Create Form State
-  const [cohortId, setCohortId] = React.useState<string>("");
+  const [createModalOpen, setCreateModalOpen] = React.useState(false);
+  const [duplicateConfirmMode, setDuplicateConfirmMode] = React.useState(false);
   const [sessionDate, setSessionDate] = React.useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [plannedStartTime, setPlannedStartTime] = React.useState<string>("");
   const [plannedEndTime, setPlannedEndTime] = React.useState<string>("");
   const [plannedDurationHours, setPlannedDurationHours] = React.useState<number>(0);
   const [title, setTitle] = React.useState<string>("");
 
-  // Pre-fill defaults when cohort changes
   React.useEffect(() => {
-    if (cohortId) {
-      const c = activeCohorts.find(x => String(x.id) === cohortId);
-      if (c) {
-        setPlannedStartTime(c.sessionStartTime.substring(0, 5));
-        setPlannedEndTime(c.sessionEndTime.substring(0, 5));
-        // Rough hour calc
-        const sH = parseInt(c.sessionStartTime.split(':')[0]);
-        const eH = parseInt(c.sessionEndTime.split(':')[0]);
-        const dur = Math.max(1, eH - sH);
-        setPlannedDurationHours(dur);
-      }
+    if (cohort) {
+      setPlannedStartTime(cohort.sessionStartTime.substring(0, 5));
+      setPlannedEndTime(cohort.sessionEndTime.substring(0, 5));
+      const sH = parseInt(cohort.sessionStartTime.split(':')[0]);
+      const eH = parseInt(cohort.sessionEndTime.split(':')[0]);
+      setPlannedDurationHours(Math.max(1, eH - sH));
     }
-  }, [cohortId, activeCohorts]);
+  }, [cohort]);
 
   const handleCreate = (force = false) => {
-    if (!cohortId || !sessionDate || !plannedStartTime || !plannedEndTime) return;
-    
+    if (!sessionDate || !plannedStartTime || !plannedEndTime) return;
+
     createMutation.mutate({
       data: {
-        cohortId: Number(cohortId),
+        cohortId,
         sessionDate,
         plannedStartTime: `${plannedStartTime}:00`,
         plannedEndTime: `${plannedEndTime}:00`,
         plannedDurationHours,
         title: title || undefined,
-        force
+        force,
       }
     }, {
-      onSuccess: (res) => {
+      onSuccess: () => {
         toast({ title: "Session created" });
         setCreateModalOpen(false);
         setDuplicateConfirmMode(false);
-        setLocation(`/attendance/${res.id}`);
       },
       onError: (err: any) => {
         if (err.status === 409) {
@@ -90,30 +80,76 @@ export default function AttendancePage() {
     });
   };
 
+  if (isLoadingCohort) {
+    return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  if (!cohort) {
+    return (
+      <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
+        <p className="text-muted-foreground">Cohort not found, or you don't have access to it.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-      <Breadcrumbs items={[{ label: "Attendance" }]} />
-      
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 page-transition-enter">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Attendance Registers</h1>
-          <p className="text-muted-foreground mt-1">Manage class sessions and record attendance.</p>
-        </div>
-        
+      <Breadcrumbs items={[{ label: "Cohorts", href: "/cohorts" }, { label: cohort.name }]} />
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mb-4 -ml-2 text-muted-foreground hover:text-foreground"
+        onClick={() => window.history.back()}
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" /> Back to all cohorts
+      </Button>
+
+      <Card className="mb-6 shadow-sm page-transition-enter">
+        <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{cohort.name}</h1>
+              {!cohort.active && (
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground px-2 py-1 rounded">Inactive</span>
+              )}
+            </div>
+            <p className="text-muted-foreground mt-1">{cohort.programme} &middot; Level {cohort.level}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-muted-foreground/70" />
+              <span>{cohort.tutorName || "No tutor assigned"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-muted-foreground/70" />
+              <span className="capitalize">{cohort.deliveryDay}s</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-muted-foreground/70" />
+              <span>{cohort.sessionStartTime.substring(0, 5)} - {cohort.sessionEndTime.substring(0, 5)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between mb-6 page-transition-enter stagger-1">
+        <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Users className="w-4 h-4 text-muted-foreground" /> Sessions for this cohort
+        </h2>
+
         <Dialog open={createModalOpen} onOpenChange={(o) => { setCreateModalOpen(o); setDuplicateConfirmMode(false); }}>
           <DialogTrigger asChild>
-            <Button className="hover-elevate shadow-sm">
+            <Button className="hover-elevate shadow-sm" size="sm">
               <Plus className="w-4 h-4 mr-2" /> New Session
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Create Attendance Session</DialogTitle>
-              <DialogDescription>
-                Generate a new register for a cohort.
-              </DialogDescription>
+              <DialogDescription>Generate a new register for {cohort.name}.</DialogDescription>
             </DialogHeader>
-            
+
             {duplicateConfirmMode ? (
               <div className="py-6 space-y-4">
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-md">
@@ -134,15 +170,6 @@ export default function AttendancePage() {
               </div>
             ) : (
               <div className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <Label>Cohort</Label>
-                  <Select value={cohortId} onValueChange={setCohortId}>
-                    <SelectTrigger><SelectValue placeholder="Select cohort..." /></SelectTrigger>
-                    <SelectContent>
-                      {activeCohorts.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label>Date</Label>
                   <Input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
@@ -166,7 +193,7 @@ export default function AttendancePage() {
                   <Input placeholder="e.g. Module 1 Intro" value={title} onChange={e => setTitle(e.target.value)} />
                 </div>
                 <DialogFooter className="mt-4">
-                  <Button onClick={() => handleCreate(false)} disabled={createMutation.isPending || !cohortId}>
+                  <Button onClick={() => handleCreate(false)} disabled={createMutation.isPending}>
                     {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     Create Register
                   </Button>
@@ -177,18 +204,13 @@ export default function AttendancePage() {
         </Dialog>
       </div>
 
-      <div className="flex items-center gap-4 mb-6 page-transition-enter stagger-1 bg-card p-2 rounded-lg border shadow-sm w-fit">
-        <div className="flex items-center px-2 text-sm font-medium text-muted-foreground">Filter:</div>
-        <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 w-auto text-sm border-transparent bg-muted/20" />
-        <span className="text-muted-foreground">-</span>
-        <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 w-auto text-sm border-transparent bg-muted/20" />
-      </div>
-
       <SessionCardGrid
         sessions={sessions}
-        isLoading={isLoading}
-        emptyDescription="Create a new session to take attendance for your learners."
+        isLoading={isLoadingSessions}
+        emptyTitle="No sessions yet"
+        emptyDescription="Create the first session for this cohort to start taking attendance."
         emptyAction={<Button onClick={() => setCreateModalOpen(true)}>Create Session</Button>}
+        showCohortName={false}
       />
     </div>
   );

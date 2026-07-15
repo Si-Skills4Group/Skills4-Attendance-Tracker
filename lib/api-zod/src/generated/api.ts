@@ -701,6 +701,40 @@ export const CreateCohortResponse = zod.object({
 })
 
 
+/**
+ * One row per cohort plus summary aggregates (active learner count, upcoming session count, outstanding register count) for the cohort-cards navigation view.
+ */
+export const ListCohortSummaryQueryParams = zod.object({
+  "tutorId": zod.coerce.number().optional(),
+  "active": zod.coerce.boolean().optional(),
+  "programme": zod.coerce.string().optional(),
+  "level": zod.coerce.string().optional()
+})
+
+export const ListCohortSummaryResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "activeLearnerCount": zod.number(),
+  "upcomingSessionCount": zod.number(),
+  "outstandingRegisterCount": zod.number()
+}))
+export const ListCohortSummaryResponse = zod.array(ListCohortSummaryResponseItem)
+
+
 export const GetCohortParams = zod.object({
   "id": zod.coerce.number()
 })
@@ -918,7 +952,8 @@ export const AllocateLearnersBody = zod.object({
 })
 
 export const AllocateLearnersResponse = zod.object({
-  "updated": zod.number()
+  "updated": zod.number(),
+  "scheduled": zod.number()
 })
 
 
@@ -947,6 +982,43 @@ export const ListAllocationHistoryResponseItem = zod.object({
   "changedDate": zod.coerce.date()
 })
 export const ListAllocationHistoryResponse = zod.array(ListAllocationHistoryResponseItem)
+
+
+/**
+ * Pending prospective transfers (effective date in the future) that have not yet been applied to the learner's tutor/cohort.
+ */
+export const ListScheduledAllocationsQueryParams = zod.object({
+  "learnerId": zod.coerce.number().optional()
+})
+
+export const ListScheduledAllocationsResponseItem = zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "previousTutorId": zod.number().nullable(),
+  "previousTutorName": zod.string().nullable(),
+  "newTutorId": zod.number().nullable(),
+  "newTutorName": zod.string().nullable(),
+  "previousCohortId": zod.number().nullable(),
+  "previousCohortName": zod.string().nullable(),
+  "newCohortId": zod.number().nullable(),
+  "newCohortName": zod.string().nullable(),
+  "effectiveDate": zod.coerce.date(),
+  "transferReason": zod.string().nullable(),
+  "changedBy": zod.number(),
+  "changedByName": zod.string(),
+  "changedDate": zod.coerce.date()
+})
+export const ListScheduledAllocationsResponse = zod.array(ListScheduledAllocationsResponseItem)
+
+
+export const CancelScheduledAllocationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelScheduledAllocationResponse = zod.object({
+  "cancelled": zod.boolean()
+})
 
 
 export const ListAttendanceSessionsQueryParams = zod.object({

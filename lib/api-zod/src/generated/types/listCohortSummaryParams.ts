@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AllocationResult {
-  updated: number;
-  scheduled: number;
-}
+export type ListCohortSummaryParams = {
+tutorId?: number;
+active?: boolean;
+programme?: string;
+level?: string;
+};

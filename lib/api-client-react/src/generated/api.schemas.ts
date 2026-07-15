@@ -347,6 +347,12 @@ export interface Cohort {
   updatedAt: string;
 }
 
+export type CohortCardSummary = Cohort & {
+  activeLearnerCount: number;
+  upcomingSessionCount: number;
+  outstandingRegisterCount: number;
+};
+
 export type CohortDetail = Cohort & {
   learnerCount: number;
 };
@@ -443,6 +449,11 @@ export interface AllocationInput {
 
 export interface AllocationResult {
   updated: number;
+  scheduled: number;
+}
+
+export interface CancelScheduledAllocationResult {
+  cancelled: boolean;
 }
 
 export interface AttendanceSession {
@@ -694,10 +705,21 @@ programme?: string;
 level?: string;
 };
 
+export type ListCohortSummaryParams = {
+tutorId?: number;
+active?: boolean;
+programme?: string;
+level?: string;
+};
+
 export type ListAllocationHistoryParams = {
 learnerId?: number;
 cohortId?: number;
 tutorId?: number;
+};
+
+export type ListScheduledAllocationsParams = {
+learnerId?: number;
 };
 
 export type ListAttendanceSessionsParams = {

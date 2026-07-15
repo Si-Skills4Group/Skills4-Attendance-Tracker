@@ -33,7 +33,9 @@ import type {
   AuditLogEntry,
   AuditLogListResponse,
   AuthUser,
+  CancelScheduledAllocationResult,
   Cohort,
+  CohortCardSummary,
   CohortDetail,
   CohortInput,
   CohortReport,
@@ -57,8 +59,10 @@ import type {
   ListAllocationHistoryParams,
   ListAttendanceSessionsParams,
   ListAuditLogParams,
+  ListCohortSummaryParams,
   ListCohortsParams,
   ListLearnersParams,
+  ListScheduledAllocationsParams,
   ListTutorsParams,
   ListUsersParams,
   LoginInput,
@@ -1906,6 +1910,87 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCreateCohortMutationOptions(options));
     }
 
+export const getListCohortSummaryUrl = (params?: ListCohortSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/cohorts/summary?${stringifiedParams}` : `/api/cohorts/summary`
+}
+
+/**
+ * One row per cohort plus summary aggregates (active learner count, upcoming session count, outstanding register count) for the cohort-cards navigation view.
+ */
+export const listCohortSummary = async (params?: ListCohortSummaryParams, options?: RequestInit): Promise<CohortCardSummary[]> => {
+
+  return customFetch<CohortCardSummary[]>(getListCohortSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCohortSummaryQueryKey = (params?: ListCohortSummaryParams,) => {
+    return [
+    `/api/cohorts/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCohortSummaryQueryOptions = <TData = Awaited<ReturnType<typeof listCohortSummary>>, TError = ErrorType<unknown>>(params?: ListCohortSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCohortSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCohortSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCohortSummary>>> = ({ signal }) => listCohortSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCohortSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCohortSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof listCohortSummary>>>
+export type ListCohortSummaryQueryError = ErrorType<unknown>
+
+
+
+export function useListCohortSummary<TData = Awaited<ReturnType<typeof listCohortSummary>>, TError = ErrorType<unknown>>(
+ params?: ListCohortSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCohortSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCohortSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetCohortUrl = (id: number,) => {
 
 
@@ -2528,6 +2613,152 @@ export function useListAllocationHistory<TData = Awaited<ReturnType<typeof listA
 
 
 
+
+export const getListScheduledAllocationsUrl = (params?: ListScheduledAllocationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/allocation/scheduled?${stringifiedParams}` : `/api/allocation/scheduled`
+}
+
+/**
+ * Pending prospective transfers (effective date in the future) that have not yet been applied to the learner's tutor/cohort.
+ */
+export const listScheduledAllocations = async (params?: ListScheduledAllocationsParams, options?: RequestInit): Promise<AllocationHistoryEntry[]> => {
+
+  return customFetch<AllocationHistoryEntry[]>(getListScheduledAllocationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListScheduledAllocationsQueryKey = (params?: ListScheduledAllocationsParams,) => {
+    return [
+    `/api/allocation/scheduled`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListScheduledAllocationsQueryOptions = <TData = Awaited<ReturnType<typeof listScheduledAllocations>>, TError = ErrorType<unknown>>(params?: ListScheduledAllocationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScheduledAllocations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListScheduledAllocationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listScheduledAllocations>>> = ({ signal }) => listScheduledAllocations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listScheduledAllocations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListScheduledAllocationsQueryResult = NonNullable<Awaited<ReturnType<typeof listScheduledAllocations>>>
+export type ListScheduledAllocationsQueryError = ErrorType<unknown>
+
+
+
+export function useListScheduledAllocations<TData = Awaited<ReturnType<typeof listScheduledAllocations>>, TError = ErrorType<unknown>>(
+ params?: ListScheduledAllocationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScheduledAllocations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListScheduledAllocationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCancelScheduledAllocationUrl = (id: number,) => {
+
+
+
+
+  return `/api/allocation/scheduled/${id}/cancel`
+}
+
+export const cancelScheduledAllocation = async (id: number, options?: RequestInit): Promise<CancelScheduledAllocationResult> => {
+
+  return customFetch<CancelScheduledAllocationResult>(getCancelScheduledAllocationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelScheduledAllocationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelScheduledAllocation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelScheduledAllocation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['cancelScheduledAllocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelScheduledAllocation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelScheduledAllocation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelScheduledAllocationMutationResult = NonNullable<Awaited<ReturnType<typeof cancelScheduledAllocation>>>
+
+    export type CancelScheduledAllocationMutationError = ErrorType<ErrorResponse>
+
+    export const useCancelScheduledAllocation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelScheduledAllocation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelScheduledAllocation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getCancelScheduledAllocationMutationOptions(options));
+    }
 
 export const getListAttendanceSessionsUrl = (params?: ListAttendanceSessionsParams,) => {
   const normalizedParams = new URLSearchParams();

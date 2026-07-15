@@ -1,6 +1,14 @@
 import * as React from "react";
-import { useListCohorts, useListTutors, useGetCurrentUser, useActivateCohort, useDeactivateCohort } from "@workspace/api-client-react";
-import { Link } from "wouter";
+import {
+  useListCohorts,
+  useListCohortSummary,
+  useListTutors,
+  useGetCurrentUser,
+  useActivateCohort,
+  useDeactivateCohort,
+  getListCohortSummaryQueryKey,
+} from "@workspace/api-client-react";
+import { Link, useSearchParams } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, BookOpen, Clock, CalendarDays, User, ArrowRight } from "lucide-react";
+import { Search, Plus, BookOpen, Clock, CalendarDays, User, ArrowRight, Users, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const allValue = "__all__";
@@ -18,20 +26,36 @@ export default function CohortsPage() {
   const isAdmin = user?.role === 'admin';
   const { toast } = useToast();
 
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [showActiveOnly, setShowActiveOnly] = React.useState(true);
-  const [tutorFilter, setTutorFilter] = React.useState(allValue);
-  const [programmeFilter, setProgrammeFilter] = React.useState(allValue);
-  const [levelFilter, setLevelFilter] = React.useState(allValue);
+  // Filter state lives in the URL, not local useState, so the browser's
+  // native back navigation from /cohorts/:id/sessions returns to this exact
+  // filtered/scrolled view instead of resetting to defaults.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q") ?? "";
+  const showActiveOnly = searchParams.get("active") !== "all";
+  const tutorFilter = searchParams.get("tutor") ?? allValue;
+  const programmeFilter = searchParams.get("programme") ?? allValue;
+  const levelFilter = searchParams.get("level") ?? allValue;
+
+  const setParam = (key: string, value: string, isDefault: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (isDefault) next.delete(key);
+      else next.set(key, value);
+      return next;
+    });
+  };
 
   const { data: allCohorts = [] } = useListCohorts({});
   const { data: tutors = [] } = useListTutors({ active: true });
 
-  const { data: cohorts = [], isLoading, refetch } = useListCohorts({
+  const summaryParams = {
     active: showActiveOnly ? true : undefined,
     tutorId: tutorFilter !== allValue ? Number(tutorFilter) : undefined,
     programme: programmeFilter !== allValue ? programmeFilter : undefined,
     level: levelFilter !== allValue ? levelFilter : undefined,
+  };
+  const { data: cohorts = [], isLoading, refetch } = useListCohortSummary(summaryParams, {
+    query: { queryKey: getListCohortSummaryQueryKey(summaryParams) },
   });
 
   const activateCohort = useActivateCohort();
@@ -91,12 +115,12 @@ export default function CohortsPage() {
           <Input
             placeholder="Search cohorts..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setParam("q", e.target.value, e.target.value === "")}
             className="pl-9 h-10 bg-card"
           />
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Select value={tutorFilter} onValueChange={setTutorFilter}>
+          <Select value={tutorFilter} onValueChange={(v) => setParam("tutor", v, v === allValue)}>
             <SelectTrigger className="w-44"><SelectValue placeholder="Tutor" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={allValue}>All tutors</SelectItem>
@@ -105,7 +129,7 @@ export default function CohortsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={programmeFilter} onValueChange={setProgrammeFilter}>
+          <Select value={programmeFilter} onValueChange={(v) => setParam("programme", v, v === allValue)}>
             <SelectTrigger className="w-44"><SelectValue placeholder="Programme" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={allValue}>All programmes</SelectItem>
@@ -114,7 +138,7 @@ export default function CohortsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={levelFilter} onValueChange={setLevelFilter}>
+          <Select value={levelFilter} onValueChange={(v) => setParam("level", v, v === allValue)}>
             <SelectTrigger className="w-36"><SelectValue placeholder="Level" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={allValue}>All levels</SelectItem>
@@ -127,7 +151,7 @@ export default function CohortsPage() {
             <Switch
               id="active-only"
               checked={showActiveOnly}
-              onCheckedChange={setShowActiveOnly}
+              onCheckedChange={(checked) => setParam("active", checked ? "" : "all", checked)}
             />
             <Label htmlFor="active-only" className="cursor-pointer">Active Only</Label>
           </div>
@@ -184,10 +208,25 @@ export default function CohortsPage() {
                     <span>{cohort.sessionStartTime.substring(0,5)} - {cohort.sessionEndTime.substring(0,5)}</span>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-muted/50 text-center">
+                  <div>
+                    <p className="text-lg font-bold text-foreground leading-none">{cohort.activeLearnerCount}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-center gap-1"><Users className="w-3 h-3" /> Learners</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-foreground leading-none">{cohort.upcomingSessionCount}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-center gap-1"><CalendarDays className="w-3 h-3" /> Upcoming</p>
+                  </div>
+                  <div>
+                    <p className={`text-lg font-bold leading-none ${cohort.outstandingRegisterCount > 0 ? 'text-amber-600' : 'text-foreground'}`}>{cohort.outstandingRegisterCount}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-center gap-1"><ClipboardList className="w-3 h-3" /> Outstanding</p>
+                  </div>
+                </div>
               </div>
-              <Link href={`/cohorts/${cohort.id}`}>
+              <Link href={`/cohorts/${cohort.id}/sessions`}>
                 <div className="bg-primary/5 border-t border-primary/10 px-5 py-3 text-xs font-medium text-primary flex items-center justify-between group-hover:bg-primary/10 transition-colors cursor-pointer">
-                  View Roster & Schedule
+                  View Sessions & Registers
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </Link>

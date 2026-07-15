@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface AllocationResult {
-  updated: number;
-  scheduled: number;
+export interface CancelScheduledAllocationResult {
+  cancelled: boolean;
 }
