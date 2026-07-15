@@ -146,6 +146,11 @@ def create_learner(payload: LearnerInput, request: Request, _session: dict = Dep
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="A learner with this reference already exists")
 
+        if payload.uln:
+            cur.execute("SELECT id FROM learners WHERE uln = %s", (payload.uln,))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="A learner with this ULN already exists")
+
         cur.execute(
             """
             INSERT INTO learners (learner_ref, uln, first_name, last_name, email, employer, programme, level,
@@ -349,6 +354,15 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _s
             updates.get("actualEndDate", existing["actual_end_date"]),
             updates.get("withdrawalDate", existing["withdrawal_date"]),
         )
+
+        if updates.get("uln") and updates["uln"] != existing["uln"]:
+            cur.execute("SELECT id FROM learners WHERE uln = %s AND id != %s", (updates["uln"], learner_id))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="A learner with this ULN already exists")
+        if updates.get("learnerRef") and updates["learnerRef"] != existing["learner_ref"]:
+            cur.execute("SELECT id FROM learners WHERE learner_ref = %s AND id != %s", (updates["learnerRef"], learner_id))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="A learner with this reference already exists")
 
         column_map = {
             "learnerRef": "learner_ref",
