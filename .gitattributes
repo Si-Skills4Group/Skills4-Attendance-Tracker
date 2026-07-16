@@ -1,0 +1,7 @@
+# Generated codegen output (orval, via WSL) is always written with LF.
+# Pin it to LF explicitly so core.autocrlf can't flag these files as
+# "modified" just because Windows would checkout CRLF -- this is what
+# caused the recurring line-ending-only diffs in lib/api-zod and
+# lib/api-client-react's generated/ folders.
+lib/api-zod/src/generated/** text eol=lf
+lib/api-client-react/src/generated/** text eol=lf
