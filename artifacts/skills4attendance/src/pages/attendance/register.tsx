@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Loader2, Save, ArrowLeft, CheckCircle2, Clock, CalendarDays, Users, Check } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { AttendanceStatusBadge } from "@/components/status-badges";
@@ -117,10 +118,11 @@ export default function RegisterPage() {
           return { ...old, entries: newEntries };
         });
       },
-      onError: () => {
+      onError: (err) => {
         // Allow retry on the next debounce tick instead of getting stuck.
         lastSavedRef.current = "";
         setSaveStatus("idle");
+        toast({ title: "Could not save register", description: getErrorMessage(err), variant: "destructive" });
       }
     });
   }, [debouncedDrafts, sessionId, saveMutate, queryClient]);

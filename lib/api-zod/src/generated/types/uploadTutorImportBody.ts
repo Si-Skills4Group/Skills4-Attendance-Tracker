@@ -6,9 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CsvRowError {
-  rowNumber: number;
-  /** @nullable */
-  field?: string | null;
-  message: string;
-}
+export type UploadTutorImportBody = {
+  file: Blob;
+};

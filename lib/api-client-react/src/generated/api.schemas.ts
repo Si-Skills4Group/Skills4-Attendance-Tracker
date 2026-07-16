@@ -287,44 +287,6 @@ export interface CsvContent {
   filename?: string;
 }
 
-export interface CsvRowError {
-  rowNumber: number;
-  /** @nullable */
-  field?: string | null;
-  message: string;
-}
-
-export type CsvPreviewRowData = {[key: string]: string};
-
-export interface CsvPreviewRow {
-  rowNumber: number;
-  data: CsvPreviewRowData;
-  isDuplicate: boolean;
-  /** @nullable */
-  duplicateReason?: string | null;
-  errors: string[];
-}
-
-export interface CsvPreviewResult {
-  totalRows: number;
-  validRows: number;
-  invalidRows: number;
-  duplicateRows: number;
-  rows: CsvPreviewRow[];
-}
-
-export type CsvImportInputRowsItem = {[key: string]: string};
-
-export interface CsvImportInput {
-  rows: CsvImportInputRowsItem[];
-}
-
-export interface CsvImportResult {
-  imported: number;
-  skipped: number;
-  errors: CsvRowError[];
-}
-
 export type LearnerImportJobStatus = typeof LearnerImportJobStatus[keyof typeof LearnerImportJobStatus];
 
 
@@ -456,6 +418,122 @@ export interface LearnerImportJobRowListResponse {
 
 export interface LearnerImportRowResolveInput {
   resolution: LearnerImportRowResolution;
+}
+
+export type TutorImportJobStatus = typeof TutorImportJobStatus[keyof typeof TutorImportJobStatus];
+
+
+export const TutorImportJobStatus = {
+  ready: 'ready',
+  importing: 'importing',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
+export type TutorImportRowClassification = typeof TutorImportRowClassification[keyof typeof TutorImportRowClassification];
+
+
+export const TutorImportRowClassification = {
+  new: 'new',
+  exact_existing: 'exact_existing',
+  probable_duplicate: 'probable_duplicate',
+  identifier_conflict: 'identifier_conflict',
+  invalid: 'invalid',
+} as const;
+
+export type TutorImportRowProposedAction = typeof TutorImportRowProposedAction[keyof typeof TutorImportRowProposedAction];
+
+
+export const TutorImportRowProposedAction = {
+  create: 'create',
+  skip: 'skip',
+  blocked: 'blocked',
+} as const;
+
+export type TutorImportRowResolution = typeof TutorImportRowResolution[keyof typeof TutorImportRowResolution];
+
+
+export const TutorImportRowResolution = {
+  skip: 'skip',
+  update: 'update',
+} as const;
+
+export type TutorImportRowResult = typeof TutorImportRowResult[keyof typeof TutorImportRowResult];
+
+
+export const TutorImportRowResult = {
+  created: 'created',
+  updated: 'updated',
+  skipped: 'skipped',
+  failed: 'failed',
+} as const;
+
+export interface TutorImportResult {
+  totalRows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface TutorImportJob {
+  id: number;
+  filename: string;
+  uploadedBy: number;
+  status: TutorImportJobStatus;
+  totalRows: number;
+  newCount: number;
+  exactExistingCount: number;
+  probableDuplicateCount: number;
+  identifierConflictCount: number;
+  invalidCount: number;
+  resultSummary: TutorImportResult | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  startedImportingAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export type TutorImportJobRowRawData = {[key: string]: string};
+
+export type TutorImportJobRowMatchDetails = { [key: string]: unknown };
+
+export interface TutorImportJobRow {
+  id: number;
+  jobId: number;
+  rowNumber: number;
+  rawData: TutorImportJobRowRawData;
+  classification: TutorImportRowClassification;
+  proposedAction: TutorImportRowProposedAction;
+  resolution: TutorImportRowResolution | null;
+  /** @nullable */
+  resolvedBy: number | null;
+  /** @nullable */
+  resolvedAt: string | null;
+  matchDetails: TutorImportJobRowMatchDetails;
+  /** @nullable */
+  matchedTutorId: number | null;
+  /** @nullable */
+  matchedTutorName: string | null;
+  errors: string[];
+  warnings: string[];
+  importResult: TutorImportRowResult | null;
+  /** @nullable */
+  importError: string | null;
+  createdAt: string;
+}
+
+export interface TutorImportJobRowListResponse {
+  items: TutorImportJobRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface TutorImportRowResolveInput {
+  resolution: TutorImportRowResolution;
 }
 
 export interface Cohort {
@@ -814,6 +892,16 @@ export interface SettingsUpdate {
 
 export type ListTutorsParams = {
 active?: boolean;
+};
+
+export type UploadTutorImportBody = {
+  file: Blob;
+};
+
+export type ListTutorImportJobRowsParams = {
+page?: number;
+pageSize?: number;
+classification?: TutorImportRowClassification;
 };
 
 export type DeactivateTutorParams = {

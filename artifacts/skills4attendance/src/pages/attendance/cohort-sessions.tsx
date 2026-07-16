@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { SessionCardGrid } from "@/components/session-card-grid";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { format } from "date-fns";
 import { ArrowLeft, Plus, Loader2, User, Users, AlertCircle } from "lucide-react";
 
@@ -82,11 +83,12 @@ export default function CohortSessionsPage() {
         setCreateModalOpen(false);
         setDuplicateConfirmMode(false);
       },
-      onError: (err: any) => {
-        if (err.status === 409) {
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        if (status === 409) {
           setDuplicateConfirmMode(true);
         } else {
-          toast({ title: "Failed to create", description: err?.data?.error || err.message, variant: "destructive" });
+          toast({ title: "Failed to create", description: getErrorMessage(err), variant: "destructive" });
         }
       }
     });

@@ -33,6 +33,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
+import { downloadCsv } from "@/lib/csv-download";
+import { SummaryStat } from "@/components/import-summary-stat";
 import {
   ArrowLeft,
   Download,
@@ -64,18 +67,6 @@ const CLASSIFICATION_META: Record<
 function ClassificationBadge({ classification }: { classification: LearnerImportRowClassification }) {
   const meta = CLASSIFICATION_META[classification];
   return <Badge variant="outline" className={`${meta.className} text-[10px] font-semibold`}>{meta.label}</Badge>;
-}
-
-function downloadCsv(csv: string, filename: string) {
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  a.remove();
 }
 
 function isResolvableRow(row: LearnerImportJobRow): boolean {
@@ -135,8 +126,8 @@ export default function LearnerImportPage() {
           setJobId(job.id);
           toast({ title: "File uploaded", description: `${job.totalRows} row(s) classified.` });
         },
-        onError: (err: any) => {
-          toast({ title: "Upload failed", description: err?.data?.error || err.message, variant: "destructive" });
+        onError: (err) => {
+          toast({ title: "Upload failed", description: getErrorMessage(err), variant: "destructive" });
         },
       },
     );
@@ -188,8 +179,8 @@ export default function LearnerImportPage() {
     resolveMutation.mutate(
       { jobId, rowId: row.id, data: { resolution } },
       {
-        onError: (err: any) => {
-          toast({ title: "Could not update row", description: err?.data?.error || err.message, variant: "destructive" });
+        onError: (err) => {
+          toast({ title: "Could not update row", description: getErrorMessage(err), variant: "destructive" });
         },
         onSuccess: () => rowsQuery.refetch(),
       },
@@ -206,9 +197,9 @@ export default function LearnerImportPage() {
       { jobId },
       {
         onSuccess: () => setConfirmOpen(false),
-        onError: (err: any) => {
+        onError: (err) => {
           setConfirmOpen(false);
-          toast({ title: "Import failed", description: err?.data?.error || err.message, variant: "destructive" });
+          toast({ title: "Import failed", description: getErrorMessage(err), variant: "destructive" });
           jobQuery.refetch();
         },
       },
@@ -568,15 +559,6 @@ export default function LearnerImportPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function SummaryStat({ label, value, className }: { label: string; value: number; className?: string }) {
-  return (
-    <div className="text-center">
-      <div className={`text-xl font-bold ${className ?? "text-foreground"}`}>{value}</div>
-      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
     </div>
   );
 }

@@ -5,8 +5,5 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { CsvImportInputRowsItem } from './csvImportInputRowsItem';
 
-export interface CsvImportInput {
-  rows: CsvImportInputRowsItem[];
-}
+export type TutorImportJobRowRawData = {[key: string]: string};

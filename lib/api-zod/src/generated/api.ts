@@ -209,44 +209,187 @@ export const CreateTutorResponse = zod.object({
 })
 
 
-export const GetTutorCsvTemplateResponse = zod.object({
+export const GetTutorImportTemplateResponse = zod.object({
   "csv": zod.string(),
   "filename": zod.string().optional()
 })
 
 
-export const PreviewTutorCsvBody = zod.object({
-  "csv": zod.string(),
-  "filename": zod.string().optional()
+export const UploadTutorImportBody = zod.object({
+  "file": zod.instanceof(File)
 })
 
-export const PreviewTutorCsvResponse = zod.object({
+export const UploadTutorImportResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
   "totalRows": zod.number(),
-  "validRows": zod.number(),
-  "invalidRows": zod.number(),
-  "duplicateRows": zod.number(),
-  "rows": zod.array(zod.object({
-  "rowNumber": zod.number(),
-  "data": zod.record(zod.string(), zod.string()),
-  "isDuplicate": zod.boolean(),
-  "duplicateReason": zod.string().nullish(),
-  "errors": zod.array(zod.string())
-}))
+  "newCount": zod.number(),
+  "exactExistingCount": zod.number(),
+  "probableDuplicateCount": zod.number(),
+  "identifierConflictCount": zod.number(),
+  "invalidCount": zod.number(),
+  "resultSummary": zod.union([zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+}),zod.null()]),
+  "lastError": zod.string().nullable(),
+  "startedImportingAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
 })
 
 
-export const ImportTutorCsvBody = zod.object({
-  "rows": zod.array(zod.record(zod.string(), zod.string()))
+export const GetTutorImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
 })
 
-export const ImportTutorCsvResponse = zod.object({
-  "imported": zod.number(),
-  "skipped": zod.number(),
-  "errors": zod.array(zod.object({
+export const GetTutorImportJobResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "exactExistingCount": zod.number(),
+  "probableDuplicateCount": zod.number(),
+  "identifierConflictCount": zod.number(),
+  "invalidCount": zod.number(),
+  "resultSummary": zod.union([zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+}),zod.null()]),
+  "lastError": zod.string().nullable(),
+  "startedImportingAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+export const ListTutorImportJobRowsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const listTutorImportJobRowsQueryPageDefault = 1;
+export const listTutorImportJobRowsQueryPageSizeDefault = 25;
+
+export const ListTutorImportJobRowsQueryParams = zod.object({
+  "page": zod.coerce.number().default(listTutorImportJobRowsQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listTutorImportJobRowsQueryPageSizeDefault),
+  "classification": zod.enum(['new', 'exact_existing', 'probable_duplicate', 'identifier_conflict', 'invalid']).optional()
+})
+
+export const ListTutorImportJobRowsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
   "rowNumber": zod.number(),
-  "field": zod.string().nullish(),
-  "message": zod.string()
-}))
+  "rawData": zod.record(zod.string(), zod.string()),
+  "classification": zod.enum(['new', 'exact_existing', 'probable_duplicate', 'identifier_conflict', 'invalid']),
+  "proposedAction": zod.enum(['create', 'skip', 'blocked']),
+  "resolution": zod.union([zod.enum(['skip', 'update']),zod.null()]),
+  "resolvedBy": zod.number().nullable(),
+  "resolvedAt": zod.coerce.date().nullable(),
+  "matchDetails": zod.record(zod.string(), zod.unknown()),
+  "matchedTutorId": zod.number().nullable(),
+  "matchedTutorName": zod.string().nullable(),
+  "errors": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "importResult": zod.union([zod.enum(['created', 'updated', 'skipped', 'failed']),zod.null()]),
+  "importError": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const ResolveTutorImportJobRowParams = zod.object({
+  "jobId": zod.coerce.number(),
+  "rowId": zod.coerce.number()
+})
+
+export const ResolveTutorImportJobRowBody = zod.object({
+  "resolution": zod.enum(['skip', 'update'])
+})
+
+export const ResolveTutorImportJobRowResponse = zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "rowNumber": zod.number(),
+  "rawData": zod.record(zod.string(), zod.string()),
+  "classification": zod.enum(['new', 'exact_existing', 'probable_duplicate', 'identifier_conflict', 'invalid']),
+  "proposedAction": zod.enum(['create', 'skip', 'blocked']),
+  "resolution": zod.union([zod.enum(['skip', 'update']),zod.null()]),
+  "resolvedBy": zod.number().nullable(),
+  "resolvedAt": zod.coerce.date().nullable(),
+  "matchDetails": zod.record(zod.string(), zod.unknown()),
+  "matchedTutorId": zod.number().nullable(),
+  "matchedTutorName": zod.string().nullable(),
+  "errors": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "importResult": zod.union([zod.enum(['created', 'updated', 'skipped', 'failed']),zod.null()]),
+  "importError": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const DownloadTutorImportErrorsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const DownloadTutorImportErrorsResponse = zod.object({
+  "csv": zod.string(),
+  "filename": zod.string().optional()
+})
+
+
+export const ConfirmTutorImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const ConfirmTutorImportJobResponse = zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+})
+
+
+export const CancelTutorImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const CancelTutorImportJobResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "exactExistingCount": zod.number(),
+  "probableDuplicateCount": zod.number(),
+  "identifierConflictCount": zod.number(),
+  "invalidCount": zod.number(),
+  "resultSummary": zod.union([zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+}),zod.null()]),
+  "lastError": zod.string().nullable(),
+  "startedImportingAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
 })
 
 
@@ -445,47 +588,6 @@ export const CreateLearnerResponse = zod.object({
   "externalSystemId": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-})
-
-
-export const GetLearnerCsvTemplateResponse = zod.object({
-  "csv": zod.string(),
-  "filename": zod.string().optional()
-})
-
-
-export const PreviewLearnerCsvBody = zod.object({
-  "csv": zod.string(),
-  "filename": zod.string().optional()
-})
-
-export const PreviewLearnerCsvResponse = zod.object({
-  "totalRows": zod.number(),
-  "validRows": zod.number(),
-  "invalidRows": zod.number(),
-  "duplicateRows": zod.number(),
-  "rows": zod.array(zod.object({
-  "rowNumber": zod.number(),
-  "data": zod.record(zod.string(), zod.string()),
-  "isDuplicate": zod.boolean(),
-  "duplicateReason": zod.string().nullish(),
-  "errors": zod.array(zod.string())
-}))
-})
-
-
-export const ImportLearnerCsvBody = zod.object({
-  "rows": zod.array(zod.record(zod.string(), zod.string()))
-})
-
-export const ImportLearnerCsvResponse = zod.object({
-  "imported": zod.number(),
-  "skipped": zod.number(),
-  "errors": zod.array(zod.object({
-  "rowNumber": zod.number(),
-  "field": zod.string().nullish(),
-  "message": zod.string()
-}))
 })
 
 

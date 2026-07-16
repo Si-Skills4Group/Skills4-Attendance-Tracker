@@ -239,10 +239,6 @@ def get_current_application_user(request: Request) -> dict[str, Any]:
     return _user_public(row)
 
 
-def require_active_user(request: Request) -> dict[str, Any]:
-    return require_auth(request)
-
-
 def require_role(*roles: str):
     def dependency(request: Request) -> dict[str, Any]:
         session = require_auth(request)
@@ -261,10 +257,6 @@ def require_role(*roles: str):
 
 def require_admin(request: Request) -> dict[str, Any]:
     return require_role("admin")(request)
-
-
-def require_administrator(request: Request) -> dict[str, Any]:
-    return require_admin(request)
 
 
 def require_tutor(request: Request) -> dict[str, Any]:

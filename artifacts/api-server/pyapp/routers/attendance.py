@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ..allocation_lib import learners_expected_in_cohort_as_of
+from ..allocation_lib import expected_learners_count_sql, learners_expected_in_cohort_as_of
 from ..auth import require_attendance_access, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
@@ -18,6 +18,31 @@ SESSION_SELECT = """
            s.planned_end_time AS "plannedEndTime", s.planned_duration_hours AS "plannedDurationHours",
            s.title, s.notes, s.created_by AS "createdBy",
            s.created_at AS "createdAt", s.updated_at AS "updatedAt"
+    FROM attendance_sessions s
+    JOIN cohorts c ON s.cohort_id = c.id
+    LEFT JOIN tutors t ON c.tutor_id = t.id
+"""
+
+# Same base select as SESSION_SELECT, but with recordedCount/expectedCount
+# computed as correlated subqueries per row instead of via _with_counts in
+# a Python loop -- one round trip to the database regardless of how many
+# sessions are returned, instead of 1 + 2N. expected_learners_count_sql is
+# the batched SQL-fragment counterpart of learners_expected_in_cohort_as_of
+# (allocation_lib), built for exactly this: each row still resolves its
+# *own* cohort_id/session_date through the same 3-tier COALESCE logic, so
+# there is no cross-contamination between sessions or cohorts -- it's just
+# evaluated by Postgres per row internally rather than by Python via N
+# separate queries.
+SESSION_SELECT_WITH_COUNTS = f"""
+    SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName",
+           c.tutor_id AS "tutorId",
+           CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName",
+           s.session_date AS "sessionDate", s.planned_start_time AS "plannedStartTime",
+           s.planned_end_time AS "plannedEndTime", s.planned_duration_hours AS "plannedDurationHours",
+           s.title, s.notes, s.created_by AS "createdBy",
+           s.created_at AS "createdAt", s.updated_at AS "updatedAt",
+           (SELECT count(*)::int FROM attendance_records ar WHERE ar.session_id = s.id) AS "recordedCount",
+           {expected_learners_count_sql("s.cohort_id", "s.session_date")}::int AS "expectedCount"
     FROM attendance_sessions s
     JOIN cohorts c ON s.cohort_id = c.id
     LEFT JOIN tutors t ON c.tutor_id = t.id
@@ -103,9 +128,8 @@ def list_attendance_sessions(
             # never matches), not a proper 403/404. IDOR probing should get
             # a real access-denied response, not an empty-but-200 result.
             require_cohort_access(cur, cohortId, session)
-        cur.execute(f"{SESSION_SELECT} {where} ORDER BY s.session_date DESC", params)
-        rows = cur.fetchall()
-        return [_with_counts(cur, r) for r in rows]
+        cur.execute(f"{SESSION_SELECT_WITH_COUNTS} {where} ORDER BY s.session_date DESC", params)
+        return cur.fetchall()
 
 
 @router.post("/attendance/sessions", status_code=201)

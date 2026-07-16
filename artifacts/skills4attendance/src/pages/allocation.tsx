@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Loader2, ArrowRightLeft, UserPlus, Calendar, Clock3, X, Info } from "lucide-react";
 import { format } from "date-fns";
 
@@ -81,11 +82,12 @@ export default function AllocationPage() {
         refetchAllocations();
         refetchScheduled();
       },
-      onError: (err: any) => {
-        if (err?.status === 409) {
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        if (status === 409) {
           toast({ title: "Learner(s) already have a pending transfer", description: "Cancel the existing scheduled transfer first.", variant: "destructive" });
         } else {
-          toast({ title: "Allocation Failed", description: err?.data?.error || err.error, variant: "destructive" });
+          toast({ title: "Allocation Failed", description: getErrorMessage(err), variant: "destructive" });
         }
       }
     });
@@ -97,7 +99,7 @@ export default function AllocationPage() {
         toast({ title: "Scheduled transfer cancelled" });
         refetchScheduled();
       },
-      onError: (err: any) => toast({ title: "Cancel failed", description: err?.data?.error || err.message, variant: "destructive" }),
+      onError: (err) => toast({ title: "Cancel failed", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 

@@ -5,10 +5,10 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { CsvRowError } from './csvRowError';
 
-export interface CsvImportResult {
-  imported: number;
+export interface TutorImportResult {
+  totalRows: number;
+  created: number;
+  updated: number;
   skipped: number;
-  errors: CsvRowError[];
 }

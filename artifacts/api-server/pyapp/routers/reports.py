@@ -17,8 +17,14 @@ from .tutors import TUTOR_SELECT
 router = APIRouter(tags=["reports"])
 
 
-def _date_params(dateFrom: str | None, dateTo: str | None):
-    return dateFrom, dateTo
+def _group_by(records: list[dict], key: str) -> dict:
+    """Groups an already-fetched record list by a key -- lets a breakdown
+    be computed from one query's results instead of one extra query per
+    entity in the breakdown (the N+1 pattern this replaces)."""
+    groups: dict = {}
+    for r in records:
+        groups.setdefault(r[key], []).append(r)
+    return groups
 
 
 @router.get("/reports/learner/{learner_id}")
@@ -50,18 +56,17 @@ def get_cohort_report(cohort_id: int, dateFrom: str | None = None, dateTo: str |
 
     records = get_records_for_cohort(cohort_id, dateFrom, dateTo)
     totals = compute_attendance_totals(records)
+    records_by_learner = _group_by(records, "learnerId")
 
-    breakdown = []
-    for learner in learners:
-        learner_records = get_records_for_learner(learner["id"], dateFrom, dateTo)
-        breakdown.append(
-            {
-                "learnerId": learner["id"],
-                "learnerName": f"{learner['firstName']} {learner['lastName']}",
-                "learnerRef": learner["learnerRef"],
-                "totals": compute_attendance_totals(learner_records),
-            }
-        )
+    breakdown = [
+        {
+            "learnerId": learner["id"],
+            "learnerName": f"{learner['firstName']} {learner['lastName']}",
+            "learnerRef": learner["learnerRef"],
+            "totals": compute_attendance_totals(records_by_learner.get(learner["id"], [])),
+        }
+        for learner in learners
+    ]
 
     return {"cohort": cohort, "totals": totals, "learnerBreakdown": breakdown}
 
@@ -82,13 +87,16 @@ def get_tutor_report(tutor_id: int, dateFrom: str | None = None, dateTo: str | N
 
     records = get_records_for_tutor(tutor_id, dateFrom, dateTo)
     totals = compute_attendance_totals(records)
+    records_by_cohort = _group_by(records, "cohortId")
 
-    breakdown = []
-    for cohort in cohorts:
-        cohort_records = get_records_for_cohort(cohort["id"], dateFrom, dateTo)
-        breakdown.append(
-            {"cohortId": cohort["id"], "cohortName": cohort["name"], "totals": compute_attendance_totals(cohort_records)}
-        )
+    breakdown = [
+        {
+            "cohortId": cohort["id"],
+            "cohortName": cohort["name"],
+            "totals": compute_attendance_totals(records_by_cohort.get(cohort["id"], [])),
+        }
+        for cohort in cohorts
+    ]
 
     return {"tutor": tutor, "totals": totals, "cohortBreakdown": breakdown}
 
@@ -100,8 +108,15 @@ def get_organisation_report(
     programme: str | None = None,
     _session: dict = Depends(require_admin),
 ):
-    records = get_records_for_organisation(dateFrom, dateTo, programme)
-    totals = compute_attendance_totals(records)
+    records_for_totals = get_records_for_organisation(dateFrom, dateTo, programme)
+    totals = compute_attendance_totals(records_for_totals)
+
+    # The programme/cohort breakdowns have always shown every programme and
+    # cohort org-wide, independent of the top-level `programme` filter above
+    # (the previous per-programme/per-cohort loops never applied it either)
+    # -- reuse the just-fetched records when there's no filter to diverge
+    # from, otherwise fetch the unfiltered set once more.
+    breakdown_records = records_for_totals if not programme else get_records_for_organisation(dateFrom, dateTo)
 
     with get_cursor() as cur:
         cur.execute(f"{COHORT_SELECT}")
@@ -109,17 +124,20 @@ def get_organisation_report(
         cur.execute("SELECT DISTINCT programme FROM cohorts")
         programmes = [r["programme"] for r in cur.fetchall()]
 
-    programme_breakdown = []
-    for programme in programmes:
-        p_records = get_records_for_organisation(dateFrom, dateTo, programme)
-        programme_breakdown.append({"programme": programme, "totals": compute_attendance_totals(p_records)})
+    records_by_programme = _group_by(breakdown_records, "programme")
+    records_by_cohort = _group_by(breakdown_records, "cohortId")
 
-    cohort_breakdown = []
-    for cohort in cohorts:
-        c_records = get_records_for_cohort(cohort["id"], dateFrom, dateTo)
-        cohort_breakdown.append(
-            {"cohortId": cohort["id"], "cohortName": cohort["name"], "totals": compute_attendance_totals(c_records)}
-        )
+    programme_breakdown = [
+        {"programme": p, "totals": compute_attendance_totals(records_by_programme.get(p, []))} for p in programmes
+    ]
+    cohort_breakdown = [
+        {
+            "cohortId": cohort["id"],
+            "cohortName": cohort["name"],
+            "totals": compute_attendance_totals(records_by_cohort.get(cohort["id"], [])),
+        }
+        for cohort in cohorts
+    ]
 
     return {"totals": totals, "programmeBreakdown": programme_breakdown, "cohortBreakdown": cohort_breakdown}
 

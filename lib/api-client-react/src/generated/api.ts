@@ -41,9 +41,6 @@ import type {
   CohortReport,
   CohortUpdate,
   CsvContent,
-  CsvImportInput,
-  CsvImportResult,
-  CsvPreviewResult,
   DeactivateTutorParams,
   ErrorResponse,
   ExportReportParams,
@@ -69,6 +66,7 @@ import type {
   ListLearnerImportJobRowsParams,
   ListLearnersParams,
   ListScheduledAllocationsParams,
+  ListTutorImportJobRowsParams,
   ListTutorsParams,
   ListUsersParams,
   LoginInput,
@@ -78,10 +76,16 @@ import type {
   Tutor,
   TutorAllocationGroup,
   TutorDashboard,
+  TutorImportJob,
+  TutorImportJobRow,
+  TutorImportJobRowListResponse,
+  TutorImportResult,
+  TutorImportRowResolveInput,
   TutorInput,
   TutorReport,
   TutorUpdate,
   UploadLearnerImportBody,
+  UploadTutorImportBody,
   UserLinkTutorInput,
   UserProvisionInput,
   UserRoleInput,
@@ -679,17 +683,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCreateTutorMutationOptions(options));
     }
 
-export const getGetTutorCsvTemplateUrl = () => {
+export const getGetTutorImportTemplateUrl = () => {
 
 
 
 
-  return `/api/tutors/csv-template`
+  return `/api/tutors/import-jobs/template`
 }
 
-export const getTutorCsvTemplate = async ( options?: RequestInit): Promise<CsvContent> => {
+export const getTutorImportTemplate = async ( options?: RequestInit): Promise<CsvContent> => {
 
-  return customFetch<CsvContent>(getGetTutorCsvTemplateUrl(),
+  return customFetch<CsvContent>(getGetTutorImportTemplateUrl(),
   {
     ...options,
     method: 'GET'
@@ -702,42 +706,42 @@ export const getTutorCsvTemplate = async ( options?: RequestInit): Promise<CsvCo
 
 
 
-export const getGetTutorCsvTemplateQueryKey = () => {
+export const getGetTutorImportTemplateQueryKey = () => {
     return [
-    `/api/tutors/csv-template`
+    `/api/tutors/import-jobs/template`
     ] as const;
     }
 
 
-export const getGetTutorCsvTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetTutorImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getTutorImportTemplate>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetTutorCsvTemplateQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorImportTemplateQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorCsvTemplate>>> = ({ signal }) => getTutorCsvTemplate({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorImportTemplate>>> = ({ signal }) => getTutorImportTemplate({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorImportTemplate>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetTutorCsvTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorCsvTemplate>>>
-export type GetTutorCsvTemplateQueryError = ErrorType<unknown>
+export type GetTutorImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorImportTemplate>>>
+export type GetTutorImportTemplateQueryError = ErrorType<unknown>
 
 
 
-export function useGetTutorCsvTemplate<TData = Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetTutorImportTemplate<TData = Awaited<ReturnType<typeof getTutorImportTemplate>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetTutorCsvTemplateQueryOptions(options)
+  const queryOptions = getGetTutorImportTemplateQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -750,22 +754,24 @@ export function useGetTutorCsvTemplate<TData = Awaited<ReturnType<typeof getTuto
 
 
 
-export const getPreviewTutorCsvUrl = () => {
+export const getUploadTutorImportUrl = () => {
 
 
 
 
-  return `/api/tutors/csv-preview`
+  return `/api/tutors/import-jobs`
 }
 
-export const previewTutorCsv = async (csvContent: CsvContent, options?: RequestInit): Promise<CsvPreviewResult> => {
+export const uploadTutorImport = async (uploadTutorImportBody: UploadTutorImportBody, options?: RequestInit): Promise<TutorImportJob> => {
+    const formData = new FormData();
+formData.append(`file`, uploadTutorImportBody.file);
 
-  return customFetch<CsvPreviewResult>(getPreviewTutorCsvUrl(),
+  return customFetch<TutorImportJob>(getUploadTutorImportUrl(),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(csvContent)
+    method: 'POST'
+    ,
+    body: formData
   }
 );}
 
@@ -773,11 +779,11 @@ export const previewTutorCsv = async (csvContent: CsvContent, options?: RequestI
 
 
 
-export const getPreviewTutorCsvMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewTutorCsv>>, TError,{data: BodyType<CsvContent>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof previewTutorCsv>>, TError,{data: BodyType<CsvContent>}, TContext> => {
+export const getUploadTutorImportMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadTutorImport>>, TError,{data: BodyType<UploadTutorImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadTutorImport>>, TError,{data: BodyType<UploadTutorImportBody>}, TContext> => {
 
-const mutationKey = ['previewTutorCsv'];
+const mutationKey = ['uploadTutorImport'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -787,10 +793,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewTutorCsv>>, {data: BodyType<CsvContent>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadTutorImport>>, {data: BodyType<UploadTutorImportBody>}> = (props) => {
           const {data} = props ?? {};
 
-          return  previewTutorCsv(data,requestOptions)
+          return  uploadTutorImport(data,requestOptions)
         }
 
 
@@ -800,37 +806,37 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PreviewTutorCsvMutationResult = NonNullable<Awaited<ReturnType<typeof previewTutorCsv>>>
-    export type PreviewTutorCsvMutationBody = BodyType<CsvContent>
-    export type PreviewTutorCsvMutationError = ErrorType<unknown>
+    export type UploadTutorImportMutationResult = NonNullable<Awaited<ReturnType<typeof uploadTutorImport>>>
+    export type UploadTutorImportMutationBody = BodyType<UploadTutorImportBody>
+    export type UploadTutorImportMutationError = ErrorType<ErrorResponse>
 
-    export const usePreviewTutorCsv = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewTutorCsv>>, TError,{data: BodyType<CsvContent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useUploadTutorImport = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadTutorImport>>, TError,{data: BodyType<UploadTutorImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof previewTutorCsv>>,
+        Awaited<ReturnType<typeof uploadTutorImport>>,
         TError,
-        {data: BodyType<CsvContent>},
+        {data: BodyType<UploadTutorImportBody>},
         TContext
       > => {
-      return useMutation(getPreviewTutorCsvMutationOptions(options));
+      return useMutation(getUploadTutorImportMutationOptions(options));
     }
 
-export const getImportTutorCsvUrl = () => {
+export const getGetTutorImportJobUrl = (jobId: number,) => {
 
 
 
 
-  return `/api/tutors/csv-import`
+  return `/api/tutors/import-jobs/${jobId}`
 }
 
-export const importTutorCsv = async (csvImportInput: CsvImportInput, options?: RequestInit): Promise<CsvImportResult> => {
+export const getTutorImportJob = async (jobId: number, options?: RequestInit): Promise<TutorImportJob> => {
 
-  return customFetch<CsvImportResult>(getImportTutorCsvUrl(),
+  return customFetch<TutorImportJob>(getGetTutorImportJobUrl(jobId),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(csvImportInput)
+    method: 'GET'
+
+
   }
 );}
 
@@ -838,11 +844,168 @@ export const importTutorCsv = async (csvImportInput: CsvImportInput, options?: R
 
 
 
-export const getImportTutorCsvMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importTutorCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof importTutorCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext> => {
+export const getGetTutorImportJobQueryKey = (jobId: number,) => {
+    return [
+    `/api/tutors/import-jobs/${jobId}`
+    ] as const;
+    }
 
-const mutationKey = ['importTutorCsv'];
+
+export const getGetTutorImportJobQueryOptions = <TData = Awaited<ReturnType<typeof getTutorImportJob>>, TError = ErrorType<ErrorResponse>>(jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorImportJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorImportJobQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorImportJob>>> = ({ signal }) => getTutorImportJob(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorImportJob>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorImportJobQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorImportJob>>>
+export type GetTutorImportJobQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetTutorImportJob<TData = Awaited<ReturnType<typeof getTutorImportJob>>, TError = ErrorType<ErrorResponse>>(
+ jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorImportJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorImportJobQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListTutorImportJobRowsUrl = (jobId: number,
+    params?: ListTutorImportJobRowsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/tutors/import-jobs/${jobId}/rows?${stringifiedParams}` : `/api/tutors/import-jobs/${jobId}/rows`
+}
+
+export const listTutorImportJobRows = async (jobId: number,
+    params?: ListTutorImportJobRowsParams, options?: RequestInit): Promise<TutorImportJobRowListResponse> => {
+
+  return customFetch<TutorImportJobRowListResponse>(getListTutorImportJobRowsUrl(jobId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTutorImportJobRowsQueryKey = (jobId: number,
+    params?: ListTutorImportJobRowsParams,) => {
+    return [
+    `/api/tutors/import-jobs/${jobId}/rows`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTutorImportJobRowsQueryOptions = <TData = Awaited<ReturnType<typeof listTutorImportJobRows>>, TError = ErrorType<unknown>>(jobId: number,
+    params?: ListTutorImportJobRowsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTutorImportJobRows>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTutorImportJobRowsQueryKey(jobId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTutorImportJobRows>>> = ({ signal }) => listTutorImportJobRows(jobId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTutorImportJobRows>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTutorImportJobRowsQueryResult = NonNullable<Awaited<ReturnType<typeof listTutorImportJobRows>>>
+export type ListTutorImportJobRowsQueryError = ErrorType<unknown>
+
+
+
+export function useListTutorImportJobRows<TData = Awaited<ReturnType<typeof listTutorImportJobRows>>, TError = ErrorType<unknown>>(
+ jobId: number,
+    params?: ListTutorImportJobRowsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTutorImportJobRows>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTutorImportJobRowsQueryOptions(jobId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getResolveTutorImportJobRowUrl = (jobId: number,
+    rowId: number,) => {
+
+
+
+
+  return `/api/tutors/import-jobs/${jobId}/rows/${rowId}`
+}
+
+export const resolveTutorImportJobRow = async (jobId: number,
+    rowId: number,
+    tutorImportRowResolveInput: TutorImportRowResolveInput, options?: RequestInit): Promise<TutorImportJobRow> => {
+
+  return customFetch<TutorImportJobRow>(getResolveTutorImportJobRowUrl(jobId,rowId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(tutorImportRowResolveInput)
+  }
+);}
+
+
+
+
+
+export const getResolveTutorImportJobRowMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveTutorImportJobRow>>, TError,{jobId: number;rowId: number;data: BodyType<TutorImportRowResolveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveTutorImportJobRow>>, TError,{jobId: number;rowId: number;data: BodyType<TutorImportRowResolveInput>}, TContext> => {
+
+const mutationKey = ['resolveTutorImportJobRow'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -852,10 +1015,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importTutorCsv>>, {data: BodyType<CsvImportInput>}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveTutorImportJobRow>>, {jobId: number;rowId: number;data: BodyType<TutorImportRowResolveInput>}> = (props) => {
+          const {jobId,rowId,data} = props ?? {};
 
-          return  importTutorCsv(data,requestOptions)
+          return  resolveTutorImportJobRow(jobId,rowId,data,requestOptions)
         }
 
 
@@ -865,19 +1028,220 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ImportTutorCsvMutationResult = NonNullable<Awaited<ReturnType<typeof importTutorCsv>>>
-    export type ImportTutorCsvMutationBody = BodyType<CsvImportInput>
-    export type ImportTutorCsvMutationError = ErrorType<unknown>
+    export type ResolveTutorImportJobRowMutationResult = NonNullable<Awaited<ReturnType<typeof resolveTutorImportJobRow>>>
+    export type ResolveTutorImportJobRowMutationBody = BodyType<TutorImportRowResolveInput>
+    export type ResolveTutorImportJobRowMutationError = ErrorType<ErrorResponse>
 
-    export const useImportTutorCsv = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importTutorCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useResolveTutorImportJobRow = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveTutorImportJobRow>>, TError,{jobId: number;rowId: number;data: BodyType<TutorImportRowResolveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof importTutorCsv>>,
+        Awaited<ReturnType<typeof resolveTutorImportJobRow>>,
         TError,
-        {data: BodyType<CsvImportInput>},
+        {jobId: number;rowId: number;data: BodyType<TutorImportRowResolveInput>},
         TContext
       > => {
-      return useMutation(getImportTutorCsvMutationOptions(options));
+      return useMutation(getResolveTutorImportJobRowMutationOptions(options));
+    }
+
+export const getDownloadTutorImportErrorsUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/tutors/import-jobs/${jobId}/rows/errors.csv`
+}
+
+export const downloadTutorImportErrors = async (jobId: number, options?: RequestInit): Promise<CsvContent> => {
+
+  return customFetch<CsvContent>(getDownloadTutorImportErrorsUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadTutorImportErrorsQueryKey = (jobId: number,) => {
+    return [
+    `/api/tutors/import-jobs/${jobId}/rows/errors.csv`
+    ] as const;
+    }
+
+
+export const getDownloadTutorImportErrorsQueryOptions = <TData = Awaited<ReturnType<typeof downloadTutorImportErrors>>, TError = ErrorType<unknown>>(jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadTutorImportErrors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadTutorImportErrorsQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadTutorImportErrors>>> = ({ signal }) => downloadTutorImportErrors(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadTutorImportErrors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadTutorImportErrorsQueryResult = NonNullable<Awaited<ReturnType<typeof downloadTutorImportErrors>>>
+export type DownloadTutorImportErrorsQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadTutorImportErrors<TData = Awaited<ReturnType<typeof downloadTutorImportErrors>>, TError = ErrorType<unknown>>(
+ jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadTutorImportErrors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadTutorImportErrorsQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getConfirmTutorImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/tutors/import-jobs/${jobId}/confirm`
+}
+
+export const confirmTutorImportJob = async (jobId: number, options?: RequestInit): Promise<TutorImportResult> => {
+
+  return customFetch<TutorImportResult>(getConfirmTutorImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getConfirmTutorImportJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmTutorImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmTutorImportJob>>, TError,{jobId: number}, TContext> => {
+
+const mutationKey = ['confirmTutorImportJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmTutorImportJob>>, {jobId: number}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  confirmTutorImportJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmTutorImportJobMutationResult = NonNullable<Awaited<ReturnType<typeof confirmTutorImportJob>>>
+
+    export type ConfirmTutorImportJobMutationError = ErrorType<ErrorResponse>
+
+    export const useConfirmTutorImportJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmTutorImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmTutorImportJob>>,
+        TError,
+        {jobId: number},
+        TContext
+      > => {
+      return useMutation(getConfirmTutorImportJobMutationOptions(options));
+    }
+
+export const getCancelTutorImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/tutors/import-jobs/${jobId}/cancel`
+}
+
+export const cancelTutorImportJob = async (jobId: number, options?: RequestInit): Promise<TutorImportJob> => {
+
+  return customFetch<TutorImportJob>(getCancelTutorImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelTutorImportJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelTutorImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelTutorImportJob>>, TError,{jobId: number}, TContext> => {
+
+const mutationKey = ['cancelTutorImportJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelTutorImportJob>>, {jobId: number}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  cancelTutorImportJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelTutorImportJobMutationResult = NonNullable<Awaited<ReturnType<typeof cancelTutorImportJob>>>
+
+    export type CancelTutorImportJobMutationError = ErrorType<ErrorResponse>
+
+    export const useCancelTutorImportJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelTutorImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelTutorImportJob>>,
+        TError,
+        {jobId: number},
+        TContext
+      > => {
+      return useMutation(getCancelTutorImportJobMutationOptions(options));
     }
 
 export const getGetTutorUrl = (id: number,) => {
@@ -1297,207 +1661,6 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateLearnerMutationOptions(options));
-    }
-
-export const getGetLearnerCsvTemplateUrl = () => {
-
-
-
-
-  return `/api/learners/csv-template`
-}
-
-export const getLearnerCsvTemplate = async ( options?: RequestInit): Promise<CsvContent> => {
-
-  return customFetch<CsvContent>(getGetLearnerCsvTemplateUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetLearnerCsvTemplateQueryKey = () => {
-    return [
-    `/api/learners/csv-template`
-    ] as const;
-    }
-
-
-export const getGetLearnerCsvTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getLearnerCsvTemplate>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetLearnerCsvTemplateQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerCsvTemplate>>> = ({ signal }) => getLearnerCsvTemplate({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerCsvTemplate>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetLearnerCsvTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerCsvTemplate>>>
-export type GetLearnerCsvTemplateQueryError = ErrorType<unknown>
-
-
-
-export function useGetLearnerCsvTemplate<TData = Awaited<ReturnType<typeof getLearnerCsvTemplate>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerCsvTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetLearnerCsvTemplateQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getPreviewLearnerCsvUrl = () => {
-
-
-
-
-  return `/api/learners/csv-preview`
-}
-
-export const previewLearnerCsv = async (csvContent: CsvContent, options?: RequestInit): Promise<CsvPreviewResult> => {
-
-  return customFetch<CsvPreviewResult>(getPreviewLearnerCsvUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(csvContent)
-  }
-);}
-
-
-
-
-
-export const getPreviewLearnerCsvMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewLearnerCsv>>, TError,{data: BodyType<CsvContent>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof previewLearnerCsv>>, TError,{data: BodyType<CsvContent>}, TContext> => {
-
-const mutationKey = ['previewLearnerCsv'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewLearnerCsv>>, {data: BodyType<CsvContent>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  previewLearnerCsv(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PreviewLearnerCsvMutationResult = NonNullable<Awaited<ReturnType<typeof previewLearnerCsv>>>
-    export type PreviewLearnerCsvMutationBody = BodyType<CsvContent>
-    export type PreviewLearnerCsvMutationError = ErrorType<unknown>
-
-    export const usePreviewLearnerCsv = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewLearnerCsv>>, TError,{data: BodyType<CsvContent>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof previewLearnerCsv>>,
-        TError,
-        {data: BodyType<CsvContent>},
-        TContext
-      > => {
-      return useMutation(getPreviewLearnerCsvMutationOptions(options));
-    }
-
-export const getImportLearnerCsvUrl = () => {
-
-
-
-
-  return `/api/learners/csv-import`
-}
-
-export const importLearnerCsv = async (csvImportInput: CsvImportInput, options?: RequestInit): Promise<CsvImportResult> => {
-
-  return customFetch<CsvImportResult>(getImportLearnerCsvUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(csvImportInput)
-  }
-);}
-
-
-
-
-
-export const getImportLearnerCsvMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importLearnerCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof importLearnerCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext> => {
-
-const mutationKey = ['importLearnerCsv'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importLearnerCsv>>, {data: BodyType<CsvImportInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  importLearnerCsv(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ImportLearnerCsvMutationResult = NonNullable<Awaited<ReturnType<typeof importLearnerCsv>>>
-    export type ImportLearnerCsvMutationBody = BodyType<CsvImportInput>
-    export type ImportLearnerCsvMutationError = ErrorType<unknown>
-
-    export const useImportLearnerCsv = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importLearnerCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof importLearnerCsv>>,
-        TError,
-        {data: BodyType<CsvImportInput>},
-        TContext
-      > => {
-      return useMutation(getImportLearnerCsvMutationOptions(options));
     }
 
 export const getGetLearnerImportTemplateUrl = () => {

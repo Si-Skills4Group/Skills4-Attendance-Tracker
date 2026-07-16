@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { ShieldCheck, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 
@@ -78,22 +79,22 @@ export default function UsersPage() {
           });
           toast({ title: "User provisioned" });
         },
-        onError: (error: any) => {
+        onError: (error) => {
           toast({
             variant: "destructive",
             title: "Could not provision user",
-            description: error?.data?.error || error?.message || "Check the identity details and try again.",
+            description: getErrorMessage(error, "Check the identity details and try again."),
           });
         },
       },
     );
   };
 
-  const onError = (title: string) => (error: any) => {
+  const onError = (title: string) => (error: unknown) => {
     toast({
       variant: "destructive",
       title,
-      description: error?.data?.error || error?.message || "The change was not applied.",
+      description: getErrorMessage(error, "The change was not applied."),
     });
   };
 
@@ -172,7 +173,7 @@ export default function UsersPage() {
           placeholder="Search users by name, email, or Entra object ID"
           className="max-w-md"
         />
-        <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
+        <Select value={roleFilter} onValueChange={(v: string) => setRoleFilter(v as UserRole | typeof allValue)}>
           <SelectTrigger className="w-44"><SelectValue placeholder="Role" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={allValue}>All roles</SelectItem>

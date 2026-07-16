@@ -16,14 +16,17 @@ from .bootstrap import bootstrap_database
 from .config import get_auth_settings
 from .db import get_cursor
 from .learner_import_lib import expire_due_learner_import_jobs
+from .login_rate_limit import prune_stale_login_attempts
 from .scheduled_allocations_lib import apply_due_scheduled_allocations
 from .session import SessionMiddleware
+from .tutor_import_lib import expire_due_tutor_import_jobs
 from .routers import (
     health,
     auth_routes,
     users,
     dashboard,
     tutors,
+    tutor_imports,
     learners,
     learner_imports,
     cohorts,
@@ -49,6 +52,10 @@ with get_cursor() as _cur:
     # Same lazy pattern as above, for learner CSV import jobs -- see
     # learner_import_lib for why there is no cron/background worker.
     expire_due_learner_import_jobs(_cur)
+    # Same lazy pattern again, for stale login-rate-limit rows.
+    prune_stale_login_attempts(_cur)
+    # ...and for tutor CSV import jobs.
+    expire_due_tutor_import_jobs(_cur)
 
 app = FastAPI(title="Skills4Attendance API")
 
@@ -77,13 +84,13 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
     return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
-api = FastAPI()
 for router in (
     health.router,
     auth_routes.router,
     users.router,
     dashboard.router,
     tutors.router,
+    tutor_imports.router,
     learners.router,
     learner_imports.router,
     cohorts.router,

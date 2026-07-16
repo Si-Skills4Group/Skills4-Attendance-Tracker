@@ -20,6 +20,7 @@ import {
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageLoadingSpinner } from "@/components/page-loading-spinner";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const { instance } = useMsal();
@@ -47,9 +48,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [user, isResolving, isAuthenticated, location, setLocation]);
 
   if (isResolving || (isAuthenticated && isLoading)) {
-    return <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
-    </div>;
+    return <PageLoadingSpinner />;
   }
 
   // Allow rendering just the content for unauthenticated users on login

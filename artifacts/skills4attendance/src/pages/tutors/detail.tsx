@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Loader2, Save, ArrowLeft, BookOpen } from "lucide-react";
 
 const baseTutorSchema = z.object({
@@ -101,7 +102,7 @@ export default function TutorDetailPage() {
           toast({ title: "Tutor created", description: "The tutor profile has been created successfully." });
           setLocation("/tutors");
         },
-        onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
     } else {
       const { active: _active, ...rest } = payload;
@@ -110,7 +111,7 @@ export default function TutorDetailPage() {
           toast({ title: "Tutor updated", description: "Changes saved successfully." });
           setLocation("/tutors");
         },
-        onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
     }
   };
@@ -121,7 +122,7 @@ export default function TutorDetailPage() {
         onSuccess: () => {
           toast({ title: "Tutor activated" });
         },
-        onError: (err: any) => toast({ title: "Activation failed", description: err?.data?.error || err.message, variant: "destructive" }),
+        onError: (err) => toast({ title: "Activation failed", description: getErrorMessage(err), variant: "destructive" }),
       });
       return;
     }
@@ -131,13 +132,14 @@ export default function TutorDetailPage() {
         setPendingDeactivation(null);
         toast({ title: "Tutor deactivated" });
       },
-      onError: (err: any) => {
-        const data = err?.data;
-        if (err?.status === 409 && data?.cohorts) {
+      onError: (err) => {
+        const data = (err as { data?: { cohorts?: { id: number; name: string }[] } } | undefined)?.data;
+        const status = (err as { status?: number } | undefined)?.status;
+        if (status === 409 && data?.cohorts) {
           setPendingDeactivation(data.cohorts);
           return;
         }
-        toast({ title: "Deactivation failed", description: data?.error || err.message, variant: "destructive" });
+        toast({ title: "Deactivation failed", description: getErrorMessage(err), variant: "destructive" });
       },
     });
   };

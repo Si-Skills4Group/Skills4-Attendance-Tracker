@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Loader2, Save, Building2 } from "lucide-react";
 
 const settingsSchema = z.object({
@@ -45,8 +46,8 @@ export default function SettingsPage() {
       onSuccess: () => {
         toast({ title: "Settings updated successfully" });
       },
-      onError: (err: any) => {
-        toast({ title: "Failed to update settings", description: err.error, variant: "destructive" });
+      onError: (err) => {
+        toast({ title: "Failed to update settings", description: getErrorMessage(err), variant: "destructive" });
       }
     });
   };

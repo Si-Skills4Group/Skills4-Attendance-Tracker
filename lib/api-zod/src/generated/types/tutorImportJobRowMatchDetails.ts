@@ -6,4 +6,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type CsvPreviewRowData = {[key: string]: string};
+export type TutorImportJobRowMatchDetails = { [key: string]: unknown };

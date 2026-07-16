@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Search, Plus, Upload, Mail, BookOpen, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function TutorsPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -61,7 +62,7 @@ export default function TutorsPage() {
           toast({ title: "Tutor activated", description: `${tutor.firstName} is now active.` });
           refetch();
         },
-        onError: (err: any) => toast({ title: "Activation failed", description: err?.data?.error || err.message, variant: "destructive" }),
+        onError: (err) => toast({ title: "Activation failed", description: getErrorMessage(err), variant: "destructive" }),
       });
       return;
     }
@@ -72,13 +73,14 @@ export default function TutorsPage() {
         toast({ title: "Tutor deactivated", description: `${tutor.firstName} is now inactive.` });
         refetch();
       },
-      onError: (err: any) => {
-        const data = err?.data;
-        if (err?.status === 409 && data?.cohorts) {
+      onError: (err) => {
+        const data = (err as { data?: { cohorts?: { id: number; name: string }[] } } | undefined)?.data;
+        const status = (err as { status?: number } | undefined)?.status;
+        if (status === 409 && data?.cohorts) {
           setPendingDeactivation({ tutor, cohorts: data.cohorts });
           return;
         }
-        toast({ title: "Deactivation failed", description: data?.error || err.message, variant: "destructive" });
+        toast({ title: "Deactivation failed", description: getErrorMessage(err), variant: "destructive" });
       },
     });
   };

@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
@@ -148,7 +149,7 @@ export default function LearnerDetailPage() {
           toast({ title: "Learner created" });
           setLocation("/learners");
         },
-        onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
     } else {
       const { status: _status, ...rest } = payload;
@@ -157,7 +158,7 @@ export default function LearnerDetailPage() {
           toast({ title: "Learner updated" });
           setLocation("/learners");
         },
-        onError: (err: any) => toast({ title: "Error", description: err.error, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
     }
   };
@@ -176,7 +177,7 @@ export default function LearnerDetailPage() {
         toast({ title: "Status updated" });
         setStatusDialogOpen(false);
       },
-      onError: (err: any) => toast({ title: "Error", description: err?.data?.error || err.message, variant: "destructive" }),
+      onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 

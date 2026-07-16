@@ -39,7 +39,7 @@ def get_records_for_cohort(cohort_id: int, date_from: str | None = None, date_to
     with get_cursor() as cur:
         cur.execute(
             f"""
-            SELECT ar.status, ar.hours_attended AS "hoursAttended",
+            SELECT ar.status, ar.hours_attended AS "hoursAttended", ar.learner_id AS "learnerId",
                    s.planned_duration_hours AS "plannedDurationHours"
             FROM attendance_records ar
             JOIN attendance_sessions s ON ar.session_id = s.id
@@ -61,7 +61,7 @@ def get_records_for_tutor(tutor_id: int, date_from: str | None = None, date_to: 
         cur.execute(
             f"""
             SELECT ar.status, ar.hours_attended AS "hoursAttended",
-                   s.planned_duration_hours AS "plannedDurationHours"
+                   s.planned_duration_hours AS "plannedDurationHours", s.cohort_id AS "cohortId"
             FROM attendance_records ar
             JOIN attendance_sessions s ON ar.session_id = s.id
             JOIN cohorts c ON s.cohort_id = c.id

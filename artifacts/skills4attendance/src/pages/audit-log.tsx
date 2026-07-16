@@ -37,7 +37,7 @@ export default function AuditLogPage() {
       <Card className="mb-6 shadow-sm page-transition-enter stagger-1">
         <CardContent className="p-4 flex flex-col sm:flex-row gap-4">
           <div className="w-full sm:w-[200px]">
-            <Select value={entityType} onValueChange={(val: any) => { setEntityType(val); setPage(1); }}>
+            <Select value={entityType} onValueChange={(val: string) => { setEntityType(val); setPage(1); }}>
               <SelectTrigger><SelectValue placeholder="Entity Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Entities</SelectItem>
@@ -51,7 +51,7 @@ export default function AuditLogPage() {
             </Select>
           </div>
           <div className="w-full sm:w-[200px]">
-            <Select value={actionFilter} onValueChange={(val: any) => { setActionFilter(val); setPage(1); }}>
+            <Select value={actionFilter} onValueChange={(val: string) => { setActionFilter(val); setPage(1); }}>
               <SelectTrigger><SelectValue placeholder="Action" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Actions</SelectItem>

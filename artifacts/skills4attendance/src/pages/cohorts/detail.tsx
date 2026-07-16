@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 import { Loader2, Save, ArrowLeft, Users } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
@@ -71,7 +72,7 @@ export default function CohortDetailPage() {
     const mutation = newActive ? activateMutation : deactivateMutation;
     mutation.mutate({ id: cohortId }, {
       onSuccess: () => toast({ title: newActive ? "Cohort activated" : "Cohort deactivated" }),
-      onError: (err: any) => toast({ title: "Update failed", description: err?.data?.error || err.message, variant: "destructive" }),
+      onError: (err) => toast({ title: "Update failed", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 
@@ -133,7 +134,7 @@ export default function CohortDetailPage() {
           toast({ title: "Cohort created" });
           setLocation("/cohorts");
         },
-        onError: (err: any) => toast({ title: "Error", description: err?.data?.error || err.message, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
     } else {
       const { active: _active, ...rest } = payload;
@@ -142,7 +143,7 @@ export default function CohortDetailPage() {
           toast({ title: "Cohort updated" });
           setLocation("/cohorts");
         },
-        onError: (err: any) => toast({ title: "Error", description: err?.data?.error || err.message, variant: "destructive" })
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
     }
   };

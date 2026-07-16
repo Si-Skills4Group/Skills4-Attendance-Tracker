@@ -276,6 +276,66 @@ CREATE INDEX IF NOT EXISTS idx_learner_import_rows_job_classification
 CREATE UNIQUE INDEX IF NOT EXISTS idx_learner_import_rows_job_row_number
   ON learner_import_rows (job_id, row_number);
 
+CREATE TABLE IF NOT EXISTS tutor_import_jobs (
+  id serial PRIMARY KEY,
+  filename text NOT NULL,
+  uploaded_by integer NOT NULL,
+  status text NOT NULL DEFAULT 'uploaded',
+  total_rows integer NOT NULL DEFAULT 0,
+  new_count integer NOT NULL DEFAULT 0,
+  exact_existing_count integer NOT NULL DEFAULT 0,
+  probable_duplicate_count integer NOT NULL DEFAULT 0,
+  identifier_conflict_count integer NOT NULL DEFAULT 0,
+  invalid_count integer NOT NULL DEFAULT 0,
+  result_summary jsonb,
+  last_error text,
+  started_importing_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tutor_import_jobs_status ON tutor_import_jobs (status);
+
+CREATE TABLE IF NOT EXISTS tutor_import_rows (
+  id serial PRIMARY KEY,
+  job_id integer NOT NULL,
+  row_number integer NOT NULL,
+  raw_data jsonb NOT NULL,
+  classification text NOT NULL,
+  proposed_action text NOT NULL,
+  resolution text,
+  resolved_by integer,
+  resolved_at timestamptz,
+  match_details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  matched_tutor_id integer,
+  errors jsonb NOT NULL DEFAULT '[]'::jsonb,
+  warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
+  import_result text,
+  import_error text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tutor_import_rows_job_classification
+  ON tutor_import_rows (job_id, classification);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tutor_import_rows_job_row_number
+  ON tutor_import_rows (job_id, row_number);
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id serial PRIMARY KEY,
+  ip_key text NOT NULL,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_key_time ON login_attempts (ip_key, attempted_at);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_cohort_date ON attendance_sessions (cohort_id, session_date);
+CREATE INDEX IF NOT EXISTS idx_learners_cohort_id ON learners (cohort_id);
+CREATE INDEX IF NOT EXISTS idx_learners_tutor_id ON learners (tutor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity_type, entity_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs (user_id, timestamp DESC);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   id serial PRIMARY KEY,
   organisation_name text NOT NULL DEFAULT 'Skills4Group',

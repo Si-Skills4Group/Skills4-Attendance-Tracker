@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/ui/combobox";
 import { Search, Plus, BookOpen, Clock, CalendarDays, User, ArrowRight, Users, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage } from "@/lib/errors";
 
 const allValue = "__all__";
 
@@ -88,7 +89,7 @@ export default function CohortsPage() {
         toast({ title: newActive ? "Cohort activated" : "Cohort deactivated", description: name });
         refetch();
       },
-      onError: (err: any) => toast({ title: "Update failed", description: err?.data?.error || err.message, variant: "destructive" }),
+      onError: (err) => toast({ title: "Update failed", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 

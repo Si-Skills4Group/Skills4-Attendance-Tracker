@@ -51,7 +51,7 @@ describe('TutorDetailPage create form', () => {
 
   it('keeps entered values in the form after a failed save', async () => {
     mockCreateMutate.mockImplementation((_payload, { onError }: any) => {
-      onError({ error: 'Email already in use' });
+      onError({ data: { error: 'Email already in use' } });
     });
     const user = userEvent.setup();
     renderWithQueryClient(<TutorDetailPage />);

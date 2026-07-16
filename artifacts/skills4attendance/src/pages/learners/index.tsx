@@ -88,7 +88,7 @@ export default function LearnersPage() {
           <div className="flex flex-wrap gap-3">
             <Select
               value={statusFilter}
-              onValueChange={(val: any) => { setStatusFilter(val); resetPage(); }}
+              onValueChange={(val: string) => { setStatusFilter(val as LearnerStatus | "all"); resetPage(); }}
             >
               <SelectTrigger className="w-40 h-10 bg-background">
                 <SelectValue placeholder="Status" />

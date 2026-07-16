@@ -147,51 +147,190 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /tutors/csv-template:
+  # ---------- Controlled tutor CSV import (job-based) ----------
+  /tutors/import-jobs/template:
     get:
-      operationId: getTutorCsvTemplate
+      operationId: getTutorImportTemplate
       tags: [tutors]
       responses:
         "200":
-          description: CSV template content
+          description: CSV template content for the controlled tutor import
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CsvContent"
-  /tutors/csv-preview:
+  /tutors/import-jobs:
     post:
-      operationId: previewTutorCsv
+      operationId: uploadTutorImport
       tags: [tutors]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Upload parsed and classified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorImportJob"
+        "400":
+          description: File rejected (too large, malformed, wrong columns, too many rows)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tutors/import-jobs/{jobId}:
+    get:
+      operationId: getTutorImportJob
+      tags: [tutors]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import job status and counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorImportJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tutors/import-jobs/{jobId}/rows:
+    get:
+      operationId: listTutorImportJobRows
+      tags: [tutors]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+        - name: classification
+          in: query
+          schema: { $ref: "#/components/schemas/TutorImportRowClassification" }
+      responses:
+        "200":
+          description: Paginated import job rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorImportJobRowListResponse"
+  /tutors/import-jobs/{jobId}/rows/{rowId}:
+    patch:
+      operationId: resolveTutorImportJobRow
+      tags: [tutors]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: rowId
+          in: path
+          required: true
+          schema: { type: integer }
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CsvContent"
+              $ref: "#/components/schemas/TutorImportRowResolveInput"
       responses:
         "200":
-          description: Preview of CSV validation results
+          description: Row resolution recorded
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CsvPreviewResult"
-  /tutors/csv-import:
-    post:
-      operationId: importTutorCsv
+                $ref: "#/components/schemas/TutorImportJobRow"
+        "400":
+          description: Row cannot be resolved (new/blocked row, or invalid resolution value)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tutors/import-jobs/{jobId}/rows/errors.csv:
+    get:
+      operationId: downloadTutorImportErrors
       tags: [tutors]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CsvImportInput"
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
       responses:
         "200":
-          description: Import summary
+          description: CSV report of every row with errors, formula-injection sanitized
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CsvImportResult"
+                $ref: "#/components/schemas/CsvContent"
+  /tutors/import-jobs/{jobId}/confirm:
+    post:
+      operationId: confirmTutorImportJob
+      tags: [tutors]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import applied (or, if already completed, the same stored result -- confirming is idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorImportResult"
+        "409":
+          description: Job is not in a confirmable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tutors/import-jobs/{jobId}/cancel:
+    post:
+      operationId: cancelTutorImportJob
+      tags: [tutors]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorImportJob"
+        "409":
+          description: Job cannot be cancelled (already completed or importing)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /tutors/{id}:
     get:
       operationId: getTutor
@@ -357,52 +496,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /learners/csv-template:
-    get:
-      operationId: getLearnerCsvTemplate
-      tags: [learners]
-      responses:
-        "200":
-          description: CSV template content
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CsvContent"
-  /learners/csv-preview:
-    post:
-      operationId: previewLearnerCsv
-      tags: [learners]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CsvContent"
-      responses:
-        "200":
-          description: Preview of CSV validation results
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CsvPreviewResult"
-  /learners/csv-import:
-    post:
-      operationId: importLearnerCsv
-      tags: [learners]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CsvImportInput"
-      responses:
-        "200":
-          description: Import summary
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CsvImportResult"
-
   # ---------- Controlled learner CSV import (job-based) ----------
   /learners/import-jobs/template:
     get:
@@ -1785,60 +1878,6 @@ components:
         csv: { type: string }
         filename: { type: string }
 
-    CsvRowError:
-      type: object
-      required: [rowNumber, message]
-      properties:
-        rowNumber: { type: integer }
-        field: { type: ["string", "null"] }
-        message: { type: string }
-
-    CsvPreviewRow:
-      type: object
-      required: [rowNumber, data, isDuplicate, errors]
-      properties:
-        rowNumber: { type: integer }
-        data:
-          type: object
-          additionalProperties: { type: string }
-        isDuplicate: { type: boolean }
-        duplicateReason: { type: ["string", "null"] }
-        errors:
-          type: array
-          items: { type: string }
-
-    CsvPreviewResult:
-      type: object
-      required: [totalRows, validRows, invalidRows, duplicateRows, rows]
-      properties:
-        totalRows: { type: integer }
-        validRows: { type: integer }
-        invalidRows: { type: integer }
-        duplicateRows: { type: integer }
-        rows:
-          type: array
-          items: { $ref: "#/components/schemas/CsvPreviewRow" }
-
-    CsvImportInput:
-      type: object
-      required: [rows]
-      properties:
-        rows:
-          type: array
-          items:
-            type: object
-            additionalProperties: { type: string }
-
-    CsvImportResult:
-      type: object
-      required: [imported, skipped, errors]
-      properties:
-        imported: { type: integer }
-        skipped: { type: integer }
-        errors:
-          type: array
-          items: { $ref: "#/components/schemas/CsvRowError" }
-
     LearnerImportJobStatus:
       type: string
       enum: [ready, importing, completed, cancelled]
@@ -1995,6 +2034,149 @@ components:
         resolution: { $ref: "#/components/schemas/LearnerImportRowResolution" }
 
     LearnerImportResult:
+      type: object
+      required: [totalRows, created, updated, skipped]
+      properties:
+        totalRows: { type: integer }
+        created: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+
+    TutorImportJobStatus:
+      type: string
+      enum: [ready, importing, completed, cancelled]
+
+    TutorImportRowClassification:
+      type: string
+      enum: [new, exact_existing, probable_duplicate, identifier_conflict, invalid]
+
+    TutorImportRowProposedAction:
+      type: string
+      enum: [create, skip, blocked]
+
+    TutorImportRowResolution:
+      type: string
+      enum: [skip, update]
+
+    TutorImportRowResult:
+      type: string
+      enum: [created, updated, skipped, failed]
+
+    TutorImportJob:
+      type: object
+      required:
+        [
+          id,
+          filename,
+          uploadedBy,
+          status,
+          totalRows,
+          newCount,
+          exactExistingCount,
+          probableDuplicateCount,
+          identifierConflictCount,
+          invalidCount,
+          resultSummary,
+          lastError,
+          startedImportingAt,
+          createdAt,
+          updatedAt,
+          expiresAt,
+        ]
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        uploadedBy: { type: integer }
+        status: { $ref: "#/components/schemas/TutorImportJobStatus" }
+        totalRows: { type: integer }
+        newCount: { type: integer }
+        exactExistingCount: { type: integer }
+        probableDuplicateCount: { type: integer }
+        identifierConflictCount: { type: integer }
+        invalidCount: { type: integer }
+        resultSummary:
+          oneOf:
+            - $ref: "#/components/schemas/TutorImportResult"
+            - type: "null"
+        lastError: { type: ["string", "null"] }
+        startedImportingAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+
+    TutorImportJobRow:
+      type: object
+      required:
+        [
+          id,
+          jobId,
+          rowNumber,
+          rawData,
+          classification,
+          proposedAction,
+          resolution,
+          resolvedBy,
+          resolvedAt,
+          matchDetails,
+          matchedTutorId,
+          matchedTutorName,
+          errors,
+          warnings,
+          importResult,
+          importError,
+          createdAt,
+        ]
+      properties:
+        id: { type: integer }
+        jobId: { type: integer }
+        rowNumber: { type: integer }
+        rawData:
+          type: object
+          additionalProperties: { type: string }
+        classification: { $ref: "#/components/schemas/TutorImportRowClassification" }
+        proposedAction: { $ref: "#/components/schemas/TutorImportRowProposedAction" }
+        resolution:
+          oneOf:
+            - $ref: "#/components/schemas/TutorImportRowResolution"
+            - type: "null"
+        resolvedBy: { type: ["integer", "null"] }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        matchDetails:
+          type: object
+          additionalProperties: true
+        matchedTutorId: { type: ["integer", "null"] }
+        matchedTutorName: { type: ["string", "null"] }
+        errors:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        importResult:
+          oneOf:
+            - $ref: "#/components/schemas/TutorImportRowResult"
+            - type: "null"
+        importError: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    TutorImportJobRowListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TutorImportJobRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    TutorImportRowResolveInput:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { $ref: "#/components/schemas/TutorImportRowResolution" }
+
+    TutorImportResult:
       type: object
       required: [totalRows, created, updated, skipped]
       properties:
