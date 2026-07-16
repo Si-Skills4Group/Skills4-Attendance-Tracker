@@ -17,7 +17,7 @@ import { SessionCardGrid } from "@/components/session-card-grid";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { ArrowLeft, Plus, Loader2, CalendarDays, Clock, User, Users, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, User, Users, AlertCircle } from "lucide-react";
 
 export default function CohortSessionsPage() {
   const params = useParams();
@@ -64,7 +64,7 @@ export default function CohortSessionsPage() {
   }, [cohort]);
 
   const handleCreate = (force = false) => {
-    if (!sessionDate || !plannedStartTime || !plannedEndTime) return;
+    if (!sessionDate || !plannedStartTime || !plannedEndTime || !title.trim()) return;
 
     createMutation.mutate({
       data: {
@@ -73,7 +73,7 @@ export default function CohortSessionsPage() {
         plannedStartTime: `${plannedStartTime}:00`,
         plannedEndTime: `${plannedEndTime}:00`,
         plannedDurationHours,
-        title: title || undefined,
+        title: title.trim(),
         force,
       }
     }, {
@@ -136,14 +136,6 @@ export default function CohortSessionsPage() {
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-muted-foreground/70" />
               <span>{cohort.tutorName || "No tutor assigned"}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-muted-foreground/70" />
-              <span className="capitalize">{cohort.deliveryDay}s</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-muted-foreground/70" />
-              <span>{cohort.sessionStartTime.substring(0, 5)} - {cohort.sessionEndTime.substring(0, 5)}</span>
             </div>
           </div>
         </CardContent>
@@ -216,11 +208,11 @@ export default function CohortSessionsPage() {
                   <Input type="number" step="0.5" value={plannedDurationHours} onChange={e => setPlannedDurationHours(parseFloat(e.target.value))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Title / Topic (Optional)</Label>
-                  <Input placeholder="e.g. Module 1 Intro" value={title} onChange={e => setTitle(e.target.value)} />
+                  <Label>Title / Topic</Label>
+                  <Input placeholder="e.g. Module 1 Intro" value={title} onChange={e => setTitle(e.target.value)} required />
                 </div>
                 <DialogFooter className="mt-4">
-                  <Button onClick={() => handleCreate(false)} disabled={createMutation.isPending}>
+                  <Button onClick={() => handleCreate(false)} disabled={createMutation.isPending || !title.trim()}>
                     {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     Create Register
                   </Button>

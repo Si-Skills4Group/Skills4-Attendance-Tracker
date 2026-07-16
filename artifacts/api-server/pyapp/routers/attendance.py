@@ -30,7 +30,7 @@ class AttendanceSessionInput(BaseModel):
     plannedStartTime: str = Field(min_length=1)
     plannedEndTime: str = Field(min_length=1)
     plannedDurationHours: float = Field(ge=0)
-    title: str | None = None
+    title: str = Field(min_length=1)
     notes: str | None = None
     force: bool = False
 

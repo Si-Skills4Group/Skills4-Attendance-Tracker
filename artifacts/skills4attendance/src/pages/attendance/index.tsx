@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
-import { Search, CalendarDays, Clock, User, ArrowRight, Users, ClipboardList, AlertCircle } from "lucide-react";
+import { Search, CalendarDays, User, ArrowRight, Users, ClipboardList, AlertCircle } from "lucide-react";
 
 const allValue = "__all__";
 
@@ -152,14 +152,6 @@ export default function AttendancePage() {
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-muted-foreground/70" />
                       <span className="truncate">{cohort.tutorName || <span className="italic text-xs">No Tutor Assigned</span>}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CalendarDays className="w-4 h-4 text-muted-foreground/70" />
-                      <span className="capitalize">{cohort.deliveryDay}s</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-muted-foreground/70" />
-                      <span>{cohort.sessionStartTime.substring(0, 5)} - {cohort.sessionEndTime.substring(0, 5)}</span>
                     </div>
                   </div>
 

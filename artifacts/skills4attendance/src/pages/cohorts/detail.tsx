@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, DeliveryDay, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
+import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
 import { useLocation, useParams, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,13 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, ArrowLeft, Users, CalendarDays, Clock } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Users } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -203,7 +202,7 @@ export default function CohortDetailPage() {
           <TabsContent value="details" className="space-y-6">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="max-w-2xl">
                   <Card className="shadow-sm">
                     <CardHeader className="border-b bg-muted/10 pb-4">
                       <CardTitle className="text-lg">Group Information</CardTitle>
@@ -258,46 +257,6 @@ export default function CohortDetailPage() {
                           <Switch checked={cohort?.active ?? false} onCheckedChange={handleToggleActive} disabled={readOnly} aria-label="Toggle active status" />
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="shadow-sm">
-                    <CardHeader className="border-b bg-muted/10 pb-4">
-                      <CardTitle className="text-lg">Schedule</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-6 space-y-4">
-                      <FormField control={form.control} name="deliveryDay" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Delivery Day</FormLabel>
-                          <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
-                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map(d => (
-                                <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField control={form.control} name="sessionStartTime" render={({ field }) => (
-                          <FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} disabled={readOnly} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="sessionEndTime" render={({ field }) => (
-                          <FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} disabled={readOnly} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 pt-2">
-                        <FormField control={form.control} name="startDate" render={({ field }) => (
-                          <FormItem><FormLabel>Start Date</FormLabel><FormControl><Input type="date" {...field} disabled={readOnly} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="endDate" render={({ field }) => (
-                          <FormItem><FormLabel>End Date (Optional)</FormLabel><FormControl><Input type="date" {...field} disabled={readOnly} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                      </div>
                     </CardContent>
                   </Card>
                 </div>

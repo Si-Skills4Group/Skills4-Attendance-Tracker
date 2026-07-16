@@ -3,9 +3,12 @@ import datetime
 import pytest
 from fastapi import HTTPException
 
+import pydantic
+
 from pyapp.routers.allocation_routes import AllocationInput, allocate_learners
 from pyapp.routers.attendance import (
     AttendanceRegisterInput,
+    AttendanceSessionInput,
     RegisterEntryInput,
     get_attendance_session,
     list_attendance_sessions,
@@ -13,6 +16,29 @@ from pyapp.routers.attendance import (
     save_attendance_register,
 )
 from pyapp.routers.cohorts import get_cohort
+
+
+class TestSessionCreationRequiresTitle:
+    def test_missing_title_is_rejected(self):
+        with pytest.raises(pydantic.ValidationError):
+            AttendanceSessionInput(
+                cohortId=1, sessionDate="2026-02-01", plannedStartTime="09:00",
+                plannedEndTime="16:00", plannedDurationHours=7,
+            )
+
+    def test_empty_title_is_rejected(self):
+        with pytest.raises(pydantic.ValidationError):
+            AttendanceSessionInput(
+                cohortId=1, sessionDate="2026-02-01", plannedStartTime="09:00",
+                plannedEndTime="16:00", plannedDurationHours=7, title="",
+            )
+
+    def test_valid_title_is_accepted(self):
+        payload = AttendanceSessionInput(
+            cohortId=1, sessionDate="2026-02-01", plannedStartTime="09:00",
+            plannedEndTime="16:00", plannedDurationHours=7, title="Module 1 Intro",
+        )
+        assert payload.title == "Module 1 Intro"
 
 
 class TestHistoricalAttendanceImmutability:

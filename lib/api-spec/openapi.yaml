@@ -1882,6 +1882,7 @@ components:
           plannedStartTime,
           plannedEndTime,
           plannedDurationHours,
+          title,
         ]
       properties:
         cohortId: { type: integer }
@@ -1889,7 +1890,7 @@ components:
         plannedStartTime: { type: string, minLength: 1 }
         plannedEndTime: { type: string, minLength: 1 }
         plannedDurationHours: { type: number, minimum: 0 }
-        title: { type: string }
+        title: { type: string, minLength: 1 }
         notes: { type: string }
         force: { type: boolean, default: false }
 

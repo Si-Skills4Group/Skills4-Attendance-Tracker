@@ -15,7 +15,8 @@ export interface AttendanceSessionInput {
   plannedEndTime: string;
   /** @minimum 0 */
   plannedDurationHours: number;
-  title?: string;
+  /** @minLength 1 */
+  title: string;
   notes?: string;
   force?: boolean;
 }

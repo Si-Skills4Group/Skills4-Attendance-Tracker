@@ -1053,6 +1053,7 @@ export const ListAttendanceSessionsResponse = zod.array(ListAttendanceSessionsRe
 
 export const createAttendanceSessionBodyPlannedDurationHoursMin = 0;
 
+
 export const createAttendanceSessionBodyForceDefault = false;
 
 export const CreateAttendanceSessionBody = zod.object({
@@ -1061,7 +1062,7 @@ export const CreateAttendanceSessionBody = zod.object({
   "plannedStartTime": zod.string().min(1),
   "plannedEndTime": zod.string().min(1),
   "plannedDurationHours": zod.number().min(createAttendanceSessionBodyPlannedDurationHoursMin),
-  "title": zod.string().optional(),
+  "title": zod.string().min(1),
   "notes": zod.string().optional(),
   "force": zod.boolean().default(createAttendanceSessionBodyForceDefault)
 })
