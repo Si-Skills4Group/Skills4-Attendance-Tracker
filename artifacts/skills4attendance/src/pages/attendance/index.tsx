@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Search, CalendarDays, Clock, User, ArrowRight, Users, ClipboardList, AlertCircle } from "lucide-react";
 
 const allValue = "__all__";
@@ -84,15 +84,17 @@ export default function AttendancePage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {isAdmin && (
-            <Select value={tutorFilter} onValueChange={(v) => setParam("tutor", v, v === allValue)}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="Tutor" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={allValue}>All tutors</SelectItem>
-                {tutors.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>{t.firstName} {t.lastName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              className="w-44"
+              options={[
+                { value: allValue, label: "All tutors" },
+                ...tutors.map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+              ]}
+              value={tutorFilter}
+              onValueChange={(v) => setParam("tutor", v, v === allValue)}
+              placeholder="Tutor"
+              searchPlaceholder="Search tutors..."
+            />
           )}
           <div className="flex items-center space-x-2 shrink-0 ml-auto">
             <Switch

@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Search, Plus, BookOpen, Clock, CalendarDays, User, ArrowRight, Users, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -120,15 +121,17 @@ export default function CohortsPage() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Select value={tutorFilter} onValueChange={(v) => setParam("tutor", v, v === allValue)}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Tutor" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={allValue}>All tutors</SelectItem>
-              {tutors.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>{t.firstName} {t.lastName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            className="w-44"
+            options={[
+              { value: allValue, label: "All tutors" },
+              ...tutors.map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+            ]}
+            value={tutorFilter}
+            onValueChange={(v) => setParam("tutor", v, v === allValue)}
+            placeholder="Tutor"
+            searchPlaceholder="Search tutors..."
+          />
           <Select value={programmeFilter} onValueChange={(v) => setParam("programme", v, v === allValue)}>
             <SelectTrigger className="w-44"><SelectValue placeholder="Programme" /></SelectTrigger>
             <SelectContent>

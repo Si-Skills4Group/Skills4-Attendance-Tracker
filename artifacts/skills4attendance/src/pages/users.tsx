@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -146,17 +147,15 @@ export default function UsersPage() {
               </div>
               <div className="space-y-2">
                 <Label>Tutor link</Label>
-                <Select value={form.tutorId} onValueChange={(tutorId) => setForm((f) => ({ ...f, tutorId }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={noTutor}>None</SelectItem>
-                    {tutors.map((tutor) => (
-                      <SelectItem key={tutor.id} value={String(tutor.id)}>
-                        {tutor.firstName} {tutor.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={[
+                    { value: noTutor, label: "None" },
+                    ...tutors.map((tutor) => ({ value: String(tutor.id), label: `${tutor.firstName} ${tutor.lastName}` })),
+                  ]}
+                  value={form.tutorId}
+                  onValueChange={(tutorId) => setForm((f) => ({ ...f, tutorId }))}
+                  searchPlaceholder="Search tutors..."
+                />
               </div>
             </div>
             <Button onClick={provision} disabled={provisionMutation.isPending}>
@@ -230,20 +229,16 @@ export default function UsersPage() {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <Select
+                    <Combobox
+                      className="w-44"
+                      options={[
+                        { value: noTutor, label: "None" },
+                        ...tutors.map((tutor) => ({ value: String(tutor.id), label: `${tutor.firstName} ${tutor.lastName}` })),
+                      ]}
                       value={user.tutorId ? String(user.tutorId) : noTutor}
                       onValueChange={(value) => handleTutorLink(user, value === noTutor ? null : Number(value))}
-                    >
-                      <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={noTutor}>None</SelectItem>
-                        {tutors.map((tutor) => (
-                          <SelectItem key={tutor.id} value={String(tutor.id)}>
-                            {tutor.firstName} {tutor.lastName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      searchPlaceholder="Search tutors..."
+                    />
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.active ? "default" : "secondary"}>

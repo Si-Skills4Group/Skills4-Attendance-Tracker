@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Plus, Upload, GraduationCap, Building2, User, ChevronLeft, ChevronRight } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
@@ -118,24 +119,28 @@ export default function LearnersPage() {
               onChange={(e) => { setEmployerFilter(e.target.value); resetPage(); }}
               className="w-40 h-10 bg-background"
             />
-            <Select value={tutorFilter} onValueChange={(v) => { setTutorFilter(v); resetPage(); }}>
-              <SelectTrigger className="w-44 h-10 bg-background"><SelectValue placeholder="Tutor" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={allValue}>All tutors</SelectItem>
-                {tutors.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>{t.firstName} {t.lastName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={cohortFilter} onValueChange={(v) => { setCohortFilter(v); resetPage(); }}>
-              <SelectTrigger className="w-44 h-10 bg-background"><SelectValue placeholder="Cohort" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={allValue}>All cohorts</SelectItem>
-                {cohorts.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              className="w-44 h-10 bg-background"
+              options={[
+                { value: allValue, label: "All tutors" },
+                ...tutors.map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+              ]}
+              value={tutorFilter}
+              onValueChange={(v) => { setTutorFilter(v); resetPage(); }}
+              placeholder="Tutor"
+              searchPlaceholder="Search tutors..."
+            />
+            <Combobox
+              className="w-44 h-10 bg-background"
+              options={[
+                { value: allValue, label: "All cohorts" },
+                ...cohorts.map((c) => ({ value: String(c.id), label: c.name })),
+              ]}
+              value={cohortFilter}
+              onValueChange={(v) => { setCohortFilter(v); resetPage(); }}
+              placeholder="Cohort"
+              searchPlaceholder="Search cohorts..."
+            />
           </div>
         </CardContent>
       </Card>

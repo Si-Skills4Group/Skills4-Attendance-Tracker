@@ -11,7 +11,7 @@ import {
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -249,24 +249,30 @@ export default function AllocationPage() {
             <CardContent className="pt-6 space-y-5">
               <div className="space-y-2">
                 <Label>Target Tutor</Label>
-                <Select value={targetTutorId} onValueChange={setTargetTutorId}>
-                  <SelectTrigger><SelectValue placeholder="Leave unchanged" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Leave unchanged</SelectItem>
-                    {tutors.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.firstName} {t.lastName}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={[
+                    { value: "", label: "Leave unchanged" },
+                    ...tutors.map(t => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+                  ]}
+                  value={targetTutorId}
+                  onValueChange={setTargetTutorId}
+                  placeholder="Leave unchanged"
+                  searchPlaceholder="Search tutors..."
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Target Cohort</Label>
-                <Select value={targetCohortId} onValueChange={setTargetCohortId}>
-                  <SelectTrigger><SelectValue placeholder="Leave unchanged" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Leave unchanged</SelectItem>
-                    {cohorts.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={[
+                    { value: "", label: "Leave unchanged" },
+                    ...cohorts.map(c => ({ value: String(c.id), label: c.name })),
+                  ]}
+                  value={targetCohortId}
+                  onValueChange={setTargetCohortId}
+                  placeholder="Leave unchanged"
+                  searchPlaceholder="Search cohorts..."
+                />
               </div>
 
               <div className="space-y-2">
