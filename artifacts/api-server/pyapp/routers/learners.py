@@ -141,52 +141,60 @@ def list_learners(
     return {"items": items, "total": total, "page": page, "pageSize": pageSize}
 
 
-@router.post("/learners", status_code=201)
-def create_learner(payload: LearnerInput, request: Request, _session: dict = Depends(require_admin)):
-    with get_cursor() as cur:
-        cur.execute("SELECT id FROM learners WHERE learner_ref = %s", (payload.learnerRef,))
+def _create_learner(cur, payload: LearnerInput, request: Request, session: dict) -> dict:
+    """Cursor-accepting internal shared with the CSV import confirm step
+    (learner_imports.py), which needs this to run inside its own
+    transaction rather than opening a separate pooled connection -- see
+    routers/learner_imports.py for why that matters for atomicity."""
+    cur.execute("SELECT id FROM learners WHERE learner_ref = %s", (payload.learnerRef,))
+    if cur.fetchone():
+        raise HTTPException(status_code=400, detail="A learner with this reference already exists")
+
+    if payload.uln:
+        cur.execute("SELECT id FROM learners WHERE uln = %s", (payload.uln,))
         if cur.fetchone():
-            raise HTTPException(status_code=400, detail="A learner with this reference already exists")
+            raise HTTPException(status_code=400, detail="A learner with this ULN already exists")
 
-        if payload.uln:
-            cur.execute("SELECT id FROM learners WHERE uln = %s", (payload.uln,))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="A learner with this ULN already exists")
+    cur.execute(
+        """
+        INSERT INTO learners (learner_ref, uln, first_name, last_name, email, employer, programme, level,
+                               start_date, planned_end_date, actual_end_date, withdrawal_date, status,
+                               tutor_id, cohort_id, external_system_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
+        """,
+        (
+            payload.learnerRef,
+            payload.uln,
+            payload.firstName,
+            payload.lastName,
+            payload.email,
+            payload.employer,
+            payload.programme,
+            payload.level,
+            payload.startDate,
+            payload.plannedEndDate,
+            payload.actualEndDate,
+            payload.withdrawalDate,
+            payload.status or "active",
+            payload.tutorId,
+            payload.cohortId,
+            payload.externalSystemId,
+        ),
+    )
+    created = cur.fetchone()
 
-        cur.execute(
-            """
-            INSERT INTO learners (learner_ref, uln, first_name, last_name, email, employer, programme, level,
-                                   start_date, planned_end_date, actual_end_date, withdrawal_date, status,
-                                   tutor_id, cohort_id, external_system_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
-            """,
-            (
-                payload.learnerRef,
-                payload.uln,
-                payload.firstName,
-                payload.lastName,
-                payload.email,
-                payload.employer,
-                payload.programme,
-                payload.level,
-                payload.startDate,
-                payload.plannedEndDate,
-                payload.actualEndDate,
-                payload.withdrawalDate,
-                payload.status or "active",
-                payload.tutorId,
-                payload.cohortId,
-                payload.externalSystemId,
-            ),
-        )
-        created = cur.fetchone()
+    write_audit_log(
+        request, action="create", entity_type="learner", entity_id=created["id"], new_value=created, cur=cur
+    )
 
-        write_audit_log(request, action="create", entity_type="learner", entity_id=created["id"], new_value=created)
+    cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (created["id"],))
+    return cur.fetchone()
 
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (created["id"],))
-        full = cur.fetchone()
 
-    return full
+@router.post("/learners", status_code=201)
+def create_learner(payload: LearnerInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return _create_learner(cur, payload, request, session)
 
 
 @router.get("/learners/csv-template")
@@ -341,67 +349,83 @@ def get_learner(learner_id: int, session: dict = Depends(require_auth)):
     return learner
 
 
-@router.patch("/learners/{learner_id}")
-def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, _session: dict = Depends(require_admin)):
-    with get_cursor() as cur:
-        cur.execute("SELECT * FROM learners WHERE id = %s", (learner_id,))
-        existing = cur.fetchone()
-        if not existing:
+def _update_learner(cur, learner_id: int, payload: LearnerUpdate, request: Request, session: dict) -> dict:
+    """Cursor-accepting internal shared with the CSV import confirm step --
+    see _create_learner's docstring. Note: the import path never puts
+    tutorId/cohortId into the LearnerUpdate it builds for an existing
+    learner, so this function's own generic column handling doesn't need
+    any import-specific carve-out to keep allocation changes out of CSV
+    updates -- that guarantee lives entirely in the caller."""
+    cur.execute("SELECT * FROM learners WHERE id = %s", (learner_id,))
+    existing = cur.fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    _validate_learner_dates(
+        updates.get("startDate", existing["start_date"]),
+        updates.get("plannedEndDate", existing["planned_end_date"]),
+        updates.get("actualEndDate", existing["actual_end_date"]),
+        updates.get("withdrawalDate", existing["withdrawal_date"]),
+    )
+
+    if updates.get("uln") and updates["uln"] != existing["uln"]:
+        cur.execute("SELECT id FROM learners WHERE uln = %s AND id != %s", (updates["uln"], learner_id))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="A learner with this ULN already exists")
+    if updates.get("learnerRef") and updates["learnerRef"] != existing["learner_ref"]:
+        cur.execute("SELECT id FROM learners WHERE learner_ref = %s AND id != %s", (updates["learnerRef"], learner_id))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="A learner with this reference already exists")
+
+    column_map = {
+        "learnerRef": "learner_ref",
+        "uln": "uln",
+        "firstName": "first_name",
+        "lastName": "last_name",
+        "email": "email",
+        "employer": "employer",
+        "programme": "programme",
+        "level": "level",
+        "startDate": "start_date",
+        "plannedEndDate": "planned_end_date",
+        "actualEndDate": "actual_end_date",
+        "withdrawalDate": "withdrawal_date",
+        "status": "status",
+        "tutorId": "tutor_id",
+        "cohortId": "cohort_id",
+        "externalSystemId": "external_system_id",
+    }
+    set_clauses = [f"{column_map[k]} = %s" for k in updates]
+    params = list(updates.values())
+    if set_clauses:
+        cur.execute(
+            f"UPDATE learners SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s RETURNING id",
+            [*params, learner_id],
+        )
+        if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Learner not found")
 
-        updates = payload.model_dump(exclude_unset=True)
-
-        _validate_learner_dates(
-            updates.get("startDate", existing["start_date"]),
-            updates.get("plannedEndDate", existing["planned_end_date"]),
-            updates.get("actualEndDate", existing["actual_end_date"]),
-            updates.get("withdrawalDate", existing["withdrawal_date"]),
-        )
-
-        if updates.get("uln") and updates["uln"] != existing["uln"]:
-            cur.execute("SELECT id FROM learners WHERE uln = %s AND id != %s", (updates["uln"], learner_id))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="A learner with this ULN already exists")
-        if updates.get("learnerRef") and updates["learnerRef"] != existing["learner_ref"]:
-            cur.execute("SELECT id FROM learners WHERE learner_ref = %s AND id != %s", (updates["learnerRef"], learner_id))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="A learner with this reference already exists")
-
-        column_map = {
-            "learnerRef": "learner_ref",
-            "uln": "uln",
-            "firstName": "first_name",
-            "lastName": "last_name",
-            "email": "email",
-            "employer": "employer",
-            "programme": "programme",
-            "level": "level",
-            "startDate": "start_date",
-            "plannedEndDate": "planned_end_date",
-            "actualEndDate": "actual_end_date",
-            "withdrawalDate": "withdrawal_date",
-            "status": "status",
-            "tutorId": "tutor_id",
-            "cohortId": "cohort_id",
-            "externalSystemId": "external_system_id",
-        }
-        set_clauses = [f"{column_map[k]} = %s" for k in updates]
-        params = list(updates.values())
-        if set_clauses:
-            cur.execute(
-                f"UPDATE learners SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s RETURNING id",
-                [*params, learner_id],
-            )
-            if not cur.fetchone():
-                raise HTTPException(status_code=404, detail="Learner not found")
-
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
-        full = cur.fetchone()
+    cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
+    full = cur.fetchone()
 
     write_audit_log(
-        request, action="update", entity_type="learner", entity_id=learner_id, previous_value=existing, new_value=full
+        request,
+        action="update",
+        entity_type="learner",
+        entity_id=learner_id,
+        previous_value=existing,
+        new_value=full,
+        cur=cur,
     )
     return full
+
+
+@router.patch("/learners/{learner_id}")
+def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return _update_learner(cur, learner_id, payload, request, session)
 
 
 @router.post("/learners/{learner_id}/change-status")

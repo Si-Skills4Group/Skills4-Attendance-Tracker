@@ -325,6 +325,139 @@ export interface CsvImportResult {
   errors: CsvRowError[];
 }
 
+export type LearnerImportJobStatus = typeof LearnerImportJobStatus[keyof typeof LearnerImportJobStatus];
+
+
+export const LearnerImportJobStatus = {
+  ready: 'ready',
+  importing: 'importing',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
+export type LearnerImportRowClassification = typeof LearnerImportRowClassification[keyof typeof LearnerImportRowClassification];
+
+
+export const LearnerImportRowClassification = {
+  new: 'new',
+  exact_existing: 'exact_existing',
+  probable_duplicate: 'probable_duplicate',
+  possible_duplicate: 'possible_duplicate',
+  identifier_conflict: 'identifier_conflict',
+  invalid: 'invalid',
+} as const;
+
+export type LearnerImportRowProposedAction = typeof LearnerImportRowProposedAction[keyof typeof LearnerImportRowProposedAction];
+
+
+export const LearnerImportRowProposedAction = {
+  create: 'create',
+  skip: 'skip',
+  blocked: 'blocked',
+} as const;
+
+export type LearnerImportRowResolution = typeof LearnerImportRowResolution[keyof typeof LearnerImportRowResolution];
+
+
+export const LearnerImportRowResolution = {
+  skip: 'skip',
+  update: 'update',
+} as const;
+
+export type LearnerImportRowCohortMatchStatus = typeof LearnerImportRowCohortMatchStatus[keyof typeof LearnerImportRowCohortMatchStatus];
+
+
+export const LearnerImportRowCohortMatchStatus = {
+  matched: 'matched',
+  zero_matches: 'zero_matches',
+  ambiguous: 'ambiguous',
+  inactive: 'inactive',
+} as const;
+
+export type LearnerImportRowResult = typeof LearnerImportRowResult[keyof typeof LearnerImportRowResult];
+
+
+export const LearnerImportRowResult = {
+  created: 'created',
+  updated: 'updated',
+  skipped: 'skipped',
+  failed: 'failed',
+} as const;
+
+export interface LearnerImportResult {
+  totalRows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface LearnerImportJob {
+  id: number;
+  filename: string;
+  uploadedBy: number;
+  status: LearnerImportJobStatus;
+  totalRows: number;
+  newCount: number;
+  exactExistingCount: number;
+  probableDuplicateCount: number;
+  possibleDuplicateCount: number;
+  identifierConflictCount: number;
+  invalidCount: number;
+  resultSummary: LearnerImportResult | null;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  startedImportingAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export type LearnerImportJobRowRawData = {[key: string]: string};
+
+export type LearnerImportJobRowMatchDetails = { [key: string]: unknown };
+
+export interface LearnerImportJobRow {
+  id: number;
+  jobId: number;
+  rowNumber: number;
+  rawData: LearnerImportJobRowRawData;
+  classification: LearnerImportRowClassification;
+  proposedAction: LearnerImportRowProposedAction;
+  resolution: LearnerImportRowResolution | null;
+  /** @nullable */
+  resolvedBy: number | null;
+  /** @nullable */
+  resolvedAt: string | null;
+  matchDetails: LearnerImportJobRowMatchDetails;
+  /** @nullable */
+  matchedLearnerId: number | null;
+  /** @nullable */
+  matchedLearnerName: string | null;
+  cohortMatchStatus: LearnerImportRowCohortMatchStatus | null;
+  /** @nullable */
+  matchedCohortId: number | null;
+  /** @nullable */
+  matchedCohortName: string | null;
+  errors: string[];
+  warnings: string[];
+  importResult: LearnerImportRowResult | null;
+  /** @nullable */
+  importError: string | null;
+  createdAt: string;
+}
+
+export interface LearnerImportJobRowListResponse {
+  items: LearnerImportJobRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface LearnerImportRowResolveInput {
+  resolution: LearnerImportRowResolution;
+}
+
 export interface Cohort {
   id: number;
   name: string;
@@ -697,6 +830,16 @@ tutorId?: number;
 cohortId?: number;
 page?: number;
 pageSize?: number;
+};
+
+export type UploadLearnerImportBody = {
+  file: Blob;
+};
+
+export type ListLearnerImportJobRowsParams = {
+page?: number;
+pageSize?: number;
+classification?: LearnerImportRowClassification;
 };
 
 export type ListCohortsParams = {

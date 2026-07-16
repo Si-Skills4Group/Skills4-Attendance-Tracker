@@ -1,0 +1,210 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { screen, fireEvent, within } from '@testing-library/react';
+import { Router, Route } from 'wouter';
+import { memoryLocation } from 'wouter/memory-location';
+import { renderWithQueryClient } from '@/test/test-utils';
+import LearnerImportPage from './import';
+
+const readyJob = {
+  id: 7,
+  filename: 'learners.csv',
+  uploadedBy: 1,
+  status: 'ready',
+  totalRows: 2,
+  newCount: 1,
+  exactExistingCount: 1,
+  probableDuplicateCount: 0,
+  possibleDuplicateCount: 0,
+  identifierConflictCount: 0,
+  invalidCount: 0,
+  resultSummary: null,
+  lastError: null,
+  startedImportingAt: null,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  expiresAt: '2026-01-04T00:00:00Z',
+};
+
+const newRow = {
+  id: 101, jobId: 7, rowNumber: 1,
+  rawData: { learner_reference: 'NEW-1', first_name: 'Jane', last_name: 'Doe', apprenticeship_programme: 'Health', level: '3', start_date: '2026-01-01', cohort_name: '' },
+  classification: 'new', proposedAction: 'create', resolution: null, resolvedBy: null, resolvedAt: null,
+  matchDetails: {}, matchedLearnerId: null, matchedLearnerName: null,
+  cohortMatchStatus: null, matchedCohortId: null, matchedCohortName: null,
+  errors: [], warnings: [], importResult: null, importError: null, createdAt: '2026-01-01T00:00:00Z',
+};
+
+const duplicateRow = {
+  id: 102, jobId: 7, rowNumber: 2,
+  rawData: { learner_reference: 'EXIST-1', first_name: 'Ada', last_name: 'Lovelace', apprenticeship_programme: 'Health', level: '3', start_date: '2026-01-01', cohort_name: '' },
+  classification: 'exact_existing', proposedAction: 'skip', resolution: null, resolvedBy: null, resolvedAt: null,
+  matchDetails: { matchedOn: 'learner_reference' }, matchedLearnerId: 42, matchedLearnerName: 'Ada Lovelace',
+  cohortMatchStatus: null, matchedCohortId: null, matchedCohortName: null,
+  errors: [], warnings: [], importResult: null, importError: null, createdAt: '2026-01-01T00:00:00Z',
+};
+
+let mockJob: { data: any; isError: boolean };
+let mockRows: { data: any; isLoading: boolean };
+let uploadMutate: ReturnType<typeof vi.fn>;
+let resolveMutate: ReturnType<typeof vi.fn>;
+let confirmMutate: ReturnType<typeof vi.fn>;
+let cancelMutate: ReturnType<typeof vi.fn>;
+let templateRefetch: ReturnType<typeof vi.fn>;
+let errorsRefetch: ReturnType<typeof vi.fn>;
+
+vi.mock('@workspace/api-client-react', () => ({
+  useGetLearnerImportTemplate: () => ({ isFetching: false, refetch: templateRefetch }),
+  useUploadLearnerImport: () => ({ mutate: uploadMutate, isPending: false }),
+  useGetLearnerImportJob: () => mockJob,
+  useListLearnerImportJobRows: () => mockRows,
+  useResolveLearnerImportJobRow: () => ({ mutate: resolveMutate, isPending: false }),
+  useConfirmLearnerImportJob: () => ({ mutate: confirmMutate, isPending: false }),
+  useCancelLearnerImportJob: () => ({ mutate: cancelMutate, isPending: false }),
+  useDownloadLearnerImportErrors: () => ({ isFetching: false, refetch: errorsRefetch }),
+  getGetLearnerImportTemplateQueryKey: () => ['getLearnerImportTemplate'],
+  getGetLearnerImportJobQueryKey: (id: number) => ['getLearnerImportJob', id],
+  getListLearnerImportJobRowsQueryKey: (id: number, params: unknown) => ['listLearnerImportJobRows', id, params],
+  getDownloadLearnerImportErrorsQueryKey: (id: number) => ['downloadLearnerImportErrors', id],
+}));
+
+function renderAtLocation(searchPath = '') {
+  const location = memoryLocation({ path: '/learners/import', searchPath, record: true });
+  renderWithQueryClient(
+    <Router hook={location.hook} searchHook={location.searchHook}>
+      <Route path="/learners/import" component={LearnerImportPage} />
+    </Router>,
+  );
+  return location;
+}
+
+beforeEach(() => {
+  mockJob = { data: undefined, isError: false };
+  mockRows = { data: undefined, isLoading: false };
+  uploadMutate = vi.fn();
+  resolveMutate = vi.fn();
+  confirmMutate = vi.fn();
+  cancelMutate = vi.fn();
+  templateRefetch = vi.fn().mockResolvedValue({ data: { csv: 'a,b\n', filename: 'template.csv' } });
+  errorsRefetch = vi.fn().mockResolvedValue({ data: { csv: 'a,b\n', filename: 'errors.csv' } });
+});
+
+describe('LearnerImportPage', () => {
+  it('shows the upload step when no import job is active', () => {
+    renderAtLocation();
+
+    expect(screen.getByText('Step 1: Template')).toBeInTheDocument();
+    expect(screen.getByLabelText(/select or drop a csv file/i)).toBeInTheDocument();
+  });
+
+  it('rejects a non-csv file without calling upload', () => {
+    renderAtLocation();
+    const input = screen.getByLabelText(/select or drop a csv file/i) as HTMLInputElement;
+    const badFile = new File(['not a csv'], 'notes.txt', { type: 'text/plain' });
+
+    fireEvent.change(input, { target: { files: [badFile] } });
+
+    expect(uploadMutate).not.toHaveBeenCalled();
+  });
+
+  it('uploads a selected CSV file and moves into the job URL param', () => {
+    uploadMutate = vi.fn((_vars, opts) => opts?.onSuccess?.(readyJob));
+    const location = renderAtLocation();
+    const input = screen.getByLabelText(/select or drop a csv file/i) as HTMLInputElement;
+    const file = new File(['learner_reference\nREF-1'], 'learners.csv', { type: 'text/csv' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(uploadMutate).toHaveBeenCalledWith({ data: { file } }, expect.anything());
+    expect(location.history?.at(-1)).toContain('job=7');
+  });
+
+  it('shows classification counts and rows for a ready job', () => {
+    mockJob = { data: readyJob, isError: false };
+    mockRows = { data: { items: [newRow, duplicateRow], total: 2, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    // "New" and "Existing match" each appear twice -- once as a summary
+    // stat label, once as this row's classification badge -- so assert
+    // presence via getAllByText rather than the ambiguous singular query.
+    expect(screen.getAllByText('New').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Existing match').length).toBeGreaterThanOrEqual(2);
+    // "Ada Lovelace" legitimately renders twice for this row: once as the
+    // CSV row's own name, once as the existing learner it matched against
+    // -- proving both the raw-data column and the match column render.
+    expect(screen.getAllByText('Ada Lovelace').length).toBe(2);
+    expect(screen.getByRole('button', { name: /confirm import/i })).toBeInTheDocument();
+  });
+
+  it('lets an admin resolve a duplicate row to update', () => {
+    mockJob = { data: readyJob, isError: false };
+    mockRows = { data: { items: [duplicateRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    const updateRadio = screen.getByRole('radio', { name: 'Update' });
+    fireEvent.click(updateRadio);
+
+    expect(resolveMutate).toHaveBeenCalledWith(
+      { jobId: 7, rowId: 102, data: { resolution: 'update' } },
+      expect.anything(),
+    );
+  });
+
+  it('does not offer a resolution choice for a new row -- it always creates', () => {
+    mockJob = { data: readyJob, isError: false };
+    mockRows = { data: { items: [newRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    expect(screen.getByText('Will create')).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it('opens a confirmation dialog before confirming the import', () => {
+    mockJob = { data: readyJob, isError: false };
+    mockRows = { data: { items: [newRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/cannot be undone/i)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /confirm import/i }));
+    expect(confirmMutate).toHaveBeenCalledWith({ jobId: 7 }, expect.anything());
+  });
+
+  it('shows the completed results step with counts and an error report download', () => {
+    mockJob = {
+      data: { ...readyJob, status: 'completed', invalidCount: 1, resultSummary: { totalRows: 2, created: 1, updated: 0, skipped: 1 } },
+      isError: false,
+    };
+    renderAtLocation('job=7');
+
+    expect(screen.getByText('Import complete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /download error report/i })).toBeInTheDocument();
+  });
+
+  it('does not show an error report button when nothing was skipped for errors', () => {
+    mockJob = {
+      data: { ...readyJob, status: 'completed', resultSummary: { totalRows: 1, created: 1, updated: 0, skipped: 0 } },
+      isError: false,
+    };
+    renderAtLocation('job=7');
+
+    expect(screen.queryByRole('button', { name: /download error report/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a cancelled state with a way to start over', () => {
+    mockJob = { data: { ...readyJob, status: 'cancelled' }, isError: false };
+    renderAtLocation('job=7');
+
+    expect(screen.getByText('Import cancelled')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start new import/i })).toBeInTheDocument();
+  });
+
+  it('shows a not-found state when the job id in the URL no longer exists', () => {
+    mockJob = { data: undefined, isError: true };
+    renderAtLocation('job=999');
+
+    expect(screen.getByText('Import job not found')).toBeInTheDocument();
+  });
+});

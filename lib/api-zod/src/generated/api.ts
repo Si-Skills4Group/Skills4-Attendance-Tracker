@@ -489,6 +489,199 @@ export const ImportLearnerCsvResponse = zod.object({
 })
 
 
+export const GetLearnerImportTemplateResponse = zod.object({
+  "csv": zod.string(),
+  "filename": zod.string().optional()
+})
+
+
+export const UploadLearnerImportBody = zod.object({
+  "file": zod.instanceof(File)
+})
+
+export const UploadLearnerImportResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "exactExistingCount": zod.number(),
+  "probableDuplicateCount": zod.number(),
+  "possibleDuplicateCount": zod.number(),
+  "identifierConflictCount": zod.number(),
+  "invalidCount": zod.number(),
+  "resultSummary": zod.union([zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+}),zod.null()]),
+  "lastError": zod.string().nullable(),
+  "startedImportingAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+export const GetLearnerImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const GetLearnerImportJobResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "exactExistingCount": zod.number(),
+  "probableDuplicateCount": zod.number(),
+  "possibleDuplicateCount": zod.number(),
+  "identifierConflictCount": zod.number(),
+  "invalidCount": zod.number(),
+  "resultSummary": zod.union([zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+}),zod.null()]),
+  "lastError": zod.string().nullable(),
+  "startedImportingAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+export const ListLearnerImportJobRowsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const listLearnerImportJobRowsQueryPageDefault = 1;
+export const listLearnerImportJobRowsQueryPageSizeDefault = 25;
+
+export const ListLearnerImportJobRowsQueryParams = zod.object({
+  "page": zod.coerce.number().default(listLearnerImportJobRowsQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listLearnerImportJobRowsQueryPageSizeDefault),
+  "classification": zod.enum(['new', 'exact_existing', 'probable_duplicate', 'possible_duplicate', 'identifier_conflict', 'invalid']).optional()
+})
+
+export const ListLearnerImportJobRowsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "rowNumber": zod.number(),
+  "rawData": zod.record(zod.string(), zod.string()),
+  "classification": zod.enum(['new', 'exact_existing', 'probable_duplicate', 'possible_duplicate', 'identifier_conflict', 'invalid']),
+  "proposedAction": zod.enum(['create', 'skip', 'blocked']),
+  "resolution": zod.union([zod.enum(['skip', 'update']),zod.null()]),
+  "resolvedBy": zod.number().nullable(),
+  "resolvedAt": zod.coerce.date().nullable(),
+  "matchDetails": zod.record(zod.string(), zod.unknown()),
+  "matchedLearnerId": zod.number().nullable(),
+  "matchedLearnerName": zod.string().nullable(),
+  "cohortMatchStatus": zod.union([zod.enum(['matched', 'zero_matches', 'ambiguous', 'inactive']),zod.null()]),
+  "matchedCohortId": zod.number().nullable(),
+  "matchedCohortName": zod.string().nullable(),
+  "errors": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "importResult": zod.union([zod.enum(['created', 'updated', 'skipped', 'failed']),zod.null()]),
+  "importError": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const ResolveLearnerImportJobRowParams = zod.object({
+  "jobId": zod.coerce.number(),
+  "rowId": zod.coerce.number()
+})
+
+export const ResolveLearnerImportJobRowBody = zod.object({
+  "resolution": zod.enum(['skip', 'update'])
+})
+
+export const ResolveLearnerImportJobRowResponse = zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "rowNumber": zod.number(),
+  "rawData": zod.record(zod.string(), zod.string()),
+  "classification": zod.enum(['new', 'exact_existing', 'probable_duplicate', 'possible_duplicate', 'identifier_conflict', 'invalid']),
+  "proposedAction": zod.enum(['create', 'skip', 'blocked']),
+  "resolution": zod.union([zod.enum(['skip', 'update']),zod.null()]),
+  "resolvedBy": zod.number().nullable(),
+  "resolvedAt": zod.coerce.date().nullable(),
+  "matchDetails": zod.record(zod.string(), zod.unknown()),
+  "matchedLearnerId": zod.number().nullable(),
+  "matchedLearnerName": zod.string().nullable(),
+  "cohortMatchStatus": zod.union([zod.enum(['matched', 'zero_matches', 'ambiguous', 'inactive']),zod.null()]),
+  "matchedCohortId": zod.number().nullable(),
+  "matchedCohortName": zod.string().nullable(),
+  "errors": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "importResult": zod.union([zod.enum(['created', 'updated', 'skipped', 'failed']),zod.null()]),
+  "importError": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const DownloadLearnerImportErrorsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const DownloadLearnerImportErrorsResponse = zod.object({
+  "csv": zod.string(),
+  "filename": zod.string().optional()
+})
+
+
+export const ConfirmLearnerImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const ConfirmLearnerImportJobResponse = zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+})
+
+
+export const CancelLearnerImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const CancelLearnerImportJobResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "exactExistingCount": zod.number(),
+  "probableDuplicateCount": zod.number(),
+  "possibleDuplicateCount": zod.number(),
+  "identifierConflictCount": zod.number(),
+  "invalidCount": zod.number(),
+  "resultSummary": zod.union([zod.object({
+  "totalRows": zod.number(),
+  "created": zod.number(),
+  "updated": zod.number(),
+  "skipped": zod.number()
+}),zod.null()]),
+  "lastError": zod.string().nullable(),
+  "startedImportingAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
 export const GetLearnerParams = zod.object({
   "id": zod.coerce.number()
 })

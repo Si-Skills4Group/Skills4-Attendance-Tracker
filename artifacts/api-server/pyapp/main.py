@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .bootstrap import bootstrap_database
 from .config import get_auth_settings
 from .db import get_cursor
+from .learner_import_lib import expire_due_learner_import_jobs
 from .scheduled_allocations_lib import apply_due_scheduled_allocations
 from .session import SessionMiddleware
 from .routers import (
@@ -24,6 +25,7 @@ from .routers import (
     dashboard,
     tutors,
     learners,
+    learner_imports,
     cohorts,
     allocation_routes,
     attendance,
@@ -44,6 +46,9 @@ bootstrap_database()
 # is a lazy check rather than a cron job.
 with get_cursor() as _cur:
     apply_due_scheduled_allocations(_cur)
+    # Same lazy pattern as above, for learner CSV import jobs -- see
+    # learner_import_lib for why there is no cron/background worker.
+    expire_due_learner_import_jobs(_cur)
 
 app = FastAPI(title="Skills4Attendance API")
 
@@ -80,6 +85,7 @@ for router in (
     dashboard.router,
     tutors.router,
     learners.router,
+    learner_imports.router,
     cohorts.router,
     allocation_routes.router,
     attendance.router,

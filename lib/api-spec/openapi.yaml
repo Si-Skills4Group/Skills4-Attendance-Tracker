@@ -402,6 +402,191 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CsvImportResult"
+
+  # ---------- Controlled learner CSV import (job-based) ----------
+  /learners/import-jobs/template:
+    get:
+      operationId: getLearnerImportTemplate
+      tags: [learners]
+      responses:
+        "200":
+          description: CSV template content for the controlled learner import
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvContent"
+  /learners/import-jobs:
+    post:
+      operationId: uploadLearnerImport
+      tags: [learners]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Upload parsed and classified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerImportJob"
+        "400":
+          description: File rejected (too large, malformed, wrong columns, too many rows)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learners/import-jobs/{jobId}:
+    get:
+      operationId: getLearnerImportJob
+      tags: [learners]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import job status and counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerImportJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learners/import-jobs/{jobId}/rows:
+    get:
+      operationId: listLearnerImportJobRows
+      tags: [learners]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+        - name: classification
+          in: query
+          schema: { $ref: "#/components/schemas/LearnerImportRowClassification" }
+      responses:
+        "200":
+          description: Paginated import job rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerImportJobRowListResponse"
+  /learners/import-jobs/{jobId}/rows/{rowId}:
+    patch:
+      operationId: resolveLearnerImportJobRow
+      tags: [learners]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: rowId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearnerImportRowResolveInput"
+      responses:
+        "200":
+          description: Row resolution recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerImportJobRow"
+        "400":
+          description: Row cannot be resolved (new/blocked row, or invalid resolution value)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learners/import-jobs/{jobId}/rows/errors.csv:
+    get:
+      operationId: downloadLearnerImportErrors
+      tags: [learners]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: CSV report of every row with errors, formula-injection sanitized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvContent"
+  /learners/import-jobs/{jobId}/confirm:
+    post:
+      operationId: confirmLearnerImportJob
+      tags: [learners]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import applied (or, if already completed, the same stored result -- confirming is idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerImportResult"
+        "409":
+          description: Job is not in a confirmable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learners/import-jobs/{jobId}/cancel:
+    post:
+      operationId: cancelLearnerImportJob
+      tags: [learners]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerImportJob"
+        "409":
+          description: Job cannot be cancelled (already completed or importing)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /learners/{id}:
     get:
       operationId: getLearner
@@ -1653,6 +1838,170 @@ components:
         errors:
           type: array
           items: { $ref: "#/components/schemas/CsvRowError" }
+
+    LearnerImportJobStatus:
+      type: string
+      enum: [ready, importing, completed, cancelled]
+
+    LearnerImportRowClassification:
+      type: string
+      enum:
+        - new
+        - exact_existing
+        - probable_duplicate
+        - possible_duplicate
+        - identifier_conflict
+        - invalid
+
+    LearnerImportRowProposedAction:
+      type: string
+      enum: [create, skip, blocked]
+
+    LearnerImportRowResolution:
+      type: string
+      enum: [skip, update]
+
+    LearnerImportRowCohortMatchStatus:
+      type: string
+      enum: [matched, zero_matches, ambiguous, inactive]
+
+    LearnerImportRowResult:
+      type: string
+      enum: [created, updated, skipped, failed]
+
+    LearnerImportJob:
+      type: object
+      required:
+        [
+          id,
+          filename,
+          uploadedBy,
+          status,
+          totalRows,
+          newCount,
+          exactExistingCount,
+          probableDuplicateCount,
+          possibleDuplicateCount,
+          identifierConflictCount,
+          invalidCount,
+          resultSummary,
+          lastError,
+          startedImportingAt,
+          createdAt,
+          updatedAt,
+          expiresAt,
+        ]
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        uploadedBy: { type: integer }
+        status: { $ref: "#/components/schemas/LearnerImportJobStatus" }
+        totalRows: { type: integer }
+        newCount: { type: integer }
+        exactExistingCount: { type: integer }
+        probableDuplicateCount: { type: integer }
+        possibleDuplicateCount: { type: integer }
+        identifierConflictCount: { type: integer }
+        invalidCount: { type: integer }
+        resultSummary:
+          oneOf:
+            - $ref: "#/components/schemas/LearnerImportResult"
+            - type: "null"
+        lastError: { type: ["string", "null"] }
+        startedImportingAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+
+    LearnerImportJobRow:
+      type: object
+      required:
+        [
+          id,
+          jobId,
+          rowNumber,
+          rawData,
+          classification,
+          proposedAction,
+          resolution,
+          resolvedBy,
+          resolvedAt,
+          matchDetails,
+          matchedLearnerId,
+          matchedLearnerName,
+          cohortMatchStatus,
+          matchedCohortId,
+          matchedCohortName,
+          errors,
+          warnings,
+          importResult,
+          importError,
+          createdAt,
+        ]
+      properties:
+        id: { type: integer }
+        jobId: { type: integer }
+        rowNumber: { type: integer }
+        rawData:
+          type: object
+          additionalProperties: { type: string }
+        classification: { $ref: "#/components/schemas/LearnerImportRowClassification" }
+        proposedAction: { $ref: "#/components/schemas/LearnerImportRowProposedAction" }
+        resolution:
+          oneOf:
+            - $ref: "#/components/schemas/LearnerImportRowResolution"
+            - type: "null"
+        resolvedBy: { type: ["integer", "null"] }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        matchDetails:
+          type: object
+          additionalProperties: true
+        matchedLearnerId: { type: ["integer", "null"] }
+        matchedLearnerName: { type: ["string", "null"] }
+        cohortMatchStatus:
+          oneOf:
+            - $ref: "#/components/schemas/LearnerImportRowCohortMatchStatus"
+            - type: "null"
+        matchedCohortId: { type: ["integer", "null"] }
+        matchedCohortName: { type: ["string", "null"] }
+        errors:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        importResult:
+          oneOf:
+            - $ref: "#/components/schemas/LearnerImportRowResult"
+            - type: "null"
+        importError: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    LearnerImportJobRowListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerImportJobRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    LearnerImportRowResolveInput:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { $ref: "#/components/schemas/LearnerImportRowResolution" }
+
+    LearnerImportResult:
+      type: object
+      required: [totalRows, created, updated, skipped]
+      properties:
+        totalRows: { type: integer }
+        created: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
 
     Cohort:
       type: object

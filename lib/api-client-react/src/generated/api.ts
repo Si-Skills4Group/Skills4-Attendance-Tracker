@@ -51,6 +51,11 @@ import type {
   GetProgrammeReportParams,
   HealthStatus,
   Learner,
+  LearnerImportJob,
+  LearnerImportJobRow,
+  LearnerImportJobRowListResponse,
+  LearnerImportResult,
+  LearnerImportRowResolveInput,
   LearnerInput,
   LearnerListResponse,
   LearnerReport,
@@ -61,6 +66,7 @@ import type {
   ListAuditLogParams,
   ListCohortSummaryParams,
   ListCohortsParams,
+  ListLearnerImportJobRowsParams,
   ListLearnersParams,
   ListScheduledAllocationsParams,
   ListTutorsParams,
@@ -75,6 +81,7 @@ import type {
   TutorInput,
   TutorReport,
   TutorUpdate,
+  UploadLearnerImportBody,
   UserLinkTutorInput,
   UserProvisionInput,
   UserRoleInput,
@@ -1491,6 +1498,567 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getImportLearnerCsvMutationOptions(options));
+    }
+
+export const getGetLearnerImportTemplateUrl = () => {
+
+
+
+
+  return `/api/learners/import-jobs/template`
+}
+
+export const getLearnerImportTemplate = async ( options?: RequestInit): Promise<CsvContent> => {
+
+  return customFetch<CsvContent>(getGetLearnerImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLearnerImportTemplateQueryKey = () => {
+    return [
+    `/api/learners/import-jobs/template`
+    ] as const;
+    }
+
+
+export const getGetLearnerImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getLearnerImportTemplate>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLearnerImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerImportTemplate>>> = ({ signal }) => getLearnerImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerImportTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLearnerImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerImportTemplate>>>
+export type GetLearnerImportTemplateQueryError = ErrorType<unknown>
+
+
+
+export function useGetLearnerImportTemplate<TData = Awaited<ReturnType<typeof getLearnerImportTemplate>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLearnerImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUploadLearnerImportUrl = () => {
+
+
+
+
+  return `/api/learners/import-jobs`
+}
+
+export const uploadLearnerImport = async (uploadLearnerImportBody: UploadLearnerImportBody, options?: RequestInit): Promise<LearnerImportJob> => {
+    const formData = new FormData();
+formData.append(`file`, uploadLearnerImportBody.file);
+
+  return customFetch<LearnerImportJob>(getUploadLearnerImportUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadLearnerImportMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadLearnerImport>>, TError,{data: BodyType<UploadLearnerImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadLearnerImport>>, TError,{data: BodyType<UploadLearnerImportBody>}, TContext> => {
+
+const mutationKey = ['uploadLearnerImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadLearnerImport>>, {data: BodyType<UploadLearnerImportBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadLearnerImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadLearnerImportMutationResult = NonNullable<Awaited<ReturnType<typeof uploadLearnerImport>>>
+    export type UploadLearnerImportMutationBody = BodyType<UploadLearnerImportBody>
+    export type UploadLearnerImportMutationError = ErrorType<ErrorResponse>
+
+    export const useUploadLearnerImport = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadLearnerImport>>, TError,{data: BodyType<UploadLearnerImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadLearnerImport>>,
+        TError,
+        {data: BodyType<UploadLearnerImportBody>},
+        TContext
+      > => {
+      return useMutation(getUploadLearnerImportMutationOptions(options));
+    }
+
+export const getGetLearnerImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/learners/import-jobs/${jobId}`
+}
+
+export const getLearnerImportJob = async (jobId: number, options?: RequestInit): Promise<LearnerImportJob> => {
+
+  return customFetch<LearnerImportJob>(getGetLearnerImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLearnerImportJobQueryKey = (jobId: number,) => {
+    return [
+    `/api/learners/import-jobs/${jobId}`
+    ] as const;
+    }
+
+
+export const getGetLearnerImportJobQueryOptions = <TData = Awaited<ReturnType<typeof getLearnerImportJob>>, TError = ErrorType<ErrorResponse>>(jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerImportJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLearnerImportJobQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerImportJob>>> = ({ signal }) => getLearnerImportJob(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerImportJob>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLearnerImportJobQueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerImportJob>>>
+export type GetLearnerImportJobQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetLearnerImportJob<TData = Awaited<ReturnType<typeof getLearnerImportJob>>, TError = ErrorType<ErrorResponse>>(
+ jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerImportJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLearnerImportJobQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListLearnerImportJobRowsUrl = (jobId: number,
+    params?: ListLearnerImportJobRowsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/learners/import-jobs/${jobId}/rows?${stringifiedParams}` : `/api/learners/import-jobs/${jobId}/rows`
+}
+
+export const listLearnerImportJobRows = async (jobId: number,
+    params?: ListLearnerImportJobRowsParams, options?: RequestInit): Promise<LearnerImportJobRowListResponse> => {
+
+  return customFetch<LearnerImportJobRowListResponse>(getListLearnerImportJobRowsUrl(jobId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLearnerImportJobRowsQueryKey = (jobId: number,
+    params?: ListLearnerImportJobRowsParams,) => {
+    return [
+    `/api/learners/import-jobs/${jobId}/rows`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListLearnerImportJobRowsQueryOptions = <TData = Awaited<ReturnType<typeof listLearnerImportJobRows>>, TError = ErrorType<unknown>>(jobId: number,
+    params?: ListLearnerImportJobRowsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLearnerImportJobRows>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLearnerImportJobRowsQueryKey(jobId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLearnerImportJobRows>>> = ({ signal }) => listLearnerImportJobRows(jobId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLearnerImportJobRows>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLearnerImportJobRowsQueryResult = NonNullable<Awaited<ReturnType<typeof listLearnerImportJobRows>>>
+export type ListLearnerImportJobRowsQueryError = ErrorType<unknown>
+
+
+
+export function useListLearnerImportJobRows<TData = Awaited<ReturnType<typeof listLearnerImportJobRows>>, TError = ErrorType<unknown>>(
+ jobId: number,
+    params?: ListLearnerImportJobRowsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLearnerImportJobRows>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLearnerImportJobRowsQueryOptions(jobId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getResolveLearnerImportJobRowUrl = (jobId: number,
+    rowId: number,) => {
+
+
+
+
+  return `/api/learners/import-jobs/${jobId}/rows/${rowId}`
+}
+
+export const resolveLearnerImportJobRow = async (jobId: number,
+    rowId: number,
+    learnerImportRowResolveInput: LearnerImportRowResolveInput, options?: RequestInit): Promise<LearnerImportJobRow> => {
+
+  return customFetch<LearnerImportJobRow>(getResolveLearnerImportJobRowUrl(jobId,rowId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(learnerImportRowResolveInput)
+  }
+);}
+
+
+
+
+
+export const getResolveLearnerImportJobRowMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveLearnerImportJobRow>>, TError,{jobId: number;rowId: number;data: BodyType<LearnerImportRowResolveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveLearnerImportJobRow>>, TError,{jobId: number;rowId: number;data: BodyType<LearnerImportRowResolveInput>}, TContext> => {
+
+const mutationKey = ['resolveLearnerImportJobRow'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveLearnerImportJobRow>>, {jobId: number;rowId: number;data: BodyType<LearnerImportRowResolveInput>}> = (props) => {
+          const {jobId,rowId,data} = props ?? {};
+
+          return  resolveLearnerImportJobRow(jobId,rowId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveLearnerImportJobRowMutationResult = NonNullable<Awaited<ReturnType<typeof resolveLearnerImportJobRow>>>
+    export type ResolveLearnerImportJobRowMutationBody = BodyType<LearnerImportRowResolveInput>
+    export type ResolveLearnerImportJobRowMutationError = ErrorType<ErrorResponse>
+
+    export const useResolveLearnerImportJobRow = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveLearnerImportJobRow>>, TError,{jobId: number;rowId: number;data: BodyType<LearnerImportRowResolveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveLearnerImportJobRow>>,
+        TError,
+        {jobId: number;rowId: number;data: BodyType<LearnerImportRowResolveInput>},
+        TContext
+      > => {
+      return useMutation(getResolveLearnerImportJobRowMutationOptions(options));
+    }
+
+export const getDownloadLearnerImportErrorsUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/learners/import-jobs/${jobId}/rows/errors.csv`
+}
+
+export const downloadLearnerImportErrors = async (jobId: number, options?: RequestInit): Promise<CsvContent> => {
+
+  return customFetch<CsvContent>(getDownloadLearnerImportErrorsUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadLearnerImportErrorsQueryKey = (jobId: number,) => {
+    return [
+    `/api/learners/import-jobs/${jobId}/rows/errors.csv`
+    ] as const;
+    }
+
+
+export const getDownloadLearnerImportErrorsQueryOptions = <TData = Awaited<ReturnType<typeof downloadLearnerImportErrors>>, TError = ErrorType<unknown>>(jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadLearnerImportErrors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadLearnerImportErrorsQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadLearnerImportErrors>>> = ({ signal }) => downloadLearnerImportErrors(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadLearnerImportErrors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadLearnerImportErrorsQueryResult = NonNullable<Awaited<ReturnType<typeof downloadLearnerImportErrors>>>
+export type DownloadLearnerImportErrorsQueryError = ErrorType<unknown>
+
+
+
+export function useDownloadLearnerImportErrors<TData = Awaited<ReturnType<typeof downloadLearnerImportErrors>>, TError = ErrorType<unknown>>(
+ jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadLearnerImportErrors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadLearnerImportErrorsQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getConfirmLearnerImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/learners/import-jobs/${jobId}/confirm`
+}
+
+export const confirmLearnerImportJob = async (jobId: number, options?: RequestInit): Promise<LearnerImportResult> => {
+
+  return customFetch<LearnerImportResult>(getConfirmLearnerImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getConfirmLearnerImportJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmLearnerImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmLearnerImportJob>>, TError,{jobId: number}, TContext> => {
+
+const mutationKey = ['confirmLearnerImportJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmLearnerImportJob>>, {jobId: number}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  confirmLearnerImportJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmLearnerImportJobMutationResult = NonNullable<Awaited<ReturnType<typeof confirmLearnerImportJob>>>
+
+    export type ConfirmLearnerImportJobMutationError = ErrorType<ErrorResponse>
+
+    export const useConfirmLearnerImportJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmLearnerImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmLearnerImportJob>>,
+        TError,
+        {jobId: number},
+        TContext
+      > => {
+      return useMutation(getConfirmLearnerImportJobMutationOptions(options));
+    }
+
+export const getCancelLearnerImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/learners/import-jobs/${jobId}/cancel`
+}
+
+export const cancelLearnerImportJob = async (jobId: number, options?: RequestInit): Promise<LearnerImportJob> => {
+
+  return customFetch<LearnerImportJob>(getCancelLearnerImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelLearnerImportJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelLearnerImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelLearnerImportJob>>, TError,{jobId: number}, TContext> => {
+
+const mutationKey = ['cancelLearnerImportJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelLearnerImportJob>>, {jobId: number}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  cancelLearnerImportJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelLearnerImportJobMutationResult = NonNullable<Awaited<ReturnType<typeof cancelLearnerImportJob>>>
+
+    export type CancelLearnerImportJobMutationError = ErrorType<ErrorResponse>
+
+    export const useCancelLearnerImportJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelLearnerImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelLearnerImportJob>>,
+        TError,
+        {jobId: number},
+        TContext
+      > => {
+      return useMutation(getCancelLearnerImportJobMutationOptions(options));
     }
 
 export const getGetLearnerUrl = (id: number,) => {
