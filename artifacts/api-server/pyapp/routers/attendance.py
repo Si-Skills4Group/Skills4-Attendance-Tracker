@@ -3,17 +3,27 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ..attendance_row_rules import (
+    AttendanceStatus,
+    diff_entry,
+    is_historical_save,
+    requires_change_reason,
+    validate_entry,
+)
 from ..auth import require_admin, require_attendance_access, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
 from ..session_register_lib import (
     apply_register_refresh,
+    bump_register_version,
     cancel_session,
     compute_register_refresh,
     ensure_expected_learners_snapshot,
     ensure_expected_learners_snapshots_bulk,
     find_duplicate_session,
+    lock_register,
     session_date_outside_cohort_range,
+    unlock_register,
 )
 
 router = APIRouter(tags=["attendance"])
@@ -27,6 +37,10 @@ SESSION_SELECT = """
            s.title, s.notes, s.created_by AS "createdBy",
            s.status, s.cancelled_at AS "cancelledAt", s.cancellation_reason AS "cancellationReason",
            s.override_reason AS "overrideReason",
+           s.register_version AS "registerVersion",
+           s.completed_at AS "completedAt", s.completed_by AS "completedBy",
+           s.register_locked_at AS "registerLockedAt", s.register_locked_by AS "registerLockedBy",
+           s.lock_reason AS "lockReason",
            s.created_at AS "createdAt", s.updated_at AS "updatedAt"
     FROM attendance_sessions s
     JOIN cohorts c ON s.cohort_id = c.id
@@ -51,6 +65,10 @@ SESSION_SELECT_WITH_COUNTS = """
            s.title, s.notes, s.created_by AS "createdBy",
            s.status, s.cancelled_at AS "cancelledAt", s.cancellation_reason AS "cancellationReason",
            s.override_reason AS "overrideReason",
+           s.register_version AS "registerVersion",
+           s.completed_at AS "completedAt", s.completed_by AS "completedBy",
+           s.register_locked_at AS "registerLockedAt", s.register_locked_by AS "registerLockedBy",
+           s.lock_reason AS "lockReason",
            s.created_at AS "createdAt", s.updated_at AS "updatedAt",
            (SELECT count(*)::int FROM attendance_records ar WHERE ar.session_id = s.id) AS "recordedCount",
            (SELECT count(*)::int FROM session_expected_learners sel WHERE sel.session_id = s.id) AS "expectedCount"
@@ -91,25 +109,43 @@ class RefreshRegisterInput(BaseModel):
     confirm: bool = False
 
 
+class CompleteRegisterInput(BaseModel):
+    registerVersion: int
+
+
+class LockRegisterInput(BaseModel):
+    reason: str = Field(min_length=1)
+    registerVersion: int
+
+
+class UnlockRegisterInput(BaseModel):
+    reason: str = Field(min_length=1)
+    registerVersion: int
+
+
 class RegisterEntryInput(BaseModel):
     learnerId: int
-    status: str
+    status: AttendanceStatus
     hoursAttended: float = Field(ge=0)
     minutesLate: int = Field(ge=0)
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=1000)
     overrideReason: str | None = None
 
 
 class AttendanceRegisterInput(BaseModel):
+    registerVersion: int
     entries: list[RegisterEntryInput]
+    changeReason: str | None = None
 
 
-def _compute_register_status(status: str, recorded_count: int, expected_count: int) -> str:
+def _compute_register_status(status: str, recorded_count: int, expected_count: int, locked_at) -> str:
     """Derived from recordedCount/expectedCount rather than stored, so
     there's exactly one source of truth for completion -- see
     session_register_lib module docstring / Phase 6 plan for why."""
     if status == "cancelled":
         return "cancelled"
+    if locked_at is not None:
+        return "locked"
     if recorded_count == 0:
         return "not_started"
     if expected_count > 0 and recorded_count >= expected_count:
@@ -129,7 +165,9 @@ def _with_counts(cur, session_row: dict) -> dict:
         "SELECT count(*)::int AS count FROM session_expected_learners WHERE session_id = %s", (session_row["id"],)
     )
     expected_count = cur.fetchone()["count"]
-    register_status = _compute_register_status(session_row["status"], recorded_count, expected_count)
+    register_status = _compute_register_status(
+        session_row["status"], recorded_count, expected_count, session_row["registerLockedAt"]
+    )
     return {
         **session_row,
         "recordedCount": recorded_count,
@@ -187,7 +225,9 @@ def list_attendance_sessions(
         rows = cur.fetchall()
 
     for row in rows:
-        row["registerStatus"] = _compute_register_status(row["status"], row["recordedCount"], row["expectedCount"])
+        row["registerStatus"] = _compute_register_status(
+            row["status"], row["recordedCount"], row["expectedCount"], row["registerLockedAt"]
+        )
     if registerStatus:
         rows = [row for row in rows if row["registerStatus"] == registerStatus]
     return rows
@@ -349,6 +389,8 @@ def update_attendance_session(
         existing = cur.fetchone()
         if existing["status"] == "cancelled":
             raise HTTPException(status_code=409, detail="Cancelled sessions cannot be edited")
+        if existing["registerLockedAt"] is not None:
+            raise HTTPException(status_code=409, detail="Register is locked. An Administrator must unlock it before editing.")
 
         updates = payload.model_dump(exclude_unset=True, exclude={"confirmChange"})
         schedule_fields = {"sessionDate", "plannedStartTime", "plannedEndTime"}
@@ -446,7 +488,7 @@ def refresh_session_register(
             cur, existing["id"], existing["cohortId"], existing["sessionDate"], session.get("userId")
         )
         full = _with_counts(cur, existing)
-        if full["registerStatus"] == "completed":
+        if full["registerStatus"] in ("completed", "locked"):
             raise HTTPException(status_code=400, detail="Completed registers cannot be refreshed")
 
         diff = compute_register_refresh(cur, existing)
@@ -472,6 +514,8 @@ def refresh_session_register(
 def save_attendance_register(
     session_id: int, payload: AttendanceRegisterInput, request: Request, session: dict = Depends(require_auth)
 ):
+    is_admin = session.get("role") == "admin"
+
     with get_cursor() as cur:
         require_attendance_access(cur, session_id, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
@@ -482,59 +526,294 @@ def save_attendance_register(
         ensure_expected_learners_snapshot(
             cur, session_id, session_row["cohortId"], session_row["sessionDate"], session.get("userId")
         )
+        before = _with_counts(cur, session_row)
+
+        if before["registerStatus"] == "locked":
+            raise HTTPException(
+                status_code=409, detail="Register is locked. An Administrator must unlock it before editing."
+            )
+        if payload.registerVersion != before["registerVersion"]:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason": "stale_register_version",
+                    "message": "This register has changed since you loaded it. Reload to see the latest version before saving.",
+                    "currentVersion": before["registerVersion"],
+                },
+            )
+
+        # One batched fetch for both the allowed-learner-ids check and each
+        # entry's expected_register_row_id -- avoids a per-entry query.
+        cur.execute(
+            'SELECT id, learner_id AS "learnerId" FROM session_expected_learners WHERE session_id = %s',
+            (session_id,),
+        )
+        expected_rows = cur.fetchall()
+        expected_row_id_by_learner = {row["learnerId"]: row["id"] for row in expected_rows}
+        learner_ids = [entry.learnerId for entry in payload.entries]
+        if not set(learner_ids).issubset(expected_row_id_by_learner.keys()):
+            raise HTTPException(status_code=403, detail="Register contains learners outside this session cohort")
+
+        cur.execute(
+            """
+            SELECT learner_id AS "learnerId", status, hours_attended AS "hoursAttended",
+                   minutes_late AS "minutesLate", notes
+            FROM attendance_records WHERE session_id = %s
+            """,
+            (session_id,),
+        )
+        existing_by_learner = {row["learnerId"]: row for row in cur.fetchall()}
 
         planned = float(session_row["plannedDurationHours"])
-        for entry in payload.entries:
-            if entry.hoursAttended > planned and not entry.overrideReason:
-                raise HTTPException(
-                    status_code=400,
-                    detail="An override reason is required when hours attended exceeds the planned session duration",
-                )
-        learner_ids = [entry.learnerId for entry in payload.entries]
-        if learner_ids:
-            # Membership is resolved from the frozen register snapshot, not
-            # the learner's *current* cohort -- so editing a past session
-            # still works for a learner who has since transferred elsewhere.
-            cur.execute("SELECT learner_id FROM session_expected_learners WHERE session_id = %s", (session_id,))
-            allowed_ids = {row["learner_id"] for row in cur.fetchall()}
-            if not set(learner_ids).issubset(allowed_ids):
-                raise HTTPException(status_code=403, detail="Register contains learners outside this session cohort")
+        historical = is_historical_save(before["registerStatus"], session_row["sessionDate"])
 
+        errors: list[dict] = []
+        diffs: dict[int, dict] = {}
+        created_learner_ids: list[int] = []
         for entry in payload.entries:
-            cur.execute(
-                """
-                INSERT INTO attendance_records
-                    (session_id, learner_id, status, hours_attended, minutes_late, notes, override_reason, last_edited_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (session_id, learner_id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    hours_attended = EXCLUDED.hours_attended,
-                    minutes_late = EXCLUDED.minutes_late,
-                    notes = EXCLUDED.notes,
-                    override_reason = EXCLUDED.override_reason,
-                    last_edited_by = EXCLUDED.last_edited_by
-                """,
-                (
-                    session_id,
-                    entry.learnerId,
-                    entry.status,
-                    entry.hoursAttended,
-                    entry.minutesLate,
-                    entry.notes,
-                    entry.overrideReason,
-                    session["userId"],
-                ),
+            errors.extend(
+                validate_entry(
+                    learner_id=entry.learnerId,
+                    status=entry.status,
+                    hours_attended=entry.hoursAttended,
+                    minutes_late=entry.minutesLate,
+                    override_reason=entry.overrideReason,
+                    planned_hours=planned,
+                    is_admin=is_admin,
+                )
             )
+            existing_entry = existing_by_learner.get(entry.learnerId)
+            if existing_entry is None:
+                created_learner_ids.append(entry.learnerId)
+            diff = diff_entry(
+                existing_entry,
+                {
+                    "status": entry.status,
+                    "hoursAttended": entry.hoursAttended,
+                    "minutesLate": entry.minutesLate,
+                    "notes": entry.notes,
+                },
+            )
+            if diff:
+                diffs[entry.learnerId] = diff
+
+        material_changes = any(requires_change_reason(d) for d in diffs.values())
+        if historical and material_changes and not (payload.changeReason and payload.changeReason.strip()):
+            errors.append(
+                {
+                    "learnerId": None,
+                    "field": "changeReason",
+                    "message": "A reason is required when editing historical attendance",
+                }
+            )
+
+        if errors:
+            raise HTTPException(status_code=422, detail={"errors": errors})
+
+        is_first_save = before["recordedCount"] == 0
+
+        with cur.connection.transaction():
+            for entry in payload.entries:
+                cur.execute(
+                    """
+                    INSERT INTO attendance_records
+                        (session_id, learner_id, status, hours_attended, minutes_late, notes, override_reason,
+                         expected_register_row_id, created_by, last_edited_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (session_id, learner_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        hours_attended = EXCLUDED.hours_attended,
+                        minutes_late = EXCLUDED.minutes_late,
+                        notes = EXCLUDED.notes,
+                        override_reason = EXCLUDED.override_reason,
+                        expected_register_row_id = EXCLUDED.expected_register_row_id,
+                        last_edited_by = EXCLUDED.last_edited_by
+                    """,
+                    (
+                        session_id,
+                        entry.learnerId,
+                        entry.status,
+                        entry.hoursAttended,
+                        entry.minutesLate,
+                        entry.notes,
+                        entry.overrideReason,
+                        expected_row_id_by_learner.get(entry.learnerId),
+                        session["userId"],
+                        session["userId"],
+                    ),
+                )
+            bump_register_version(cur, session_id)
 
     write_audit_log(
         request,
         action="save_register",
         entity_type="attendance_session",
         entity_id=session_id,
-        new_value={"entries": len(payload.entries)},
+        new_value={
+            "isFirstSave": is_first_save,
+            "changeReason": payload.changeReason if material_changes else None,
+            "created": created_learner_ids,
+            "changes": [{"learnerId": learner_id, "fields": diff} for learner_id, diff in diffs.items()],
+            "totalEntries": len(payload.entries),
+        },
     )
 
     return get_attendance_session(session_id, session)
+
+
+@router.post("/attendance/sessions/{session_id}/complete-register")
+def complete_register(
+    session_id: int, payload: CompleteRegisterInput, request: Request, session: dict = Depends(require_auth)
+):
+    with get_cursor() as cur:
+        require_attendance_access(cur, session_id, session)
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        session_row = cur.fetchone()
+        if session_row["status"] == "cancelled":
+            raise HTTPException(status_code=409, detail="Cancelled sessions cannot be completed")
+
+        ensure_expected_learners_snapshot(
+            cur, session_id, session_row["cohortId"], session_row["sessionDate"], session.get("userId")
+        )
+        before = _with_counts(cur, session_row)
+        if before["registerStatus"] == "locked":
+            raise HTTPException(status_code=409, detail="Register is locked")
+        if payload.registerVersion != before["registerVersion"]:
+            raise HTTPException(
+                status_code=409,
+                detail={"reason": "stale_register_version", "currentVersion": before["registerVersion"]},
+            )
+
+        planned = float(session_row["plannedDurationHours"])
+        cur.execute(
+            """
+            SELECT sel.learner_id AS "learnerId", ar.id AS "recordId", ar.status,
+                   ar.hours_attended AS "hoursAttended", ar.minutes_late AS "minutesLate"
+            FROM session_expected_learners sel
+            LEFT JOIN attendance_records ar ON ar.learner_id = sel.learner_id AND ar.session_id = sel.session_id
+            WHERE sel.session_id = %s
+            """,
+            (session_id,),
+        )
+        rows = cur.fetchall()
+
+        errors: list[dict] = []
+        for row in rows:
+            if row["recordId"] is None:
+                errors.append(
+                    {
+                        "learnerId": row["learnerId"],
+                        "field": "status",
+                        "message": "Attendance has not been recorded for this learner",
+                    }
+                )
+                continue
+            errors.extend(
+                validate_entry(
+                    learner_id=row["learnerId"],
+                    status=row["status"],
+                    hours_attended=float(row["hoursAttended"]),
+                    minutes_late=row["minutesLate"],
+                    override_reason=None,
+                    planned_hours=planned,
+                    is_admin=True,
+                    check_override=False,
+                )
+            )
+        if errors:
+            raise HTTPException(status_code=422, detail={"errors": errors})
+
+        with cur.connection.transaction():
+            cur.execute(
+                "UPDATE attendance_sessions SET completed_at = now(), completed_by = %s WHERE id = %s",
+                (session["userId"], session_id),
+            )
+            bump_register_version(cur, session_id)
+
+    write_audit_log(
+        request,
+        action="complete_register",
+        entity_type="attendance_session",
+        entity_id=session_id,
+        new_value={"completedBy": session["userId"]},
+    )
+    return get_attendance_session(session_id, session)
+
+
+@router.post("/attendance/sessions/{session_id}/lock")
+def lock_attendance_register(
+    session_id: int, payload: LockRegisterInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Attendance session not found")
+
+        ensure_expected_learners_snapshot(
+            cur, existing["id"], existing["cohortId"], existing["sessionDate"], session.get("userId")
+        )
+        before = _with_counts(cur, existing)
+        if before["registerStatus"] == "locked":
+            raise HTTPException(status_code=400, detail="Register is already locked")
+        if before["registerStatus"] != "completed":
+            raise HTTPException(status_code=400, detail="Only a completed register can be locked")
+        if payload.registerVersion != before["registerVersion"]:
+            raise HTTPException(
+                status_code=409,
+                detail={"reason": "stale_register_version", "currentVersion": before["registerVersion"]},
+            )
+
+        with cur.connection.transaction():
+            lock_register(cur, existing, payload.reason, session["userId"])
+            bump_register_version(cur, session_id)
+
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        full = _with_counts(cur, cur.fetchone())
+
+    write_audit_log(
+        request,
+        action="lock_register",
+        entity_type="attendance_session",
+        entity_id=session_id,
+        new_value={"reason": payload.reason},
+    )
+    return full
+
+
+@router.post("/attendance/sessions/{session_id}/unlock")
+def unlock_attendance_register(
+    session_id: int, payload: UnlockRegisterInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Attendance session not found")
+        if existing["registerLockedAt"] is None:
+            raise HTTPException(status_code=400, detail="Register is not locked")
+        if payload.registerVersion != existing["registerVersion"]:
+            raise HTTPException(
+                status_code=409,
+                detail={"reason": "stale_register_version", "currentVersion": existing["registerVersion"]},
+            )
+
+        with cur.connection.transaction():
+            unlock_register(cur, existing)
+            bump_register_version(cur, session_id)
+
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        full = _with_counts(cur, cur.fetchone())
+
+    write_audit_log(
+        request,
+        action="unlock_register",
+        entity_type="attendance_session",
+        entity_id=session_id,
+        previous_value={"lockReason": existing["lockReason"]},
+        new_value={"reason": payload.reason},
+    )
+    return full
 
 
 @router.post("/attendance/sessions/{session_id}/mark-all-present")
@@ -552,18 +831,20 @@ def mark_all_present(session_id: int, request: Request, session: dict = Depends(
         cur.execute("SELECT learner_id FROM session_expected_learners WHERE session_id = %s", (session_id,))
         learner_ids = [row["learner_id"] for row in cur.fetchall()]
 
-        for learner_id in learner_ids:
-            cur.execute(
-                """
-                INSERT INTO attendance_records
-                    (session_id, learner_id, status, hours_attended, minutes_late, last_edited_by)
-                VALUES (%s, %s, 'present', %s, 0, %s)
-                ON CONFLICT (session_id, learner_id) DO UPDATE SET
-                    status = 'present', hours_attended = EXCLUDED.hours_attended,
-                    minutes_late = 0, last_edited_by = EXCLUDED.last_edited_by
-                """,
-                (session_id, learner_id, session_row["plannedDurationHours"], session["userId"]),
-            )
+        with cur.connection.transaction():
+            for learner_id in learner_ids:
+                cur.execute(
+                    """
+                    INSERT INTO attendance_records
+                        (session_id, learner_id, status, hours_attended, minutes_late, created_by, last_edited_by)
+                    VALUES (%s, %s, 'present', %s, 0, %s, %s)
+                    ON CONFLICT (session_id, learner_id) DO UPDATE SET
+                        status = 'present', hours_attended = EXCLUDED.hours_attended,
+                        minutes_late = 0, last_edited_by = EXCLUDED.last_edited_by
+                    """,
+                    (session_id, learner_id, session_row["plannedDurationHours"], session["userId"], session["userId"]),
+                )
+            bump_register_version(cur, session_id)
 
     write_audit_log(
         request,

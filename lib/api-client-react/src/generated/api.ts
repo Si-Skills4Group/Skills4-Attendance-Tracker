@@ -40,6 +40,7 @@ import type {
   CohortInput,
   CohortReport,
   CohortUpdate,
+  CompleteRegisterInput,
   CsvContent,
   DeactivateTutorParams,
   ErrorResponse,
@@ -70,6 +71,7 @@ import type {
   ListTutorImportJobRowsParams,
   ListTutorsParams,
   ListUsersParams,
+  LockRegisterInput,
   LoginInput,
   OrganisationReport,
   ProgrammeAttendanceRow,
@@ -89,6 +91,7 @@ import type {
   TutorInput,
   TutorReport,
   TutorUpdate,
+  UnlockRegisterInput,
   UploadLearnerImportBody,
   UploadTutorImportBody,
   UserLinkTutorInput,
@@ -4108,6 +4111,204 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getSaveAttendanceRegisterMutationOptions(options));
+    }
+
+export const getCompleteRegisterUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/complete-register`
+}
+
+export const completeRegister = async (id: number,
+    completeRegisterInput: CompleteRegisterInput, options?: RequestInit): Promise<AttendanceRegister> => {
+
+  return customFetch<AttendanceRegister>(getCompleteRegisterUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeRegisterInput)
+  }
+);}
+
+
+
+
+
+export const getCompleteRegisterMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeRegister>>, TError,{id: number;data: BodyType<CompleteRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeRegister>>, TError,{id: number;data: BodyType<CompleteRegisterInput>}, TContext> => {
+
+const mutationKey = ['completeRegister'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeRegister>>, {id: number;data: BodyType<CompleteRegisterInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  completeRegister(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof completeRegister>>>
+    export type CompleteRegisterMutationBody = BodyType<CompleteRegisterInput>
+    export type CompleteRegisterMutationError = ErrorType<ErrorResponse>
+
+    export const useCompleteRegister = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeRegister>>, TError,{id: number;data: BodyType<CompleteRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeRegister>>,
+        TError,
+        {id: number;data: BodyType<CompleteRegisterInput>},
+        TContext
+      > => {
+      return useMutation(getCompleteRegisterMutationOptions(options));
+    }
+
+export const getLockAttendanceRegisterUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/lock`
+}
+
+export const lockAttendanceRegister = async (id: number,
+    lockRegisterInput: LockRegisterInput, options?: RequestInit): Promise<AttendanceSession> => {
+
+  return customFetch<AttendanceSession>(getLockAttendanceRegisterUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(lockRegisterInput)
+  }
+);}
+
+
+
+
+
+export const getLockAttendanceRegisterMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lockAttendanceRegister>>, TError,{id: number;data: BodyType<LockRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof lockAttendanceRegister>>, TError,{id: number;data: BodyType<LockRegisterInput>}, TContext> => {
+
+const mutationKey = ['lockAttendanceRegister'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof lockAttendanceRegister>>, {id: number;data: BodyType<LockRegisterInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  lockAttendanceRegister(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LockAttendanceRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof lockAttendanceRegister>>>
+    export type LockAttendanceRegisterMutationBody = BodyType<LockRegisterInput>
+    export type LockAttendanceRegisterMutationError = ErrorType<ErrorResponse>
+
+    export const useLockAttendanceRegister = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lockAttendanceRegister>>, TError,{id: number;data: BodyType<LockRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof lockAttendanceRegister>>,
+        TError,
+        {id: number;data: BodyType<LockRegisterInput>},
+        TContext
+      > => {
+      return useMutation(getLockAttendanceRegisterMutationOptions(options));
+    }
+
+export const getUnlockAttendanceRegisterUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/unlock`
+}
+
+export const unlockAttendanceRegister = async (id: number,
+    unlockRegisterInput: UnlockRegisterInput, options?: RequestInit): Promise<AttendanceSession> => {
+
+  return customFetch<AttendanceSession>(getUnlockAttendanceRegisterUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(unlockRegisterInput)
+  }
+);}
+
+
+
+
+
+export const getUnlockAttendanceRegisterMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlockAttendanceRegister>>, TError,{id: number;data: BodyType<UnlockRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlockAttendanceRegister>>, TError,{id: number;data: BodyType<UnlockRegisterInput>}, TContext> => {
+
+const mutationKey = ['unlockAttendanceRegister'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlockAttendanceRegister>>, {id: number;data: BodyType<UnlockRegisterInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  unlockAttendanceRegister(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlockAttendanceRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof unlockAttendanceRegister>>>
+    export type UnlockAttendanceRegisterMutationBody = BodyType<UnlockRegisterInput>
+    export type UnlockAttendanceRegisterMutationError = ErrorType<ErrorResponse>
+
+    export const useUnlockAttendanceRegister = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlockAttendanceRegister>>, TError,{id: number;data: BodyType<UnlockRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unlockAttendanceRegister>>,
+        TError,
+        {id: number;data: BodyType<UnlockRegisterInput>},
+        TContext
+      > => {
+      return useMutation(getUnlockAttendanceRegisterMutationOptions(options));
     }
 
 export const getMarkAllPresentUrl = (id: number,) => {

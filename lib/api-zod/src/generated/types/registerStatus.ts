@@ -14,4 +14,5 @@ export const RegisterStatus = {
   in_progress: 'in_progress',
   completed: 'completed',
   cancelled: 'cancelled',
+  locked: 'locked',
 } as const;

@@ -1322,7 +1322,7 @@ export const ListAttendanceSessionsQueryParams = zod.object({
   "dateFrom": zod.date().optional(),
   "dateTo": zod.date().optional(),
   "status": zod.enum(['scheduled', 'cancelled']).optional(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']).optional()
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']).optional()
 })
 
 export const ListAttendanceSessionsResponseItem = zod.object({
@@ -1343,7 +1343,13 @@ export const ListAttendanceSessionsResponseItem = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1388,7 +1394,13 @@ export const CreateAttendanceSessionResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1418,7 +1430,13 @@ export const GetAttendanceSessionResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1477,7 +1495,13 @@ export const UpdateAttendanceSessionResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1514,7 +1538,13 @@ export const CancelAttendanceSessionResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1555,7 +1585,13 @@ export const GenerateSessionRegisterResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1615,17 +1651,21 @@ export const saveAttendanceRegisterBodyEntriesItemHoursAttendedMin = 0;
 
 export const saveAttendanceRegisterBodyEntriesItemMinutesLateMin = 0;
 
+export const saveAttendanceRegisterBodyEntriesItemNotesMax = 1000;
+
 
 
 export const SaveAttendanceRegisterBody = zod.object({
+  "registerVersion": zod.number(),
   "entries": zod.array(zod.object({
   "learnerId": zod.number(),
   "status": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn']),
   "hoursAttended": zod.number().min(saveAttendanceRegisterBodyEntriesItemHoursAttendedMin),
   "minutesLate": zod.number().min(saveAttendanceRegisterBodyEntriesItemMinutesLateMin),
-  "notes": zod.string().optional(),
+  "notes": zod.string().max(saveAttendanceRegisterBodyEntriesItemNotesMax).optional(),
   "overrideReason": zod.string().optional()
-}))
+})),
+  "changeReason": zod.string().optional()
 })
 
 export const SaveAttendanceRegisterResponse = zod.object({
@@ -1647,7 +1687,13 @@ export const SaveAttendanceRegisterResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1665,6 +1711,146 @@ export const SaveAttendanceRegisterResponse = zod.object({
   "lastEditedBy": zod.number().nullable(),
   "lastEditedByName": zod.string().nullable()
 }))
+})
+
+
+export const CompleteRegisterParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CompleteRegisterBody = zod.object({
+  "registerVersion": zod.number()
+})
+
+export const CompleteRegisterResponse = zod.object({
+  "session": zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "entries": zod.array(zod.object({
+  "recordId": zod.number().nullable(),
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string(),
+  "status": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn']),
+  "hoursAttended": zod.number(),
+  "minutesLate": zod.number(),
+  "notes": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "lastEditedBy": zod.number().nullable(),
+  "lastEditedByName": zod.string().nullable()
+}))
+})
+
+
+export const LockAttendanceRegisterParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const LockAttendanceRegisterBody = zod.object({
+  "reason": zod.string().min(1),
+  "registerVersion": zod.number()
+})
+
+export const LockAttendanceRegisterResponse = zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const UnlockAttendanceRegisterParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UnlockAttendanceRegisterBody = zod.object({
+  "reason": zod.string().min(1),
+  "registerVersion": zod.number()
+})
+
+export const UnlockAttendanceRegisterResponse = zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
 
 
@@ -1691,7 +1877,13 @@ export const MarkAllPresentResponse = zod.object({
   "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
-  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2155,6 +2347,7 @@ export const listAuditLogQueryPageSizeDefault = 25;
 
 export const ListAuditLogQueryParams = zod.object({
   "entityType": zod.coerce.string().optional(),
+  "entityId": zod.coerce.number().optional(),
   "userId": zod.coerce.number().optional(),
   "action": zod.coerce.string().optional(),
   "dateFrom": zod.date().optional(),

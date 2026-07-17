@@ -150,7 +150,7 @@ class TestHistoricalAttendanceImmutability:
         )
         save_attendance_register(
             past_session["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
         db.execute("SELECT id, status FROM attendance_records WHERE session_id = %s AND learner_id = %s", (past_session["id"], learner["id"]))
@@ -209,7 +209,7 @@ class TestHistoricalAttendanceImmutability:
         with pytest.raises(HTTPException) as exc:
             save_attendance_register(
                 session["id"],
-                AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=outsider["id"], status="present", hoursAttended=7, minutesLate=0)]),
+                AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=outsider["id"], status="present", hoursAttended=7, minutesLate=0)]),
                 request_factory(), admin_user,
             )
         assert exc.value.status_code == 403
@@ -317,12 +317,12 @@ class TestCohortNavigationDataIntegrity:
         # a missing/extra session.
         save_attendance_register(
             a1["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner_a["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner_a["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
         save_attendance_register(
             b2["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner_b["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner_b["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
 
@@ -510,7 +510,7 @@ class TestSessionCancellation:
         session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
         save_attendance_register(
             session["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
 
@@ -539,7 +539,7 @@ class TestSessionCancellation:
         with pytest.raises(HTTPException) as exc:
             save_attendance_register(
                 session["id"],
-                AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+                AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
                 request_factory(), admin_user,
             )
         assert exc.value.status_code == 409
@@ -587,7 +587,7 @@ class TestSessionEditConfirmation:
         session = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-02-01", created_by=admin_user["userId"])
         save_attendance_register(
             session["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
 
@@ -608,7 +608,7 @@ class TestSessionEditConfirmation:
         session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
         save_attendance_register(
             session["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
 
@@ -688,7 +688,7 @@ class TestRegisterRefreshEndpoint:
         session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
         save_attendance_register(
             session["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
 
@@ -707,7 +707,7 @@ class TestRegisterRefreshEndpoint:
         get_attendance_session(session["id"], admin_user)
         save_attendance_register(
             session["id"],
-            AttendanceRegisterInput(entries=[RegisterEntryInput(learnerId=marked["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=marked["id"], status="present", hoursAttended=7, minutesLate=0)]),
             request_factory(), admin_user,
         )
         db.execute(

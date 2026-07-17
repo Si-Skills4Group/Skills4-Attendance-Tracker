@@ -5,10 +5,7 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { RegisterEntryInput } from './registerEntryInput';
 
-export interface AttendanceRegisterInput {
+export interface CompleteRegisterInput {
   registerVersion: number;
-  entries: RegisterEntryInput[];
-  changeReason?: string;
 }

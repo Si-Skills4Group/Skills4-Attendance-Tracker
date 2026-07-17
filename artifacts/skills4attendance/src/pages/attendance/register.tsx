@@ -2,13 +2,16 @@ import * as React from "react";
 import {
   useGetAttendanceSession,
   useSaveAttendanceRegister,
-  useMarkAllPresent,
+  useCompleteRegister,
+  useLockAttendanceRegister,
+  useUnlockAttendanceRegister,
   useUpdateAttendanceSession,
   useCancelAttendanceSession,
   useRefreshSessionRegister,
   useGetCurrentUser,
   AttendanceStatus,
   RegisterEntryInput,
+  AttendanceRegister,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -17,19 +20,71 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, CheckCircle2, Clock, CalendarDays, Users, Check, Pencil, Ban, RefreshCw } from "lucide-react";
+import {
+  Loader2, Save, ArrowLeft, CheckCircle2, Clock, CalendarDays, Users, Pencil, Ban, RefreshCw,
+  ChevronDown, Lock, Unlock, ShieldCheck, AlertTriangle,
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { RegisterStatusBadge } from "@/components/status-badges";
-import { useDebounce } from "@/hooks/use-debounce";
+import { RegisterHistoryPanel } from "@/components/register-history-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetAttendanceSessionQueryKey } from "@workspace/api-client-react";
 
-type DraftEntry = RegisterEntryInput & { _isDirty?: boolean; _originalHours: number; _requireOverrideReason: boolean };
+type DraftEntry = {
+  learnerId: number;
+  status: AttendanceStatus;
+  hoursAttended: number;
+  minutesLate: number;
+  notes: string;
+  overrideReason: string;
+  _originalHours: number;
+  _requireOverrideReason: boolean;
+};
+
+const ZERO_HOURS_STATUSES: AttendanceStatus[] = ["absent_authorised", "absent_unauthorised", "not_expected", "withdrawn"];
+
+const STATUS_LABELS: Record<AttendanceStatus, string> = {
+  present: "Present",
+  late: "Late",
+  absent_authorised: "Absent (Authorised)",
+  absent_unauthorised: "Absent (Unauthorised)",
+  not_expected: "Not Expected",
+  withdrawn: "Withdrawn",
+};
+
+function buildDraft(entry: {
+  learnerId: number; status: AttendanceStatus; hoursAttended: number; minutesLate: number;
+  notes: string | null; overrideReason: string | null;
+}, originalHours: number): DraftEntry {
+  return {
+    learnerId: entry.learnerId,
+    status: entry.status,
+    hoursAttended: entry.hoursAttended,
+    minutesLate: entry.minutesLate,
+    notes: entry.notes || "",
+    overrideReason: entry.overrideReason || "",
+    _originalHours: originalHours,
+    _requireOverrideReason: entry.status === "present" && entry.hoursAttended !== originalHours,
+  };
+}
+
+function draftsEqual(a: DraftEntry, b: DraftEntry): boolean {
+  return a.status === b.status && a.hoursAttended === b.hoursAttended
+    && a.minutesLate === b.minutesLate && a.notes === b.notes;
+}
 
 export default function RegisterPage() {
   const params = useParams();
@@ -43,113 +98,78 @@ export default function RegisterPage() {
 
   const { data: register, isLoading } = useGetAttendanceSession(sessionId);
   const saveMutation = useSaveAttendanceRegister();
-  const markAllMutation = useMarkAllPresent();
+  const completeMutation = useCompleteRegister();
+  const lockMutation = useLockAttendanceRegister();
+  const unlockMutation = useUnlockAttendanceRegister();
   const updateMutation = useUpdateAttendanceSession();
   const cancelMutation = useCancelAttendanceSession();
   const refreshMutation = useRefreshSessionRegister();
 
-  // Local state for edits
+  // ---------------------------------------------------------------------
+  // Local draft state -- purely local until an explicit Save Draft /
+  // Complete Register action. No autosave.
+  // ---------------------------------------------------------------------
   const [drafts, setDrafts] = React.useState<Record<number, DraftEntry>>({});
-  const [saveStatus, setSaveStatus] = React.useState<"idle"|"saving"|"saved">("idle");
+  const [baseline, setBaseline] = React.useState<Record<number, DraftEntry>>({});
+  const [selected, setSelected] = React.useState<Set<number>>(new Set());
+  const [rowErrors, setRowErrors] = React.useState<Record<number, string[]>>({});
+  const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved">("idle");
 
-  // We use debounce to auto-save
-  const debouncedDrafts = useDebounce(drafts, 1000);
-
-  // Initialize drafts when data loads
   const initRef = React.useRef<string>("");
   React.useEffect(() => {
     if (register && initRef.current !== JSON.stringify(register.entries)) {
       initRef.current = JSON.stringify(register.entries);
-      const newDrafts: Record<number, DraftEntry> = {};
-      register.entries.forEach(e => {
-        newDrafts[e.learnerId] = {
-          learnerId: e.learnerId,
-          status: e.status,
-          hoursAttended: e.hoursAttended,
-          minutesLate: e.minutesLate,
-          notes: e.notes || "",
-          overrideReason: e.overrideReason || "",
-          _originalHours: register.session.plannedDurationHours,
-          _requireOverrideReason: e.hoursAttended !== register.session.plannedDurationHours && e.status === "present",
-          _isDirty: false
-        };
-      });
-      setDrafts(newDrafts);
+      const next: Record<number, DraftEntry> = {};
+      register.entries.forEach(e => { next[e.learnerId] = buildDraft(e, register.session.plannedDurationHours); });
+      setDrafts(next);
+      setBaseline(next);
+      setRowErrors({});
     }
   }, [register]);
 
-  // Auto-save effect
-  // NOTE: depend only on primitives/stable references (debouncedDrafts, sessionId,
-  // saveMutate, queryClient). Including the whole `saveMutation` result object or
-  // `register` here caused this effect to re-run on every render (their identity
-  // changes on unrelated renders/cache patches), which re-fired mutate() in a tight
-  // loop and crashed the app with "Maximum update depth exceeded".
-  const lastSavedRef = React.useRef<string>("");
-  const saveMutate = saveMutation.mutate;
-  const isCancelled = register?.session.status === "cancelled";
+  const isRowDirty = React.useCallback((learnerId: number) => {
+    const d = drafts[learnerId];
+    const b = baseline[learnerId];
+    if (!d || !b) return false;
+    return !draftsEqual(d, b);
+  }, [drafts, baseline]);
+
+  const dirtyLearnerIds = Object.keys(drafts).map(Number).filter(isRowDirty);
+  const hasUnsavedChanges = dirtyLearnerIds.length > 0;
+
   React.useEffect(() => {
-    if (isCancelled) return;
-    // Only save dirty entries
-    const dirtyEntries = Object.values(debouncedDrafts).filter(d => d._isDirty);
-    if (dirtyEntries.length === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
 
-    // Validate: if require override, ensure it's not empty
-    const invalid = dirtyEntries.find(d => d._requireOverrideReason && !d.overrideReason);
-    if (invalid) return; // Don't auto-save if validation fails
+  const guardNavigate = (to: string) => {
+    if (hasUnsavedChanges && !window.confirm("You have unsaved attendance changes. Leave without saving?")) {
+      return;
+    }
+    setLocation(to);
+  };
 
-    const payloadString = JSON.stringify(dirtyEntries);
-    if (payloadString === lastSavedRef.current) return;
-    // Mark as "in flight" immediately so this effect can't re-fire the same
-    // payload again before the request resolves.
-    lastSavedRef.current = payloadString;
-
-    setSaveStatus("saving");
-
-    const entriesToSave = dirtyEntries.map(({ _isDirty, _originalHours, _requireOverrideReason, ...rest }) => rest);
-
-    saveMutate({ id: sessionId, data: { entries: entriesToSave } }, {
-      onSuccess: () => {
-        setSaveStatus("saved");
-        setTimeout(() => setSaveStatus("idle"), 2000);
-
-        // Mark as clean locally (copy entries instead of mutating them in place,
-        // since the mutated objects are also referenced by debouncedDrafts)
-        setDrafts(prev => {
-          const next = { ...prev };
-          dirtyEntries.forEach(d => {
-            const existing = next[d.learnerId];
-            if (existing) next[d.learnerId] = { ...existing, _isDirty: false };
-          });
-          return next;
-        });
-
-        // Patch query cache instead of full invalidate to prevent jumping
-        queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), (old: any) => {
-          if (!old) return old;
-          const newEntries = old.entries.map((e: any) => {
-            const savedDraft = entriesToSave.find(d => d.learnerId === e.learnerId);
-            return savedDraft ? { ...e, ...savedDraft } : e;
-          });
-          return { ...old, entries: newEntries };
-        });
-      },
-      onError: (err) => {
-        // Allow retry on the next debounce tick instead of getting stuck.
-        lastSavedRef.current = "";
-        setSaveStatus("idle");
-        toast({ title: "Could not save register", description: getErrorMessage(err), variant: "destructive" });
-      }
-    });
-  }, [debouncedDrafts, sessionId, saveMutate, queryClient, isCancelled]);
+  const applySavedResult = (result: AttendanceRegister) => {
+    const next: Record<number, DraftEntry> = {};
+    result.entries.forEach(e => { next[e.learnerId] = buildDraft(e, result.session.plannedDurationHours); });
+    setDrafts(next);
+    setBaseline(next);
+    setRowErrors({});
+    queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), result);
+  };
 
   const updateDraft = (learnerId: number, field: keyof DraftEntry, value: any) => {
+    setRowErrors(prev => { if (!prev[learnerId]) return prev; const next = { ...prev }; delete next[learnerId]; return next; });
     setDrafts(prev => {
       const draft = prev[learnerId];
       if (!draft) return prev;
+      const next = { ...draft, [field]: value };
 
-      const next = { ...draft, [field]: value, _isDirty: true };
-
-      // Auto-adjust hours if status changes
       if (field === "status") {
         if (value === "present" || value === "late") {
           next.hoursAttended = next._originalHours;
@@ -159,31 +179,251 @@ export default function RegisterPage() {
         }
       }
 
-      // Check if override reason is required
-      if (next.status === "present" && next.hoursAttended !== next._originalHours) {
-        next._requireOverrideReason = true;
-      } else {
-        next._requireOverrideReason = false;
-        if (field !== "overrideReason") next.overrideReason = ""; // clear it if no longer needed
-      }
+      next._requireOverrideReason = next.status === "present" && next.hoursAttended !== next._originalHours;
+      if (!next._requireOverrideReason && field !== "overrideReason") next.overrideReason = "";
 
       return { ...prev, [learnerId]: next };
     });
   };
 
+  // ---------------------------------------------------------------------
+  // Row selection + bulk actions (local-draft-only; confirm before
+  // overwriting unsaved edits, per design decision 5)
+  // ---------------------------------------------------------------------
+  const entries = register?.entries ?? [];
+  const allSelected = entries.length > 0 && entries.every(e => selected.has(e.learnerId));
+
+  const toggleAll = (checked: boolean) => {
+    setSelected(checked ? new Set(entries.map(e => e.learnerId)) : new Set());
+  };
+  const toggleRow = (learnerId: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(learnerId)) next.delete(learnerId); else next.add(learnerId);
+      return next;
+    });
+  };
+
+  const [bulkConfirm, setBulkConfirm] = React.useState<{ message: string; run: () => void } | null>(null);
+
+  const applyToRows = (targetIds: number[], label: string, apply: (d: DraftEntry) => Partial<DraftEntry>) => {
+    if (targetIds.length === 0) return;
+    const run = () => {
+      setRowErrors({});
+      setDrafts(prev => {
+        const next = { ...prev };
+        targetIds.forEach(id => {
+          if (next[id]) {
+            const merged = { ...next[id], ...apply(next[id]) };
+            merged._requireOverrideReason = merged.status === "present" && merged.hoursAttended !== merged._originalHours;
+            next[id] = merged;
+          }
+        });
+        return next;
+      });
+    };
+    const overwriting = targetIds.filter(isRowDirty).length;
+    if (overwriting > 0) {
+      setBulkConfirm({
+        message: `${label} will overwrite unsaved changes on ${overwriting} row${overwriting === 1 ? "" : "s"}. Continue?`,
+        run,
+      });
+    } else {
+      run();
+    }
+  };
+
   const handleMarkAllPresent = () => {
-    setSaveStatus("saving");
-    markAllMutation.mutate({ id: sessionId }, {
-      onSuccess: () => {
-        setSaveStatus("saved");
-        setTimeout(() => setSaveStatus("idle"), 2000);
-        queryClient.invalidateQueries({ queryKey: getGetAttendanceSessionQueryKey(sessionId) });
-      }
+    applyToRows(entries.map(e => e.learnerId), "Mark all present", (d) => ({
+      status: "present", hoursAttended: d._originalHours, minutesLate: 0, overrideReason: "",
+    }));
+  };
+
+  const handleSetSelectedStatus = (status: AttendanceStatus) => {
+    applyToRows(Array.from(selected), `Set ${STATUS_LABELS[status]}`, (d) => {
+      if (status === "present") return { status, hoursAttended: d._originalHours, minutesLate: 0, overrideReason: "" };
+      if (ZERO_HOURS_STATUSES.includes(status)) return { status, hoursAttended: 0, minutesLate: 0, overrideReason: "" };
+      return { status };
+    });
+  };
+
+  const handleClearSelected = () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    setRowErrors(prev => { const next = { ...prev }; ids.forEach(id => delete next[id]); return next; });
+    setDrafts(prev => {
+      const next = { ...prev };
+      ids.forEach(id => { if (baseline[id]) next[id] = baseline[id]; });
+      return next;
     });
   };
 
   // ---------------------------------------------------------------------
-  // Edit session
+  // Save / Complete / conflict / historical change-reason
+  // ---------------------------------------------------------------------
+  const [reasonDialog, setReasonDialog] = React.useState<{ then?: (result: AttendanceRegister) => void } | null>(null);
+  const [reasonInput, setReasonInput] = React.useState("");
+  const [conflictVersion, setConflictVersion] = React.useState<number | null>(null);
+
+  const buildEntries = (): RegisterEntryInput[] =>
+    Object.values(drafts).map(({ _originalHours, _requireOverrideReason, notes, overrideReason, ...rest }) => ({
+      ...rest,
+      notes: notes.trim() ? notes.trim() : undefined,
+      overrideReason: overrideReason.trim() ? overrideReason.trim() : undefined,
+    }));
+
+  const performSave = (reason: string | undefined, then?: (result: AttendanceRegister) => void) => {
+    if (!register) return;
+    setSaveState("saving");
+    saveMutation.mutate({
+      id: sessionId,
+      data: { registerVersion: register.session.registerVersion, entries: buildEntries(), changeReason: reason },
+    }, {
+      onSuccess: (result) => {
+        setSaveState("saved");
+        setTimeout(() => setSaveState("idle"), 2000);
+        applySavedResult(result);
+        setReasonDialog(null);
+        setReasonInput("");
+        then?.(result);
+      },
+      onError: (err) => {
+        setSaveState("idle");
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+
+        if (status === 409 && detail?.reason === "stale_register_version") {
+          setConflictVersion(detail.currentVersion ?? null);
+          return;
+        }
+        if (status === 422 && Array.isArray(detail?.errors)) {
+          const needsReason = detail.errors.some((e: any) => e.field === "changeReason");
+          if (needsReason) {
+            setReasonDialog({ then });
+            return;
+          }
+          const nextRowErrors: Record<number, string[]> = {};
+          const general: string[] = [];
+          detail.errors.forEach((e: any) => {
+            if (e.learnerId != null) {
+              nextRowErrors[e.learnerId] = [...(nextRowErrors[e.learnerId] || []), e.message];
+            } else {
+              general.push(e.message);
+            }
+          });
+          setRowErrors(nextRowErrors);
+          toast({
+            title: "Some rows could not be saved",
+            description: general.join("; ") || "Check the highlighted rows and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+        toast({ title: "Could not save register", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
+  const performComplete = (registerVersion: number) => {
+    completeMutation.mutate({ id: sessionId, data: { registerVersion } }, {
+      onSuccess: (result) => {
+        toast({ title: "Register completed" });
+        queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), result);
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+        if (status === 409 && detail?.reason === "stale_register_version") {
+          setConflictVersion(detail.currentVersion ?? null);
+          return;
+        }
+        if (status === 422 && Array.isArray(detail?.errors)) {
+          const messages = detail.errors.map((e: any) =>
+            e.learnerId != null ? `Learner ${e.learnerId}: ${e.message}` : e.message);
+          toast({ title: "Register is not complete", description: messages.join("; "), variant: "destructive" });
+          return;
+        }
+        toast({ title: "Could not complete register", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
+  const handleSaveDraft = () => performSave(undefined);
+  const handleCompleteRegister = () => performSave(undefined, (saved) => performComplete(saved.session.registerVersion));
+
+  const submitReason = () => {
+    const then = reasonDialog?.then;
+    performSave(reasonInput.trim(), then);
+  };
+
+  const reloadRegister = () => {
+    setConflictVersion(null);
+    initRef.current = "";
+    queryClient.invalidateQueries({ queryKey: getGetAttendanceSessionQueryKey(sessionId) });
+  };
+
+  // ---------------------------------------------------------------------
+  // Lock / Unlock (admin-only)
+  // ---------------------------------------------------------------------
+  const [lockOpen, setLockOpen] = React.useState(false);
+  const [lockReasonInput, setLockReasonInput] = React.useState("");
+  const [unlockOpen, setUnlockOpen] = React.useState(false);
+  const [unlockReasonInput, setUnlockReasonInput] = React.useState("");
+
+  const submitLock = () => {
+    if (!register) return;
+    lockMutation.mutate({
+      id: sessionId,
+      data: { reason: lockReasonInput.trim(), registerVersion: register.session.registerVersion },
+    }, {
+      onSuccess: (result) => {
+        toast({ title: "Register locked" });
+        setLockOpen(false);
+        setLockReasonInput("");
+        queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), (old: any) =>
+          old ? { ...old, session: result } : old);
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+        if (status === 409 && detail?.reason === "stale_register_version") {
+          setLockOpen(false);
+          setConflictVersion(detail.currentVersion ?? null);
+          return;
+        }
+        toast({ title: "Could not lock register", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
+  const submitUnlock = () => {
+    if (!register) return;
+    unlockMutation.mutate({
+      id: sessionId,
+      data: { reason: unlockReasonInput.trim(), registerVersion: register.session.registerVersion },
+    }, {
+      onSuccess: (result) => {
+        toast({ title: "Register unlocked" });
+        setUnlockOpen(false);
+        setUnlockReasonInput("");
+        queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), (old: any) =>
+          old ? { ...old, session: result } : old);
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+        if (status === 409 && detail?.reason === "stale_register_version") {
+          setUnlockOpen(false);
+          setConflictVersion(detail.currentVersion ?? null);
+          return;
+        }
+        toast({ title: "Could not unlock register", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
+  // ---------------------------------------------------------------------
+  // Edit session (unchanged from Phase 6)
   // ---------------------------------------------------------------------
   const [editOpen, setEditOpen] = React.useState(false);
   const [editTitle, setEditTitle] = React.useState("");
@@ -234,7 +474,7 @@ export default function RegisterPage() {
   };
 
   // ---------------------------------------------------------------------
-  // Cancel session
+  // Cancel session (unchanged from Phase 6)
   // ---------------------------------------------------------------------
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [cancelReason, setCancelReason] = React.useState("");
@@ -265,7 +505,7 @@ export default function RegisterPage() {
   };
 
   // ---------------------------------------------------------------------
-  // Refresh expected learners
+  // Refresh expected learners (unchanged from Phase 6)
   // ---------------------------------------------------------------------
   const [refreshOpen, setRefreshOpen] = React.useState(false);
   const [refreshDiff, setRefreshDiff] = React.useState<{ toAdd: { learnerId: number; learnerName: string }[]; toRemove: { learnerId: number; learnerName: string }[]; blocked: { learnerId: number; learnerName: string }[] } | null>(null);
@@ -302,10 +542,18 @@ export default function RegisterPage() {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  const { session, entries } = register;
+  const { session } = register;
   const todayIso = format(new Date(), "yyyy-MM-dd");
-  const canRefresh = isAdmin && session.status !== "cancelled" && session.registerStatus !== "completed"
-    && session.sessionDate.slice(0, 10) >= todayIso;
+  const isCancelled = session.status === "cancelled";
+  const isLocked = session.registerLockedAt != null;
+  const isCompleted = session.registerStatus === "completed";
+  const isHistorical = session.registerStatus === "completed" || session.registerStatus === "locked"
+    || session.sessionDate.slice(0, 10) < todayIso;
+  const isReadOnly = isCancelled || isLocked;
+  const canRefresh = isAdmin && !isCancelled && !isCompleted && !isLocked && session.sessionDate.slice(0, 10) >= todayIso;
+  const canLock = isAdmin && isCompleted && !isLocked;
+  const canUnlock = isAdmin && isLocked;
+  const isSaving = saveMutation.isPending || completeMutation.isPending;
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col h-[calc(100vh-64px)]">
@@ -317,7 +565,7 @@ export default function RegisterPage() {
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="icon" onClick={() => setLocation("/attendance")}>
+            <Button variant="outline" size="icon" aria-label="Back to Attendance" onClick={() => guardNavigate("/attendance")}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div>
@@ -335,22 +583,59 @@ export default function RegisterPage() {
                 <span className="flex items-center"><Users className="w-3.5 h-3.5 mr-1.5" />{session.tutorName}</span>
                 <span>•</span>
                 <span>{session.recordedCount} of {session.expectedCount} learner{session.expectedCount === 1 ? "" : "s"} recorded</span>
+                {session.completedAt && (
+                  <>
+                    <span>•</span>
+                    <span>Completed {format(parseISO(session.completedAt), "MMM d, yyyy HH:mm")}</span>
+                  </>
+                )}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="text-sm font-medium text-muted-foreground flex items-center mr-2">
-              {saveStatus === "saving" && <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Saving...</>}
-              {saveStatus === "saved" && <><Check className="w-3 h-3 mr-1.5 text-emerald-500" /> Saved</>}
-              {saveStatus === "idle" && <span className="opacity-0">Saved</span>}
+            <div className="text-sm font-medium text-muted-foreground flex items-center mr-1">
+              {isSaving && <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Saving...</>}
+              {!isSaving && saveState === "saved" && <><CheckCircle2 className="w-3 h-3 mr-1.5 text-emerald-500" /> Saved</>}
+              {!isSaving && saveState === "idle" && hasUnsavedChanges && (
+                <span className="text-amber-600 dark:text-amber-500 flex items-center"><AlertTriangle className="w-3 h-3 mr-1.5" /> Unsaved changes</span>
+              )}
             </div>
-            {!isCancelled && (
-              <Button variant="secondary" onClick={handleMarkAllPresent} disabled={markAllMutation.isPending} className="shadow-sm border">
+            {!isReadOnly && (
+              <Button variant="secondary" onClick={handleMarkAllPresent} className="shadow-sm border">
                 <CheckCircle2 className="w-4 h-4 mr-2" /> Mark All Present
               </Button>
             )}
-            {!isCancelled && (
+            {!isReadOnly && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={selected.size === 0} className="shadow-sm">
+                    Bulk Actions ({selected.size}) <ChevronDown className="w-4 h-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleSetSelectedStatus("present")}>Set Present</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSetSelectedStatus("absent_authorised")}>Set Absent (Authorised)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSetSelectedStatus("absent_unauthorised")}>Set Absent (Unauthorised)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSetSelectedStatus("not_expected")}>Set Not Expected</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleClearSelected}>Clear Selected (revert to last save)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {!isReadOnly && (
+              <>
+                <Button variant="outline" onClick={handleSaveDraft} disabled={isSaving} className="shadow-sm">
+                  {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Draft
+                </Button>
+                <Button onClick={handleCompleteRegister} disabled={isSaving} className="shadow-sm">
+                  {completeMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+                  Complete Register
+                </Button>
+              </>
+            )}
+            {!isReadOnly && (
               <Button variant="outline" onClick={openEditDialog} className="shadow-sm">
                 <Pencil className="w-4 h-4 mr-2" /> Edit
               </Button>
@@ -360,7 +645,17 @@ export default function RegisterPage() {
                 <RefreshCw className="w-4 h-4 mr-2" /> Refresh Expected Learners
               </Button>
             )}
-            {isAdmin && !isCancelled && (
+            {canLock && (
+              <Button variant="outline" onClick={() => setLockOpen(true)} className="shadow-sm">
+                <Lock className="w-4 h-4 mr-2" /> Lock Register
+              </Button>
+            )}
+            {canUnlock && (
+              <Button variant="outline" onClick={() => setUnlockOpen(true)} className="shadow-sm">
+                <Unlock className="w-4 h-4 mr-2" /> Unlock Register
+              </Button>
+            )}
+            {isAdmin && !isCancelled && !isLocked && (
               <Button variant="outline" onClick={() => setCancelOpen(true)} className="shadow-sm text-destructive hover:text-destructive">
                 <Ban className="w-4 h-4 mr-2" /> Cancel Session
               </Button>
@@ -379,6 +674,22 @@ export default function RegisterPage() {
             </p>
           </div>
         )}
+
+        {isLocked && (
+          <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 p-4 rounded-md mb-6">
+            <h4 className="font-semibold text-violet-800 dark:text-violet-400 mb-1 flex items-center"><Lock className="w-4 h-4 mr-2" /> This register is locked</h4>
+            {session.lockReason && <p className="text-sm text-violet-700 dark:text-violet-400">Reason: {session.lockReason}</p>}
+            <p className="text-sm text-violet-700 dark:text-violet-400 mt-1">
+              {isAdmin ? "An Administrator must unlock the register before it can be edited." : "Attendance cannot be edited while this register is locked. Contact an Administrator to unlock it."}
+            </p>
+          </div>
+        )}
+
+        {!isReadOnly && isHistorical && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-md mb-6 text-sm text-amber-700 dark:text-amber-400">
+            This is a historical register. Changing recorded attendance (status or hours) will require a reason.
+          </div>
+        )}
       </div>
 
       <Card className="flex-1 shadow-sm overflow-hidden flex flex-col min-h-0 page-transition-enter stagger-1">
@@ -386,10 +697,15 @@ export default function RegisterPage() {
           <Table>
             <TableHeader className="bg-muted/30 sticky top-0 z-10 backdrop-blur-md shadow-sm">
               <TableRow>
-                <TableHead className="w-[250px]">Learner</TableHead>
+                <TableHead className="w-[40px]">
+                  {!isReadOnly && (
+                    <Checkbox checked={allSelected} onCheckedChange={(c) => toggleAll(!!c)} aria-label="Select all learners" />
+                  )}
+                </TableHead>
+                <TableHead className="w-[230px]">Learner</TableHead>
                 <TableHead className="w-[180px]">Status</TableHead>
-                <TableHead className="w-[120px]">Hours</TableHead>
-                <TableHead className="w-[120px]">Mins Late</TableHead>
+                <TableHead className="w-[110px]">Hours</TableHead>
+                <TableHead className="w-[110px]">Mins Late</TableHead>
                 <TableHead>Notes / Reason</TableHead>
               </TableRow>
             </TableHeader>
@@ -397,18 +713,31 @@ export default function RegisterPage() {
               {entries.map(entry => {
                 const draft = drafts[entry.learnerId];
                 if (!draft) return null;
+                const errors = rowErrors[entry.learnerId];
 
                 return (
-                  <TableRow key={entry.learnerId} className="hover:bg-muted/10">
+                  <TableRow key={entry.learnerId} className="hover:bg-muted/10 align-top">
+                    <TableCell className="pt-3">
+                      {!isReadOnly && (
+                        <Checkbox
+                          checked={selected.has(entry.learnerId)}
+                          onCheckedChange={() => toggleRow(entry.learnerId)}
+                          aria-label={`Select ${entry.learnerName}`}
+                        />
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="font-medium text-sm">{entry.learnerName}</div>
                       <div className="text-xs text-muted-foreground font-mono mt-0.5">{entry.learnerRef}</div>
+                      {isRowDirty(entry.learnerId) && (
+                        <div className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Unsaved</div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Select
                         value={draft.status}
                         onValueChange={(v) => updateDraft(entry.learnerId, "status", v as AttendanceStatus)}
-                        disabled={isCancelled}
+                        disabled={isReadOnly}
                       >
                         <SelectTrigger className="h-9">
                           <SelectValue />
@@ -431,7 +760,7 @@ export default function RegisterPage() {
                         className={`h-9 w-20 ${draft._requireOverrideReason ? 'border-amber-400' : ''}`}
                         value={draft.hoursAttended}
                         onChange={(e) => updateDraft(entry.learnerId, "hoursAttended", parseFloat(e.target.value) || 0)}
-                        disabled={isCancelled || !["present", "late"].includes(draft.status)}
+                        disabled={isReadOnly || !["present", "late"].includes(draft.status)}
                       />
                     </TableCell>
                     <TableCell>
@@ -441,27 +770,35 @@ export default function RegisterPage() {
                         className="h-9 w-20"
                         value={draft.minutesLate}
                         onChange={(e) => updateDraft(entry.learnerId, "minutesLate", parseInt(e.target.value) || 0)}
-                        disabled={isCancelled || draft.status !== "late"}
+                        disabled={isReadOnly || draft.status !== "late"}
                       />
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-2">
-                        {draft._requireOverrideReason && (
+                        {draft._requireOverrideReason && isAdmin && (
                           <Input
                             placeholder="Reason for altered hours (Required)"
                             className="h-9 border-amber-400 focus-visible:ring-amber-400"
                             value={draft.overrideReason}
                             onChange={(e) => updateDraft(entry.learnerId, "overrideReason", e.target.value)}
-                            disabled={isCancelled}
+                            disabled={isReadOnly}
                           />
+                        )}
+                        {draft._requireOverrideReason && !isAdmin && (
+                          <p className="text-xs text-amber-600 dark:text-amber-500">
+                            Exceeds planned hours -- an Administrator must approve this.
+                          </p>
                         )}
                         <Input
                           placeholder="General notes (Optional)"
                           className="h-9 bg-transparent"
                           value={draft.notes}
                           onChange={(e) => updateDraft(entry.learnerId, "notes", e.target.value)}
-                          disabled={isCancelled}
+                          disabled={isReadOnly}
                         />
+                        {errors && errors.map((msg, i) => (
+                          <p key={i} className="text-xs text-rose-600 dark:text-rose-500">{msg}</p>
+                        ))}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -471,9 +808,113 @@ export default function RegisterPage() {
           </Table>
         </div>
         <div className="bg-muted/10 p-3 text-xs text-muted-foreground text-center border-t">
-          {isCancelled ? "This session is cancelled -- the register is read-only." : "Changes are saved automatically when you modify a field."}
+          {isCancelled ? "This session is cancelled -- the register is read-only." :
+            isLocked ? "This register is locked -- unlock it to make changes." :
+            "Changes are kept locally until you click Save Draft or Complete Register."}
         </div>
       </Card>
+
+      {isAdmin && (
+        <div className="mt-6 shrink-0">
+          <RegisterHistoryPanel sessionId={sessionId} />
+        </div>
+      )}
+
+      {/* Historical change-reason prompt */}
+      <Dialog open={!!reasonDialog} onOpenChange={(o) => { if (!o) { setReasonDialog(null); setReasonInput(""); } }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Reason for historical change</DialogTitle>
+            <DialogDescription>
+              This register is historical or already completed. Explain why you're changing previously recorded attendance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="change-reason">Reason</Label>
+            <Textarea id="change-reason" value={reasonInput} onChange={e => setReasonInput(e.target.value)} rows={3} className="mt-2" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReasonDialog(null); setReasonInput(""); }}>Cancel</Button>
+            <Button onClick={submitReason} disabled={!reasonInput.trim() || saveMutation.isPending}>
+              {saveMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Concurrency conflict */}
+      <AlertDialog open={conflictVersion !== null} onOpenChange={(o) => { if (!o) setConflictVersion(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>This register has changed</AlertDialogTitle>
+            <AlertDialogDescription>
+              Someone else saved changes to this register since you loaded it. Reload to see the latest version --
+              your local unsaved changes will be discarded.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Editing</AlertDialogCancel>
+            <AlertDialogAction onClick={reloadRegister}>Reload Register</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk-action overwrite confirm */}
+      <AlertDialog open={!!bulkConfirm} onOpenChange={(o) => { if (!o) setBulkConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Overwrite unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>{bulkConfirm?.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { bulkConfirm?.run(); setBulkConfirm(null); }}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Lock register */}
+      <Dialog open={lockOpen} onOpenChange={(o) => { setLockOpen(o); if (!o) setLockReasonInput(""); }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Lock Register</DialogTitle>
+            <DialogDescription>Locking prevents any further edits until an Administrator unlocks it.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="lock-reason">Reason</Label>
+            <Textarea id="lock-reason" value={lockReasonInput} onChange={e => setLockReasonInput(e.target.value)} rows={3} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLockOpen(false)}>Cancel</Button>
+            <Button onClick={submitLock} disabled={!lockReasonInput.trim() || lockMutation.isPending}>
+              {lockMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <Lock className="w-4 h-4 mr-2" /> Lock Register
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unlock register */}
+      <Dialog open={unlockOpen} onOpenChange={(o) => { setUnlockOpen(o); if (!o) setUnlockReasonInput(""); }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Unlock Register</DialogTitle>
+            <DialogDescription>This action is audited. Provide a reason for unlocking.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="unlock-reason">Reason</Label>
+            <Textarea id="unlock-reason" value={unlockReasonInput} onChange={e => setUnlockReasonInput(e.target.value)} rows={3} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnlockOpen(false)}>Cancel</Button>
+            <Button onClick={submitUnlock} disabled={!unlockReasonInput.trim() || unlockMutation.isPending}>
+              {unlockMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <Unlock className="w-4 h-4 mr-2" /> Unlock Register
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[425px]">

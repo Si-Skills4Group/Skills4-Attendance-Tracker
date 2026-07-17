@@ -59,6 +59,7 @@ export const RegisterStatus = {
   in_progress: 'in_progress',
   completed: 'completed',
   cancelled: 'cancelled',
+  locked: 'locked',
 } as const;
 
 export type DeliveryDay = typeof DeliveryDay[keyof typeof DeliveryDay];
@@ -709,6 +710,17 @@ export interface AttendanceSession {
   recordedCount: number;
   expectedCount: number;
   registerStatus: RegisterStatus;
+  registerVersion: number;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  completedBy: number | null;
+  /** @nullable */
+  registerLockedAt: string | null;
+  /** @nullable */
+  registerLockedBy: number | null;
+  /** @nullable */
+  lockReason: string | null;
   createdBy: number;
   createdAt: string;
   updatedAt: string;
@@ -755,6 +767,22 @@ export interface RefreshRegisterInput {
   confirm?: boolean;
 }
 
+export interface CompleteRegisterInput {
+  registerVersion: number;
+}
+
+export interface LockRegisterInput {
+  /** @minLength 1 */
+  reason: string;
+  registerVersion: number;
+}
+
+export interface UnlockRegisterInput {
+  /** @minLength 1 */
+  reason: string;
+  registerVersion: number;
+}
+
 export interface ExpectedLearner {
   learnerId: number;
   learnerName: string;
@@ -799,12 +827,15 @@ export interface RegisterEntryInput {
   hoursAttended: number;
   /** @minimum 0 */
   minutesLate: number;
+  /** @maxLength 1000 */
   notes?: string;
   overrideReason?: string;
 }
 
 export interface AttendanceRegisterInput {
+  registerVersion: number;
   entries: RegisterEntryInput[];
+  changeReason?: string;
 }
 
 export interface AttendanceRegister {
@@ -1061,6 +1092,7 @@ active?: boolean;
 
 export type ListAuditLogParams = {
 entityType?: string;
+entityId?: number;
 userId?: number;
 action?: string;
 dateFrom?: string;

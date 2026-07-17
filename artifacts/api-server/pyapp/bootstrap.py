@@ -374,6 +374,20 @@ CREATE TABLE IF NOT EXISTS session_expected_learners (
 CREATE INDEX IF NOT EXISTS idx_session_expected_learners_session ON session_expected_learners (session_id);
 CREATE INDEX IF NOT EXISTS idx_session_expected_learners_learner ON session_expected_learners (learner_id);
 
+-- Phase 7: register concurrency, explicit completion, and locking (the
+-- register_locked_at/register_locked_by columns above were added in Phase 6
+-- for forward-compatibility and are wired up for real here).
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS register_version integer NOT NULL DEFAULT 1;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS completed_by integer;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS lock_reason text;
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_updated_at ON attendance_sessions (updated_at);
+
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS created_by integer;
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS expected_register_row_id integer;
+CREATE INDEX IF NOT EXISTS idx_attendance_records_learner_id ON attendance_records (learner_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_records_status ON attendance_records (status);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   id serial PRIMARY KEY,
   organisation_name text NOT NULL DEFAULT 'Skills4Group',

@@ -11,6 +11,7 @@ router = APIRouter(tags=["audit"])
 @router.get("/audit-log")
 def list_audit_log(
     entityType: str | None = None,
+    entityId: int | None = None,
     userId: int | None = None,
     action: str | None = None,
     dateFrom: str | None = None,
@@ -24,6 +25,9 @@ def list_audit_log(
     if entityType:
         clauses.append("a.entity_type = %s")
         params.append(entityType)
+    if entityId is not None:
+        clauses.append("a.entity_id = %s")
+        params.append(entityId)
     if userId is not None:
         clauses.append("a.user_id = %s")
         params.append(userId)

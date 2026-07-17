@@ -215,3 +215,47 @@ def cancel_session(cur, session_row: dict, reason: str, confirm_with_attendance:
         """,
         (reason, user_id, session_row["id"]),
     )
+
+
+def bump_register_version(cur, session_id: int) -> int:
+    """Increments the register's optimistic-concurrency version. Callers
+    must run this inside the same transaction as whatever data change it's
+    protecting, so a save/complete/lock/unlock either fully lands together
+    with the version bump, or neither does -- a failed save must never bump
+    the version without also writing the rows it claims to have saved."""
+    cur.execute(
+        """
+        UPDATE attendance_sessions SET register_version = register_version + 1
+        WHERE id = %s RETURNING register_version
+        """,
+        (session_id,),
+    )
+    return cur.fetchone()["register_version"]
+
+
+def lock_register(cur, session_row: dict, reason: str, user_id: int | None) -> None:
+    """Locks a completed register. Callers must have already confirmed the
+    register is currently completed (not cancelled/in_progress/already
+    locked) -- this only performs the state change itself."""
+    cur.execute(
+        """
+        UPDATE attendance_sessions
+        SET register_locked_at = now(), register_locked_by = %s, lock_reason = %s
+        WHERE id = %s
+        """,
+        (user_id, reason, session_row["id"]),
+    )
+
+
+def unlock_register(cur, session_row: dict) -> None:
+    """Clears the lock. The *unlock* reason is captured in the audit log by
+    the caller, not persisted on the row -- lock_reason records why it was
+    locked, not why it was later unlocked."""
+    cur.execute(
+        """
+        UPDATE attendance_sessions
+        SET register_locked_at = NULL, register_locked_by = NULL, lock_reason = NULL
+        WHERE id = %s
+        """,
+        (session_row["id"],),
+    )

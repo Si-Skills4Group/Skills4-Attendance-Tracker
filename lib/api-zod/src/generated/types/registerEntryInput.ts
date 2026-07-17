@@ -14,6 +14,7 @@ export interface RegisterEntryInput {
   hoursAttended: number;
   /** @minimum 0 */
   minutesLate: number;
+  /** @maxLength 1000 */
   notes?: string;
   overrideReason?: string;
 }

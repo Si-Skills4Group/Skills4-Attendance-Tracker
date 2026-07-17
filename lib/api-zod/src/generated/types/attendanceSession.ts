@@ -32,6 +32,17 @@ export interface AttendanceSession {
   recordedCount: number;
   expectedCount: number;
   registerStatus: RegisterStatus;
+  registerVersion: number;
+  /** @nullable */
+  completedAt: Date | null;
+  /** @nullable */
+  completedBy: number | null;
+  /** @nullable */
+  registerLockedAt: Date | null;
+  /** @nullable */
+  registerLockedBy: number | null;
+  /** @nullable */
+  lockReason: string | null;
   createdBy: number;
   createdAt: Date;
   updatedAt: Date;

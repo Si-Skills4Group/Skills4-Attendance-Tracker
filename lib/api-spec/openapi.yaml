@@ -1351,7 +1351,127 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Session is cancelled
+          description: Session is cancelled, register is locked, or the register version is stale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: One or more rows failed validation -- nothing was saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/complete-register:
+    post:
+      operationId: completeRegister
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRegisterInput"
+      responses:
+        "200":
+          description: Register completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRegister"
+        "409":
+          description: Session is cancelled, register is locked, or the register version is stale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: One or more expected learners are missing or invalid attendance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/lock:
+    post:
+      operationId: lockAttendanceRegister
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockRegisterInput"
+      responses:
+        "200":
+          description: Register locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "400":
+          description: Register is not completed, or already locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Register version is stale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/unlock:
+    post:
+      operationId: unlockAttendanceRegister
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlockRegisterInput"
+      responses:
+        "200":
+          description: Register unlocked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "400":
+          description: Register is not locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Register version is stale
           content:
             application/json:
               schema:
@@ -1699,6 +1819,9 @@ paths:
         - name: entityType
           in: query
           schema: { type: string }
+        - name: entityId
+          in: query
+          schema: { type: integer }
         - name: userId
           in: query
           schema: { type: integer }
@@ -1799,6 +1922,7 @@ components:
         - in_progress
         - completed
         - cancelled
+        - locked
 
     DeliveryDay:
       type: string
@@ -2545,6 +2669,12 @@ components:
           recordedCount,
           expectedCount,
           registerStatus,
+          registerVersion,
+          completedAt,
+          completedBy,
+          registerLockedAt,
+          registerLockedBy,
+          lockReason,
           createdBy,
           createdAt,
           updatedAt,
@@ -2568,6 +2698,12 @@ components:
         recordedCount: { type: integer }
         expectedCount: { type: integer }
         registerStatus: { $ref: "#/components/schemas/RegisterStatus" }
+        registerVersion: { type: integer }
+        completedAt: { type: ["string", "null"], format: date-time }
+        completedBy: { type: ["integer", "null"] }
+        registerLockedAt: { type: ["string", "null"], format: date-time }
+        registerLockedBy: { type: ["integer", "null"] }
+        lockReason: { type: ["string", "null"] }
         createdBy: { type: integer }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -2616,6 +2752,26 @@ components:
       type: object
       properties:
         confirm: { type: boolean, default: false }
+
+    CompleteRegisterInput:
+      type: object
+      required: [registerVersion]
+      properties:
+        registerVersion: { type: integer }
+
+    LockRegisterInput:
+      type: object
+      required: [reason, registerVersion]
+      properties:
+        reason: { type: string, minLength: 1 }
+        registerVersion: { type: integer }
+
+    UnlockRegisterInput:
+      type: object
+      required: [reason, registerVersion]
+      properties:
+        reason: { type: string, minLength: 1 }
+        registerVersion: { type: integer }
 
     ExpectedLearner:
       type: object
@@ -2690,16 +2846,18 @@ components:
         status: { $ref: "#/components/schemas/AttendanceStatus" }
         hoursAttended: { type: number, minimum: 0 }
         minutesLate: { type: integer, minimum: 0 }
-        notes: { type: string }
+        notes: { type: string, maxLength: 1000 }
         overrideReason: { type: string }
 
     AttendanceRegisterInput:
       type: object
-      required: [entries]
+      required: [registerVersion, entries]
       properties:
+        registerVersion: { type: integer }
         entries:
           type: array
           items: { $ref: "#/components/schemas/RegisterEntryInput" }
+        changeReason: { type: string }
 
     AttendanceRegister:
       type: object

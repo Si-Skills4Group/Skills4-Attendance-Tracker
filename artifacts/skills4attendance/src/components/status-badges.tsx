@@ -44,6 +44,7 @@ export function RegisterStatusBadge({ status }: { status: RegisterStatus }) {
     in_progress: { className: "bg-amber-100 text-amber-800 border-amber-200", label: "In progress" },
     completed: { className: "bg-emerald-100 text-emerald-800 border-emerald-200", label: "Register complete" },
     cancelled: { className: "bg-rose-100 text-rose-800 border-rose-200", label: "Session cancelled" },
+    locked: { className: "bg-violet-100 text-violet-800 border-violet-200", label: "Locked" },
   };
 
   const v = variants[status] || variants.not_started;
