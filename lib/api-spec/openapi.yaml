@@ -1111,6 +1111,12 @@ paths:
         - name: dateTo
           in: query
           schema: { type: string, format: date }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/SessionStatus" }
+        - name: registerStatus
+          in: query
+          schema: { $ref: "#/components/schemas/RegisterStatus" }
       responses:
         "200":
           description: Attendance sessions
@@ -1190,6 +1196,132 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Session is cancelled, or a schedule change needs confirmation because attendance is already recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/cancel:
+    post:
+      operationId: cancelAttendanceSession
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCancelInput"
+      responses:
+        "200":
+          description: Session cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "400":
+          description: Already cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Attendance already recorded, confirm to cancel anyway
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/expected-learners:
+    get:
+      operationId: getSessionExpectedLearners
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The session's expected-learner register snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ExpectedLearner" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/generate-register:
+    post:
+      operationId: generateSessionRegister
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Register generated (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/refresh-register:
+    post:
+      operationId: refreshSessionRegister
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRegisterInput"
+      responses:
+        "200":
+          description: With confirm=false, a dry-run diff; with confirm=true, the applied result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/RegisterRefreshDiff"
+                  - $ref: "#/components/schemas/RegisterRefreshResult"
+        "400":
+          description: Session is cancelled, historical, or its register is already complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /attendance/sessions/{id}/register:
     put:
       operationId: saveAttendanceRegister
@@ -1218,6 +1350,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Session is cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /attendance/sessions/{id}/mark-all-present:
     post:
       operationId: markAllPresent
@@ -1234,6 +1372,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AttendanceRegister"
+        "409":
+          description: Session is cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ---------- Reports ----------
   /reports/learner/{id}:
@@ -1641,6 +1785,20 @@ components:
         - late
         - not_expected
         - withdrawn
+
+    SessionStatus:
+      type: string
+      enum:
+        - scheduled
+        - cancelled
+
+    RegisterStatus:
+      type: string
+      enum:
+        - not_started
+        - in_progress
+        - completed
+        - cancelled
 
     DeliveryDay:
       type: string
@@ -2380,8 +2538,13 @@ components:
           plannedDurationHours,
           title,
           notes,
+          status,
+          cancelledAt,
+          cancellationReason,
+          overrideReason,
           recordedCount,
           expectedCount,
+          registerStatus,
           createdBy,
           createdAt,
           updatedAt,
@@ -2398,8 +2561,13 @@ components:
         plannedDurationHours: { type: number }
         title: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
+        status: { $ref: "#/components/schemas/SessionStatus" }
+        cancelledAt: { type: ["string", "null"], format: date-time }
+        cancellationReason: { type: ["string", "null"] }
+        overrideReason: { type: ["string", "null"] }
         recordedCount: { type: integer }
         expectedCount: { type: integer }
+        registerStatus: { $ref: "#/components/schemas/RegisterStatus" }
         createdBy: { type: integer }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -2424,6 +2592,7 @@ components:
         title: { type: string, minLength: 1 }
         notes: { type: string }
         force: { type: boolean, default: false }
+        overrideReason: { type: string }
 
     AttendanceSessionUpdate:
       type: object
@@ -2434,6 +2603,55 @@ components:
         plannedDurationHours: { type: number, minimum: 0 }
         title: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
+        confirmChange: { type: boolean, default: false }
+
+    SessionCancelInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+        confirmWithAttendance: { type: boolean, default: false }
+
+    RefreshRegisterInput:
+      type: object
+      properties:
+        confirm: { type: boolean, default: false }
+
+    ExpectedLearner:
+      type: object
+      required: [learnerId, learnerName]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+
+    RegisterRefreshDiff:
+      type: object
+      required: [toAdd, toRemove, blocked]
+      properties:
+        toAdd:
+          type: array
+          items: { $ref: "#/components/schemas/ExpectedLearner" }
+        toRemove:
+          type: array
+          items: { $ref: "#/components/schemas/ExpectedLearner" }
+        blocked:
+          type: array
+          items: { $ref: "#/components/schemas/ExpectedLearner" }
+
+    RegisterRefreshResult:
+      type: object
+      required: [added, removed, blocked]
+      properties:
+        added:
+          type: array
+          items: { $ref: "#/components/schemas/ExpectedLearner" }
+        removed:
+          type: array
+          items: { $ref: "#/components/schemas/ExpectedLearner" }
+        blocked:
+          type: array
+          items: { $ref: "#/components/schemas/ExpectedLearner" }
 
     RegisterEntry:
       type: object

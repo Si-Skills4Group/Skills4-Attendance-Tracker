@@ -13,12 +13,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SessionCardGrid } from "@/components/session-card-grid";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
 import { format } from "date-fns";
 import { ArrowLeft, Plus, Loader2, User, Users, AlertCircle } from "lucide-react";
+
+const CONFLICT_MESSAGES: Record<string, string> = {
+  duplicate_session: "A session already exists for this cohort on this date and start time.",
+  outside_cohort_date_range: "This date falls outside the cohort's start/end dates.",
+};
 
 export default function CohortSessionsPage() {
   const params = useParams();
@@ -40,19 +47,35 @@ export default function CohortSessionsPage() {
 
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
-  const sessionsParams = { cohortId, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined };
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [registerStatusFilter, setRegisterStatusFilter] = React.useState("all");
+  const sessionsParams = {
+    cohortId,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    status: statusFilter !== "all" ? (statusFilter as "scheduled" | "cancelled") : undefined,
+    registerStatus: registerStatusFilter !== "all"
+      ? (registerStatusFilter as "not_started" | "in_progress" | "completed" | "cancelled")
+      : undefined,
+  };
   const { data: sessions = [], isLoading: isLoadingSessions, isError: isSessionsError } = useListAttendanceSessions(sessionsParams, {
     query: { queryKey: getListAttendanceSessionsQueryKey(sessionsParams), enabled: !!cohort },
   });
 
   const createMutation = useCreateAttendanceSession();
   const [createModalOpen, setCreateModalOpen] = React.useState(false);
-  const [duplicateConfirmMode, setDuplicateConfirmMode] = React.useState(false);
+  const [conflictReasons, setConflictReasons] = React.useState<string[] | null>(null);
+  const [overrideReason, setOverrideReason] = React.useState("");
   const [sessionDate, setSessionDate] = React.useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [plannedStartTime, setPlannedStartTime] = React.useState<string>("");
   const [plannedEndTime, setPlannedEndTime] = React.useState<string>("");
   const [plannedDurationHours, setPlannedDurationHours] = React.useState<number>(0);
   const [title, setTitle] = React.useState<string>("");
+
+  const isAdmin = currentUser?.role === "admin";
+  const isDateOutsideCohortRange = !!sessionDate && !!cohort && (
+    sessionDate < cohort.startDate || (!!cohort.endDate && sessionDate > cohort.endDate)
+  );
 
   React.useEffect(() => {
     if (cohort) {
@@ -76,17 +99,20 @@ export default function CohortSessionsPage() {
         plannedDurationHours,
         title: title.trim(),
         force,
+        overrideReason: force ? overrideReason.trim() : undefined,
       }
     }, {
       onSuccess: () => {
         toast({ title: "Session created" });
         setCreateModalOpen(false);
-        setDuplicateConfirmMode(false);
+        setConflictReasons(null);
+        setOverrideReason("");
       },
       onError: (err) => {
         const status = (err as { status?: number } | undefined)?.status;
-        if (status === 409) {
-          setDuplicateConfirmMode(true);
+        const reasons = (err as { data?: { reasons?: string[] } } | undefined)?.data?.reasons;
+        if (status === 409 && reasons) {
+          setConflictReasons(reasons);
         } else {
           toast({ title: "Failed to create", description: getErrorMessage(err), variant: "destructive" });
         }
@@ -157,9 +183,26 @@ export default function CohortSessionsPage() {
               Clear
             </button>
           )}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-8 w-auto text-sm border-transparent bg-muted/20"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sessions</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={registerStatusFilter} onValueChange={setRegisterStatusFilter}>
+            <SelectTrigger className="h-8 w-auto text-sm border-transparent bg-muted/20"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any register status</SelectItem>
+              <SelectItem value="not_started">Not started</SelectItem>
+              <SelectItem value="in_progress">In progress</SelectItem>
+              <SelectItem value="completed">Register complete</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <Dialog open={createModalOpen} onOpenChange={(o) => { setCreateModalOpen(o); setDuplicateConfirmMode(false); }}>
+        <Dialog open={createModalOpen} onOpenChange={(o) => { setCreateModalOpen(o); setConflictReasons(null); setOverrideReason(""); }}>
           <DialogTrigger asChild>
             <Button className="hover-elevate shadow-sm" size="sm">
               <Plus className="w-4 h-4 mr-2" /> New Session
@@ -171,47 +214,77 @@ export default function CohortSessionsPage() {
               <DialogDescription>Generate a new register for {cohort.name}.</DialogDescription>
             </DialogHeader>
 
-            {duplicateConfirmMode ? (
+            {conflictReasons ? (
               <div className="py-6 space-y-4">
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-md">
                   <h4 className="font-semibold text-amber-800 dark:text-amber-500 flex items-center gap-2 mb-2">
-                    Duplicate Session Detected
+                    Session Conflict Detected
                   </h4>
-                  <p className="text-sm text-amber-700 dark:text-amber-400">
-                    A session already exists for this cohort on {sessionDate}. Are you sure you want to create another one?
-                  </p>
+                  <ul className="text-sm text-amber-700 dark:text-amber-400 list-disc list-inside space-y-1">
+                    {conflictReasons.map((reason) => (
+                      <li key={reason}>{CONFLICT_MESSAGES[reason] || reason}</li>
+                    ))}
+                  </ul>
                 </div>
+                {isAdmin ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="session-override-reason">Reason for creating anyway</Label>
+                    <Textarea
+                      id="session-override-reason"
+                      value={overrideReason}
+                      onChange={e => setOverrideReason(e.target.value)}
+                      placeholder="Explain why this session should be created despite the conflict"
+                      rows={3}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Only an Administrator can confirm and create a session despite this conflict.
+                  </p>
+                )}
                 <DialogFooter className="mt-6">
-                  <Button variant="outline" onClick={() => setDuplicateConfirmMode(false)}>Go Back</Button>
-                  <Button variant="destructive" onClick={() => handleCreate(true)} disabled={createMutation.isPending}>
-                    {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Create Anyway
-                  </Button>
+                  <Button variant="outline" onClick={() => { setConflictReasons(null); setOverrideReason(""); }}>Go Back</Button>
+                  {isAdmin && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleCreate(true)}
+                      disabled={createMutation.isPending || !overrideReason.trim()}
+                    >
+                      {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      Create Anyway
+                    </Button>
+                  )}
                 </DialogFooter>
               </div>
             ) : (
               <div className="grid gap-4 py-4">
                 <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
+                  <Label htmlFor="new-session-date">Date</Label>
+                  <Input id="new-session-date" type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
+                  {isDateOutsideCohortRange && (
+                    <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      This date falls outside the cohort's start/end dates.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Start Time</Label>
-                    <Input type="time" value={plannedStartTime} onChange={e => setPlannedStartTime(e.target.value)} />
+                    <Label htmlFor="new-session-start-time">Start Time</Label>
+                    <Input id="new-session-start-time" type="time" value={plannedStartTime} onChange={e => setPlannedStartTime(e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>End Time</Label>
-                    <Input type="time" value={plannedEndTime} onChange={e => setPlannedEndTime(e.target.value)} />
+                    <Label htmlFor="new-session-end-time">End Time</Label>
+                    <Input id="new-session-end-time" type="time" value={plannedEndTime} onChange={e => setPlannedEndTime(e.target.value)} />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Duration (Hours)</Label>
-                  <Input type="number" step="0.5" value={plannedDurationHours} onChange={e => setPlannedDurationHours(parseFloat(e.target.value))} />
+                  <Label htmlFor="new-session-duration">Duration (Hours)</Label>
+                  <Input id="new-session-duration" type="number" step="0.5" value={plannedDurationHours} onChange={e => setPlannedDurationHours(parseFloat(e.target.value))} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Title / Topic</Label>
-                  <Input placeholder="e.g. Module 1 Intro" value={title} onChange={e => setTitle(e.target.value)} required />
+                  <Label htmlFor="new-session-title">Title / Topic</Label>
+                  <Input id="new-session-title" placeholder="e.g. Module 1 Intro" value={title} onChange={e => setTitle(e.target.value)} required />
                 </div>
                 <DialogFooter className="mt-4">
                   <Button onClick={() => handleCreate(false)} disabled={createMutation.isPending || !title.trim()}>

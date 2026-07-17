@@ -49,7 +49,8 @@ export function SessionCardGrid({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 page-transition-enter stagger-2">
       {sessions.map((session) => {
-        const isComplete = session.recordedCount === session.expectedCount && session.expectedCount > 0;
+        const isCancelled = session.registerStatus === "cancelled";
+        const isComplete = session.registerStatus === "completed";
         // Only flag incomplete sessions as "needs attention" if they're today or in the past -
         // a future session naturally has no records yet, so it shouldn't be highlighted amber.
         // NOTE: session.sessionDate arrives as a coerced Date object (response date fields go
@@ -59,17 +60,21 @@ export function SessionCardGrid({
         const todayOnly = new Date();
         todayOnly.setHours(0, 0, 0, 0);
         const isFuture = sessionDateOnly.getTime() > todayOnly.getTime();
-        const needsAttention = !isComplete && !isFuture;
-        const accentClass = isComplete
-          ? 'border-l-4 border-l-emerald-500'
-          : needsAttention
-            ? 'border-l-4 border-l-amber-500'
-            : 'border-l-4 border-l-muted';
-        const completionLabelClass = isComplete
-          ? "text-emerald-600"
-          : needsAttention
-            ? "text-amber-600"
-            : "text-muted-foreground";
+        const needsAttention = !isCancelled && !isComplete && !isFuture;
+        const accentClass = isCancelled
+          ? 'border-l-4 border-l-muted'
+          : isComplete
+            ? 'border-l-4 border-l-emerald-500'
+            : needsAttention
+              ? 'border-l-4 border-l-amber-500'
+              : 'border-l-4 border-l-muted';
+        const completionLabelClass = isCancelled
+          ? "text-muted-foreground"
+          : isComplete
+            ? "text-emerald-600"
+            : needsAttention
+              ? "text-amber-600"
+              : "text-muted-foreground";
         const completionBarClass = isComplete
           ? 'bg-emerald-500'
           : needsAttention
@@ -77,7 +82,7 @@ export function SessionCardGrid({
             : 'bg-muted-foreground/40';
         return (
           <Link key={session.id} href={`/attendance/${session.id}`}>
-            <Card className={`h-full overflow-hidden transition-all hover:border-primary/50 hover:shadow-md cursor-pointer group ${accentClass}`}>
+            <Card className={`h-full overflow-hidden transition-all hover:border-primary/50 hover:shadow-md cursor-pointer group ${accentClass} ${isCancelled ? 'opacity-70' : ''}`}>
               <div className="p-5 flex flex-col h-full">
                 <div className="flex justify-between items-start mb-3">
                   <div>
@@ -106,17 +111,21 @@ export function SessionCardGrid({
 
                 <div className="mt-auto pt-4 border-t border-muted/50">
                   <div className={`text-sm font-semibold ${completionLabelClass}`}>
-                    {isComplete ? "Register complete" : "Register incomplete"}
+                    {isCancelled ? "Session cancelled" : isComplete ? "Register complete" : "Register incomplete"}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {session.recordedCount} of {session.expectedCount} learner{session.expectedCount === 1 ? "" : "s"} recorded
-                  </p>
-                  <div className="w-full bg-muted/30 h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div
-                      className={`h-full ${completionBarClass}`}
-                      style={{ width: `${session.expectedCount ? (session.recordedCount / session.expectedCount) * 100 : 0}%` }}
-                    ></div>
-                  </div>
+                  {!isCancelled && (
+                    <>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {session.recordedCount} of {session.expectedCount} learner{session.expectedCount === 1 ? "" : "s"} recorded
+                      </p>
+                      <div className="w-full bg-muted/30 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div
+                          className={`h-full ${completionBarClass}`}
+                          style={{ width: `${session.expectedCount ? (session.recordedCount / session.expectedCount) * 100 : 0}%` }}
+                        ></div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </Card>

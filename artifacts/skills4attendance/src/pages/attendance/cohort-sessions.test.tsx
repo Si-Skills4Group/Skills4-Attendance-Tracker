@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Router, Route } from 'wouter';
 import { memoryLocation } from 'wouter/memory-location';
 import { renderWithQueryClient } from '@/test/test-utils';
@@ -8,7 +9,7 @@ import CohortSessionsPage from './cohort-sessions';
 const cohort = {
   id: 5, name: 'Cohort A', programme: 'Data Analyst', level: '3', tutorId: 10, tutorName: 'Tam Tutor',
   deliveryDay: 'monday', sessionStartTime: '09:00:00', sessionEndTime: '16:00:00',
-  startDate: '2026-01-01', endDate: null, active: true, externalSystemId: null,
+  startDate: '2026-01-01', endDate: '2026-06-30', active: true, externalSystemId: null,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
 };
 
@@ -16,18 +17,21 @@ const sessionA1 = {
   id: 100, cohortId: 5, cohortName: 'Cohort A', tutorId: 10, tutorName: 'Tam Tutor',
   sessionDate: '2026-02-01', plannedStartTime: '09:00:00', plannedEndTime: '16:00:00',
   plannedDurationHours: 7, title: null, notes: null, createdBy: 1,
+  status: 'scheduled', cancelledAt: null, cancellationReason: null, overrideReason: null,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
-  recordedCount: 3, expectedCount: 5,
+  recordedCount: 3, expectedCount: 5, registerStatus: 'in_progress',
 };
 
 let mockCohort: { data: any; isLoading: boolean; isError: boolean };
 let mockSessions: { data: any[]; isLoading: boolean; isError: boolean };
+let mockCurrentUser: { data: any };
+const mockCreateMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
-  useGetCurrentUser: () => ({ data: { role: 'admin' } }),
+  useGetCurrentUser: () => mockCurrentUser,
   useGetCohort: () => mockCohort,
   useListAttendanceSessions: () => mockSessions,
-  useCreateAttendanceSession: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateAttendanceSession: () => ({ mutate: mockCreateMutate, isPending: false }),
   getGetCohortQueryKey: (id: number) => ['getCohort', id],
   getListAttendanceSessionsQueryKey: (params: unknown) => ['listAttendanceSessions', params],
 }));
@@ -43,6 +47,11 @@ function renderAtLocation(searchPath = '') {
 }
 
 describe('CohortSessionsPage', () => {
+  beforeEach(() => {
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCreateMutate.mockReset();
+  });
+
   it('shows only the selected cohort\'s sessions, with an explicit completion label', () => {
     mockCohort = { data: cohort, isLoading: false, isError: false };
     mockSessions = { data: [sessionA1], isLoading: false, isError: false };
@@ -106,5 +115,82 @@ describe('CohortSessionsPage', () => {
     renderAtLocation();
 
     expect(screen.getByRole('button', { name: /new session/i })).toBeInTheDocument();
+  });
+
+  it('shows a cancelled session distinctly, excluded from the completion label', () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = {
+      data: [{ ...sessionA1, status: 'cancelled', registerStatus: 'cancelled' }],
+      isLoading: false, isError: false,
+    };
+    renderAtLocation();
+
+    expect(screen.getByText('Session cancelled')).toBeInTheDocument();
+    expect(screen.queryByText('Register incomplete')).not.toBeInTheDocument();
+  });
+
+  it('warns when the chosen date falls outside the cohort\'s start/end dates', async () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /new session/i }));
+    const dateInput = screen.getByLabelText('Date');
+    await user.clear(dateInput);
+    await user.type(dateInput, '2026-08-15');
+
+    expect(screen.getByText(/falls outside the cohort's start\/end dates/i)).toBeInTheDocument();
+  });
+
+  it('shows a conflict dialog on 409 and lets an admin override with a reason', async () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    mockCreateMutate.mockImplementation((_payload, { onError }: any) => {
+      onError({ status: 409, data: { reasons: ['duplicate_session'] } });
+    });
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /new session/i }));
+    await user.type(screen.getByLabelText('Title / Topic'), 'Module 1');
+    await user.click(screen.getByRole('button', { name: /create register/i }));
+
+    expect(await screen.findByText('Session Conflict Detected')).toBeInTheDocument();
+    expect(screen.getByText(/a session already exists for this cohort/i)).toBeInTheDocument();
+
+    const createAnyway = screen.getByRole('button', { name: /create anyway/i });
+    expect(createAnyway).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText(/explain why/i), 'Second session approved');
+    expect(createAnyway).toBeEnabled();
+  });
+
+  it('does not let a tutor override a conflict -- no reason field or override button', async () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    mockCreateMutate.mockImplementation((_payload, { onError }: any) => {
+      onError({ status: 409, data: { reasons: ['duplicate_session'] } });
+    });
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /new session/i }));
+    await user.type(screen.getByLabelText('Title / Topic'), 'Module 1');
+    await user.click(screen.getByRole('button', { name: /create register/i }));
+
+    expect(await screen.findByText('Session Conflict Detected')).toBeInTheDocument();
+    expect(screen.getByText(/only an administrator can confirm/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create anyway/i })).not.toBeInTheDocument();
+  });
+
+  it('offers session-status and register-status filters', () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    renderAtLocation();
+
+    expect(screen.getByText('All sessions')).toBeInTheDocument();
+    expect(screen.getByText('Any register status')).toBeInTheDocument();
   });
 });

@@ -134,15 +134,16 @@ def cohort_factory(db):
             session_start_time="09:00",
             session_end_time="16:00",
             start_date="2026-01-01",
+            end_date=None,
             active=True,
         )
         defaults.update(overrides)
         db.execute(
             """
             INSERT INTO cohorts (name, programme, level, tutor_id, delivery_day, session_start_time,
-                                  session_end_time, start_date, active)
+                                  session_end_time, start_date, end_date, active)
             VALUES (%(name)s, %(programme)s, %(level)s, %(tutor_id)s, %(delivery_day)s, %(session_start_time)s,
-                    %(session_end_time)s, %(start_date)s, %(active)s)
+                    %(session_end_time)s, %(start_date)s, %(end_date)s, %(active)s)
             RETURNING id
             """,
             defaults,
@@ -172,15 +173,17 @@ def learner_factory(db):
             status="active",
             tutor_id=None,
             cohort_id=None,
+            withdrawal_date=None,
+            actual_end_date=None,
         )
         defaults.update(overrides)
         defaults.setdefault("uln", None)
         db.execute(
             """
             INSERT INTO learners (learner_ref, uln, first_name, last_name, programme, level, start_date, status,
-                                   tutor_id, cohort_id)
+                                   tutor_id, cohort_id, withdrawal_date, actual_end_date)
             VALUES (%(learner_ref)s, %(uln)s, %(first_name)s, %(last_name)s, %(programme)s, %(level)s, %(start_date)s,
-                    %(status)s, %(tutor_id)s, %(cohort_id)s)
+                    %(status)s, %(tutor_id)s, %(cohort_id)s, %(withdrawal_date)s, %(actual_end_date)s)
             RETURNING id
             """,
             defaults,

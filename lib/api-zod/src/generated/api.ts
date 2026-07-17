@@ -1320,7 +1320,9 @@ export const ListAttendanceSessionsQueryParams = zod.object({
   "cohortId": zod.coerce.number().optional(),
   "tutorId": zod.coerce.number().optional(),
   "dateFrom": zod.date().optional(),
-  "dateTo": zod.date().optional()
+  "dateTo": zod.date().optional(),
+  "status": zod.enum(['scheduled', 'cancelled']).optional(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']).optional()
 })
 
 export const ListAttendanceSessionsResponseItem = zod.object({
@@ -1335,8 +1337,13 @@ export const ListAttendanceSessionsResponseItem = zod.object({
   "plannedDurationHours": zod.number(),
   "title": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1359,7 +1366,8 @@ export const CreateAttendanceSessionBody = zod.object({
   "plannedDurationHours": zod.number().min(createAttendanceSessionBodyPlannedDurationHoursMin),
   "title": zod.string().min(1),
   "notes": zod.string().optional(),
-  "force": zod.boolean().default(createAttendanceSessionBodyForceDefault)
+  "force": zod.boolean().default(createAttendanceSessionBodyForceDefault),
+  "overrideReason": zod.string().optional()
 })
 
 export const CreateAttendanceSessionResponse = zod.object({
@@ -1374,8 +1382,13 @@ export const CreateAttendanceSessionResponse = zod.object({
   "plannedDurationHours": zod.number(),
   "title": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1399,8 +1412,13 @@ export const GetAttendanceSessionResponse = zod.object({
   "plannedDurationHours": zod.number(),
   "title": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1429,7 +1447,7 @@ export const UpdateAttendanceSessionParams = zod.object({
 
 export const updateAttendanceSessionBodyPlannedDurationHoursMin = 0;
 
-
+export const updateAttendanceSessionBodyConfirmChangeDefault = false;
 
 export const UpdateAttendanceSessionBody = zod.object({
   "sessionDate": zod.coerce.date().optional(),
@@ -1437,7 +1455,8 @@ export const UpdateAttendanceSessionBody = zod.object({
   "plannedEndTime": zod.string().min(1).optional(),
   "plannedDurationHours": zod.number().min(updateAttendanceSessionBodyPlannedDurationHoursMin).optional(),
   "title": zod.string().nullish(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "confirmChange": zod.boolean().default(updateAttendanceSessionBodyConfirmChangeDefault)
 })
 
 export const UpdateAttendanceSessionResponse = zod.object({
@@ -1452,12 +1471,140 @@ export const UpdateAttendanceSessionResponse = zod.object({
   "plannedDurationHours": zod.number(),
   "title": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
+
+
+export const CancelAttendanceSessionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const cancelAttendanceSessionBodyConfirmWithAttendanceDefault = false;
+
+export const CancelAttendanceSessionBody = zod.object({
+  "reason": zod.string().min(1),
+  "confirmWithAttendance": zod.boolean().default(cancelAttendanceSessionBodyConfirmWithAttendanceDefault)
+})
+
+export const CancelAttendanceSessionResponse = zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const GetSessionExpectedLearnersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSessionExpectedLearnersResponseItem = zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+})
+export const GetSessionExpectedLearnersResponse = zod.array(GetSessionExpectedLearnersResponseItem)
+
+
+export const GenerateSessionRegisterParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GenerateSessionRegisterResponse = zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const RefreshSessionRegisterParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const refreshSessionRegisterBodyConfirmDefault = false;
+
+export const RefreshSessionRegisterBody = zod.object({
+  "confirm": zod.boolean().default(refreshSessionRegisterBodyConfirmDefault)
+})
+
+export const RefreshSessionRegisterResponse = zod.union([zod.object({
+  "toAdd": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+})),
+  "toRemove": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+})),
+  "blocked": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+}))
+}),zod.object({
+  "added": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+})),
+  "removed": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+})),
+  "blocked": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string().optional()
+}))
+})])
 
 
 export const SaveAttendanceRegisterParams = zod.object({
@@ -1494,8 +1641,13 @@ export const SaveAttendanceRegisterResponse = zod.object({
   "plannedDurationHours": zod.number(),
   "title": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1533,8 +1685,13 @@ export const MarkAllPresentResponse = zod.object({
   "plannedDurationHours": zod.number(),
   "title": zod.string().nullable(),
   "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
   "recordedCount": zod.number(),
   "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled']),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()

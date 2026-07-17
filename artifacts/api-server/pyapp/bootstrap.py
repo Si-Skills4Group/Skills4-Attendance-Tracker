@@ -56,6 +56,14 @@ EXCEPTION
 END
 $$;
 
+DO $$
+BEGIN
+  CREATE TYPE session_status AS ENUM ('scheduled', 'cancelled');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS users (
   id serial PRIMARY KEY,
   first_name text NOT NULL,
@@ -335,6 +343,36 @@ CREATE INDEX IF NOT EXISTS idx_learners_tutor_id ON learners (tutor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity_type, entity_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs (user_id, timestamp DESC);
+
+-- Phase 6: attendance session lifecycle (cancel/edit-confirm/duplicate-override)
+-- and a persisted expected-learner register snapshot (see session_register_lib.py).
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS status session_status NOT NULL DEFAULT 'scheduled';
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cancelled_at timestamptz;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cancellation_reason text;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cancelled_by integer;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS register_locked_at timestamptz;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS register_locked_by integer;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS override_reason text;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS updated_by integer;
+-- Explicit marker (rather than "no snapshot rows exist yet") so a session
+-- whose register legitimately has zero eligible learners is never mistaken
+-- for one that hasn't been generated, and silently regenerated later.
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS register_generated_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_status ON attendance_sessions (status);
+
+CREATE TABLE IF NOT EXISTS session_expected_learners (
+  id serial PRIMARY KEY,
+  session_id integer NOT NULL,
+  learner_id integer NOT NULL,
+  cohort_id integer NOT NULL,
+  source_allocation_history_id integer,
+  generated_at timestamptz NOT NULL DEFAULT now(),
+  generated_by integer,
+  UNIQUE (session_id, learner_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_expected_learners_session ON session_expected_learners (session_id);
+CREATE INDEX IF NOT EXISTS idx_session_expected_learners_learner ON session_expected_learners (learner_id);
 
 CREATE TABLE IF NOT EXISTS app_settings (
   id serial PRIMARY KEY,

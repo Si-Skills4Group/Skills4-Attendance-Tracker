@@ -54,7 +54,11 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
     Three-tier resolution per learner: the most recent history row on or
     before as_of_date; else the *earliest* history row's previous_cohort_id
     (the cohort they were in before their first-ever transfer); else the
-    learner's current cohort_id (never transferred)."""
+    learner's current cohort_id (never transferred).
+
+    Also excludes learners who, as of that date, hadn't started yet, or had
+    already withdrawn/completed -- cohort-history resolution alone doesn't
+    know about a learner's own start/end lifecycle."""
     cur.execute(
         """
         SELECT l.id
@@ -68,6 +72,9 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
              ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
             l.cohort_id
         ) = %(cohort_id)s
+        AND l.start_date <= %(as_of)s
+        AND NOT (l.status = 'withdrawn' AND l.withdrawal_date IS NOT NULL AND l.withdrawal_date <= %(as_of)s)
+        AND NOT (l.status = 'completed' AND l.actual_end_date IS NOT NULL AND l.actual_end_date <= %(as_of)s)
         """,
         {"as_of": as_of_date, "cohort_id": cohort_id},
     )
@@ -92,6 +99,9 @@ def expected_learners_count_sql(cohort_id_column: str, as_of_date_column: str) -
              WHERE h.learner_id = exp_l.id ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
             exp_l.cohort_id
         ) = {cohort_id_column}
+        AND exp_l.start_date <= {as_of_date_column}
+        AND NOT (exp_l.status = 'withdrawn' AND exp_l.withdrawal_date IS NOT NULL AND exp_l.withdrawal_date <= {as_of_date_column})
+        AND NOT (exp_l.status = 'completed' AND exp_l.actual_end_date IS NOT NULL AND exp_l.actual_end_date <= {as_of_date_column})
     )"""
 
 

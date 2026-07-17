@@ -4,10 +4,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
-from ..allocation_lib import expected_learners_count_sql
 from ..auth import require_admin, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
+from ..session_register_lib import ensure_expected_learners_snapshots_bulk
 
 router = APIRouter(tags=["cohorts"])
 
@@ -187,20 +187,31 @@ def list_cohort_summary(
                 """
                 SELECT cohort_id AS "cohortId", count(*)::int AS count
                 FROM attendance_sessions
-                WHERE cohort_id = ANY(%s) AND session_date >= CURRENT_DATE
+                WHERE cohort_id = ANY(%s) AND session_date >= CURRENT_DATE AND status != 'cancelled'
                 GROUP BY cohort_id
                 """,
                 (cohort_ids,),
             )
             upcoming_counts = {row["cohortId"]: row["count"] for row in cur.fetchall()}
 
-            expected_sql = expected_learners_count_sql("s.cohort_id", "s.session_date")
+            # Ensure every past-or-today session in these cohorts has its
+            # expected-learners snapshot generated before counting against
+            # it, so "outstanding" reads the same frozen roster the session's
+            # own register page shows (rather than a live-recomputed one
+            # that could disagree after a backdated allocation correction).
             cur.execute(
-                f"""
+                "SELECT id FROM attendance_sessions WHERE cohort_id = ANY(%s) AND session_date <= CURRENT_DATE",
+                (cohort_ids,),
+            )
+            ensure_expected_learners_snapshots_bulk(cur, [row["id"] for row in cur.fetchall()])
+
+            cur.execute(
+                """
                 SELECT s.cohort_id AS "cohortId", count(*)::int AS count
                 FROM attendance_sessions s
-                WHERE s.cohort_id = ANY(%s) AND s.session_date <= CURRENT_DATE
-                  AND (SELECT count(*) FROM attendance_records WHERE session_id = s.id) < {expected_sql}
+                WHERE s.cohort_id = ANY(%s) AND s.session_date <= CURRENT_DATE AND s.status != 'cancelled'
+                  AND (SELECT count(*) FROM attendance_records WHERE session_id = s.id)
+                      < (SELECT count(*) FROM session_expected_learners WHERE session_id = s.id)
                 GROUP BY s.cohort_id
                 """,
                 (cohort_ids,),

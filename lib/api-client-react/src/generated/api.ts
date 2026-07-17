@@ -43,6 +43,7 @@ import type {
   CsvContent,
   DeactivateTutorParams,
   ErrorResponse,
+  ExpectedLearner,
   ExportReportParams,
   GetOrganisationReportParams,
   GetProgrammeReportParams,
@@ -72,6 +73,10 @@ import type {
   LoginInput,
   OrganisationReport,
   ProgrammeAttendanceRow,
+  RefreshRegisterInput,
+  RegisterRefreshDiff,
+  RegisterRefreshResult,
+  SessionCancelInput,
   SettingsUpdate,
   Tutor,
   TutorAllocationGroup,
@@ -3771,6 +3776,274 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getUpdateAttendanceSessionMutationOptions(options));
     }
 
+export const getCancelAttendanceSessionUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/cancel`
+}
+
+export const cancelAttendanceSession = async (id: number,
+    sessionCancelInput: SessionCancelInput, options?: RequestInit): Promise<AttendanceSession> => {
+
+  return customFetch<AttendanceSession>(getCancelAttendanceSessionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sessionCancelInput)
+  }
+);}
+
+
+
+
+
+export const getCancelAttendanceSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAttendanceSession>>, TError,{id: number;data: BodyType<SessionCancelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelAttendanceSession>>, TError,{id: number;data: BodyType<SessionCancelInput>}, TContext> => {
+
+const mutationKey = ['cancelAttendanceSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelAttendanceSession>>, {id: number;data: BodyType<SessionCancelInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  cancelAttendanceSession(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelAttendanceSessionMutationResult = NonNullable<Awaited<ReturnType<typeof cancelAttendanceSession>>>
+    export type CancelAttendanceSessionMutationBody = BodyType<SessionCancelInput>
+    export type CancelAttendanceSessionMutationError = ErrorType<ErrorResponse>
+
+    export const useCancelAttendanceSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelAttendanceSession>>, TError,{id: number;data: BodyType<SessionCancelInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelAttendanceSession>>,
+        TError,
+        {id: number;data: BodyType<SessionCancelInput>},
+        TContext
+      > => {
+      return useMutation(getCancelAttendanceSessionMutationOptions(options));
+    }
+
+export const getGetSessionExpectedLearnersUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/expected-learners`
+}
+
+export const getSessionExpectedLearners = async (id: number, options?: RequestInit): Promise<ExpectedLearner[]> => {
+
+  return customFetch<ExpectedLearner[]>(getGetSessionExpectedLearnersUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSessionExpectedLearnersQueryKey = (id: number,) => {
+    return [
+    `/api/attendance/sessions/${id}/expected-learners`
+    ] as const;
+    }
+
+
+export const getGetSessionExpectedLearnersQueryOptions = <TData = Awaited<ReturnType<typeof getSessionExpectedLearners>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSessionExpectedLearners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSessionExpectedLearnersQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSessionExpectedLearners>>> = ({ signal }) => getSessionExpectedLearners(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSessionExpectedLearners>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSessionExpectedLearnersQueryResult = NonNullable<Awaited<ReturnType<typeof getSessionExpectedLearners>>>
+export type GetSessionExpectedLearnersQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetSessionExpectedLearners<TData = Awaited<ReturnType<typeof getSessionExpectedLearners>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSessionExpectedLearners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSessionExpectedLearnersQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateSessionRegisterUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/generate-register`
+}
+
+export const generateSessionRegister = async (id: number, options?: RequestInit): Promise<AttendanceSession> => {
+
+  return customFetch<AttendanceSession>(getGenerateSessionRegisterUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getGenerateSessionRegisterMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSessionRegister>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateSessionRegister>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['generateSessionRegister'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateSessionRegister>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  generateSessionRegister(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateSessionRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof generateSessionRegister>>>
+
+    export type GenerateSessionRegisterMutationError = ErrorType<ErrorResponse>
+
+    export const useGenerateSessionRegister = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSessionRegister>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateSessionRegister>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getGenerateSessionRegisterMutationOptions(options));
+    }
+
+export const getRefreshSessionRegisterUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/refresh-register`
+}
+
+export const refreshSessionRegister = async (id: number,
+    refreshRegisterInput?: RefreshRegisterInput, options?: RequestInit): Promise<RegisterRefreshDiff | RegisterRefreshResult> => {
+
+  return customFetch<RegisterRefreshDiff | RegisterRefreshResult>(getRefreshSessionRegisterUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(refreshRegisterInput)
+  }
+);}
+
+
+
+
+
+export const getRefreshSessionRegisterMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSessionRegister>>, TError,{id: number;data?: BodyType<RefreshRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshSessionRegister>>, TError,{id: number;data?: BodyType<RefreshRegisterInput>}, TContext> => {
+
+const mutationKey = ['refreshSessionRegister'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshSessionRegister>>, {id: number;data?: BodyType<RefreshRegisterInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  refreshSessionRegister(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshSessionRegisterMutationResult = NonNullable<Awaited<ReturnType<typeof refreshSessionRegister>>>
+    export type RefreshSessionRegisterMutationBody = BodyType<RefreshRegisterInput> | undefined
+    export type RefreshSessionRegisterMutationError = ErrorType<ErrorResponse>
+
+    export const useRefreshSessionRegister = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshSessionRegister>>, TError,{id: number;data?: BodyType<RefreshRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshSessionRegister>>,
+        TError,
+        {id: number;data?: BodyType<RefreshRegisterInput>},
+        TContext
+      > => {
+      return useMutation(getRefreshSessionRegisterMutationOptions(options));
+    }
+
 export const getSaveAttendanceRegisterUrl = (id: number,) => {
 
 
@@ -3860,7 +4133,7 @@ export const markAllPresent = async (id: number, options?: RequestInit): Promise
 
 
 
-export const getMarkAllPresentMutationOptions = <TError = ErrorType<unknown>,
+export const getMarkAllPresentMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAllPresent>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof markAllPresent>>, TError,{id: number}, TContext> => {
 
@@ -3889,9 +4162,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type MarkAllPresentMutationResult = NonNullable<Awaited<ReturnType<typeof markAllPresent>>>
 
-    export type MarkAllPresentMutationError = ErrorType<unknown>
+    export type MarkAllPresentMutationError = ErrorType<ErrorResponse>
 
-    export const useMarkAllPresent = <TError = ErrorType<unknown>,
+    export const useMarkAllPresent = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAllPresent>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof markAllPresent>>,

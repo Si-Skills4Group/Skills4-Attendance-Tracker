@@ -5,10 +5,14 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RegisterStatus } from './registerStatus';
+import type { SessionStatus } from './sessionStatus';
 
 export type ListAttendanceSessionsParams = {
 cohortId?: number;
 tutorId?: number;
 dateFrom?: Date;
 dateTo?: Date;
+status?: SessionStatus;
+registerStatus?: RegisterStatus;
 };

@@ -18,4 +18,5 @@ export interface AttendanceSessionUpdate {
   title?: string | null;
   /** @nullable */
   notes?: string | null;
+  confirmChange?: boolean;
 }

@@ -19,4 +19,5 @@ export interface AttendanceSessionInput {
   title: string;
   notes?: string;
   force?: boolean;
+  overrideReason?: string;
 }

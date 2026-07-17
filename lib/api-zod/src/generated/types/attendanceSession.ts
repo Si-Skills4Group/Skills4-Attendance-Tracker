@@ -5,6 +5,8 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RegisterStatus } from './registerStatus';
+import type { SessionStatus } from './sessionStatus';
 
 export interface AttendanceSession {
   id: number;
@@ -20,8 +22,16 @@ export interface AttendanceSession {
   title: string | null;
   /** @nullable */
   notes: string | null;
+  status: SessionStatus;
+  /** @nullable */
+  cancelledAt: Date | null;
+  /** @nullable */
+  cancellationReason: string | null;
+  /** @nullable */
+  overrideReason: string | null;
   recordedCount: number;
   expectedCount: number;
+  registerStatus: RegisterStatus;
   createdBy: number;
   createdAt: Date;
   updatedAt: Date;

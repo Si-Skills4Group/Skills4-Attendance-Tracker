@@ -43,6 +43,24 @@ export const AttendanceStatus = {
   withdrawn: 'withdrawn',
 } as const;
 
+export type SessionStatus = typeof SessionStatus[keyof typeof SessionStatus];
+
+
+export const SessionStatus = {
+  scheduled: 'scheduled',
+  cancelled: 'cancelled',
+} as const;
+
+export type RegisterStatus = typeof RegisterStatus[keyof typeof RegisterStatus];
+
+
+export const RegisterStatus = {
+  not_started: 'not_started',
+  in_progress: 'in_progress',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
 export type DeliveryDay = typeof DeliveryDay[keyof typeof DeliveryDay];
 
 
@@ -681,8 +699,16 @@ export interface AttendanceSession {
   title: string | null;
   /** @nullable */
   notes: string | null;
+  status: SessionStatus;
+  /** @nullable */
+  cancelledAt: string | null;
+  /** @nullable */
+  cancellationReason: string | null;
+  /** @nullable */
+  overrideReason: string | null;
   recordedCount: number;
   expectedCount: number;
+  registerStatus: RegisterStatus;
   createdBy: number;
   createdAt: string;
   updatedAt: string;
@@ -701,6 +727,7 @@ export interface AttendanceSessionInput {
   title: string;
   notes?: string;
   force?: boolean;
+  overrideReason?: string;
 }
 
 export interface AttendanceSessionUpdate {
@@ -715,6 +742,35 @@ export interface AttendanceSessionUpdate {
   title?: string | null;
   /** @nullable */
   notes?: string | null;
+  confirmChange?: boolean;
+}
+
+export interface SessionCancelInput {
+  /** @minLength 1 */
+  reason: string;
+  confirmWithAttendance?: boolean;
+}
+
+export interface RefreshRegisterInput {
+  confirm?: boolean;
+}
+
+export interface ExpectedLearner {
+  learnerId: number;
+  learnerName: string;
+  learnerRef?: string;
+}
+
+export interface RegisterRefreshDiff {
+  toAdd: ExpectedLearner[];
+  toRemove: ExpectedLearner[];
+  blocked: ExpectedLearner[];
+}
+
+export interface RegisterRefreshResult {
+  added: ExpectedLearner[];
+  removed: ExpectedLearner[];
+  blocked: ExpectedLearner[];
 }
 
 export interface RegisterEntry {
@@ -959,6 +1015,8 @@ cohortId?: number;
 tutorId?: number;
 dateFrom?: string;
 dateTo?: string;
+status?: SessionStatus;
+registerStatus?: RegisterStatus;
 };
 
 export type GetOrganisationReportParams = {
