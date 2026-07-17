@@ -6,12 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CohortSummary } from './cohortSummary';
-import type { LearnerAttendanceRow } from './learnerAttendanceRow';
+import type { LearnerAttendanceSummaryRow } from './learnerAttendanceSummaryRow';
 import type { SessionSummary } from './sessionSummary';
 
 export interface TutorDashboard {
   cohorts: CohortSummary[];
   nextSession: SessionSummary | null;
   sessionsAwaitingCompletion: SessionSummary[];
-  lowAttendanceLearners: LearnerAttendanceRow[];
+  lowAttendanceLearners: LearnerAttendanceSummaryRow[];
 }

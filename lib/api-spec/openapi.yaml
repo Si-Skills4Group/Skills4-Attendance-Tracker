@@ -17,6 +17,7 @@ tags:
   - name: cohorts
   - name: allocation
   - name: attendance
+  - name: attendance-summary
   - name: reports
   - name: audit
   - name: settings
@@ -107,6 +108,213 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TutorDashboard"
+  /dashboard/tutor/cohorts:
+    get:
+      operationId: getTutorDashboardCohorts
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: Cohort cards for the current tutor
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TutorCohortOverviewRow" }
+  /dashboard/tutor/outstanding-registers:
+    get:
+      operationId: getTutorOutstandingRegisters
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Registers awaiting completion for the current tutor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutstandingRegisterListResponse"
+  /dashboard/tutor/low-attendance-learners:
+    get:
+      operationId: getTutorLowAttendanceLearners
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Learners below the low-attendance threshold, scoped to the current tutor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerAttendanceSummaryListResponse"
+  /dashboard/admin/tutors:
+    get:
+      operationId: getAdminDashboardTutors
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Per-tutor attendance/completion overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminTutorOverviewListResponse"
+  /dashboard/admin/cohorts:
+    get:
+      operationId: getAdminDashboardCohorts
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Per-cohort attendance/completion overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCohortOverviewListResponse"
+  /dashboard/admin/outstanding-registers:
+    get:
+      operationId: getAdminOutstandingRegisters
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Registers awaiting completion, organisation-wide
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutstandingRegisterListResponse"
+  /dashboard/admin/low-attendance-learners:
+    get:
+      operationId: getAdminLowAttendanceLearners
+      tags: [dashboard]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Learners below the low-attendance threshold, organisation-wide
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerAttendanceSummaryListResponse"
+
+  # ---------- Attendance summary (reusable calculation endpoints) ----------
+  /attendance-summary/learners/{learnerId}:
+    get:
+      operationId: getLearnerAttendanceSummary
+      tags: [attendance-summary]
+      parameters:
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: Attendance summary for one learner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSummaryResponse"
+        "400":
+          description: Invalid period/date range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Learner not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance-summary/cohorts/{cohortId}:
+    get:
+      operationId: getCohortAttendanceSummary
+      tags: [attendance-summary]
+      parameters:
+        - name: cohortId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: Attendance summary for one cohort
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSummaryResponse"
+        "400":
+          description: Invalid period/date range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Cohort not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance-summary/tutors/{tutorId}:
+    get:
+      operationId: getTutorAttendanceSummary
+      tags: [attendance-summary]
+      parameters:
+        - name: tutorId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: Attendance summary for one tutor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSummaryResponse"
+        "400":
+          description: Invalid period/date range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Tutor not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ---------- Tutors ----------
   /tutors:
@@ -1878,6 +2086,30 @@ paths:
                 $ref: "#/components/schemas/AppSettings"
 
 components:
+  parameters:
+    PeriodParam:
+      name: period
+      in: query
+      schema:
+        type: string
+        enum: [current_week, current_month, previous_month, last_30_days, custom]
+        default: current_month
+    DateFromParam:
+      name: dateFrom
+      in: query
+      schema: { type: string, format: date }
+    DateToParam:
+      name: dateTo
+      in: query
+      schema: { type: string, format: date }
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, default: 1 }
+    PageSizeParam:
+      name: pageSize
+      in: query
+      schema: { type: integer, default: 25 }
   schemas:
     HealthStatus:
       type: object
@@ -3010,7 +3242,7 @@ components:
           items: { $ref: "#/components/schemas/RecentEdit" }
         lowAttendanceLearners:
           type: array
-          items: { $ref: "#/components/schemas/LearnerAttendanceRow" }
+          items: { $ref: "#/components/schemas/LearnerAttendanceSummaryRow" }
 
     TutorDashboard:
       type: object
@@ -3034,7 +3266,246 @@ components:
           items: { $ref: "#/components/schemas/SessionSummary" }
         lowAttendanceLearners:
           type: array
-          items: { $ref: "#/components/schemas/LearnerAttendanceRow" }
+          items: { $ref: "#/components/schemas/LearnerAttendanceSummaryRow" }
+
+    # ---------- Phase 8: attendance calculations and dashboards ----------
+
+    AttendanceMetrics:
+      type: object
+      required:
+        [
+          periodStart,
+          periodEnd,
+          expectedMinutes,
+          attendedMinutes,
+          authorisedAbsenceMinutes,
+          authorisedAbsenceSessions,
+          unauthorisedAbsenceMinutes,
+          unauthorisedAbsenceSessions,
+          lateMinutes,
+          lateSessionCount,
+          averageMinutesLate,
+          missingRecordCount,
+          completedRegisterRowCount,
+          attendancePercentage,
+          attendanceDataCompleteness,
+          insufficientData,
+          calculatedAt,
+        ]
+      properties:
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        expectedMinutes: { type: number }
+        attendedMinutes: { type: number }
+        authorisedAbsenceMinutes: { type: number }
+        authorisedAbsenceSessions: { type: integer }
+        unauthorisedAbsenceMinutes: { type: number }
+        unauthorisedAbsenceSessions: { type: integer }
+        lateMinutes: { type: integer }
+        lateSessionCount: { type: integer }
+        averageMinutesLate:
+          oneOf:
+            - type: number
+            - type: "null"
+        missingRecordCount: { type: integer }
+        completedRegisterRowCount: { type: integer }
+        attendancePercentage:
+          description: Null when expectedMinutes is zero -- never a fabricated 0%.
+          oneOf:
+            - type: number
+            - type: "null"
+        attendanceDataCompleteness:
+          description: Percentage of applicable register rows that have an actual recorded status (vs missing).
+          oneOf:
+            - type: number
+            - type: "null"
+        insufficientData:
+          description: True when there isn't enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).
+          type: boolean
+        calculatedAt: { type: string, format: date-time }
+
+    RegisterCompletionSummary:
+      type: object
+      required:
+        [
+          periodStart,
+          periodEnd,
+          notStarted,
+          inProgress,
+          completed,
+          locked,
+          outstanding,
+          completionPercentage,
+        ]
+      properties:
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        notStarted: { type: integer }
+        inProgress: { type: integer }
+        completed: { type: integer }
+        locked: { type: integer }
+        outstanding:
+          description: Not-started/in-progress registers whose session date has already passed.
+          type: integer
+        completionPercentage:
+          oneOf:
+            - type: number
+            - type: "null"
+
+    AttendanceSummaryResponse:
+      type: object
+      required: [metrics, registerCompletion]
+      properties:
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+
+    BudProgress:
+      description: Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.
+      type: object
+      properties:
+        activityProgress:
+          oneOf: [{ type: number }, { type: "null" }]
+        activitiesOverdue:
+          oneOf: [{ type: integer }, { type: "null" }]
+        lastSubmissionDate:
+          oneOf: [{ type: string, format: date-time }, { type: "null" }]
+        lastCompletedActivity:
+          oneOf: [{ type: string, format: date }, { type: "null" }]
+        statusDesc:
+          oneOf: [{ type: string }, { type: "null" }]
+        learningPlanUrl:
+          oneOf: [{ type: string }, { type: "null" }]
+        syncedAt:
+          oneOf: [{ type: string, format: date-time }, { type: "null" }]
+
+    LearnerAttendanceSummaryRow:
+      type: object
+      required: [learnerId, learnerName, learnerRef, metrics]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+        cohortName:
+          oneOf:
+            - type: string
+            - type: "null"
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        bud:
+          description: Null when no Bud sync match exists yet -- never breaks the row.
+          oneOf:
+            - $ref: "#/components/schemas/BudProgress"
+            - type: "null"
+
+    LearnerAttendanceSummaryListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerAttendanceSummaryRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    OutstandingRegisterListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SessionSummary" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    TutorCohortOverviewRow:
+      type: object
+      required:
+        [
+          cohort,
+          activeLearnerCount,
+          nextSession,
+          attendancePercentage,
+          registerCompletion,
+          lowAttendanceLearnerCount,
+        ]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        activeLearnerCount: { type: integer }
+        nextSession:
+          oneOf:
+            - $ref: "#/components/schemas/SessionSummary"
+            - type: "null"
+        attendancePercentage:
+          oneOf:
+            - type: number
+            - type: "null"
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        lowAttendanceLearnerCount: { type: integer }
+
+    AdminTutorOverviewRow:
+      type: object
+      required:
+        [
+          tutorId,
+          tutorName,
+          activeCohorts,
+          activeLearners,
+          attendancePercentage,
+          registerCompletion,
+          lowAttendanceLearnerCount,
+        ]
+      properties:
+        tutorId: { type: integer }
+        tutorName: { type: string }
+        activeCohorts: { type: integer }
+        activeLearners: { type: integer }
+        attendancePercentage:
+          oneOf:
+            - type: number
+            - type: "null"
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        lowAttendanceLearnerCount: { type: integer }
+
+    AdminTutorOverviewListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminTutorOverviewRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    AdminCohortOverviewRow:
+      type: object
+      required:
+        [
+          cohort,
+          activeLearnerCount,
+          attendancePercentage,
+          registerCompletion,
+        ]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        activeLearnerCount: { type: integer }
+        attendancePercentage:
+          oneOf:
+            - type: number
+            - type: "null"
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+
+    AdminCohortOverviewListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminCohortOverviewRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     AuditLogEntry:
       type: object

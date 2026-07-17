@@ -20,7 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminCohortOverviewListResponse,
   AdminDashboard,
+  AdminTutorOverviewListResponse,
   AllocationHistoryEntry,
   AllocationInput,
   AllocationResult,
@@ -30,6 +32,7 @@ import type {
   AttendanceSession,
   AttendanceSessionInput,
   AttendanceSessionUpdate,
+  AttendanceSummaryResponse,
   AuditLogEntry,
   AuditLogListResponse,
   AuthUser,
@@ -46,10 +49,21 @@ import type {
   ErrorResponse,
   ExpectedLearner,
   ExportReportParams,
+  GetAdminDashboardCohortsParams,
+  GetAdminDashboardTutorsParams,
+  GetAdminLowAttendanceLearnersParams,
+  GetAdminOutstandingRegistersParams,
+  GetCohortAttendanceSummaryParams,
+  GetLearnerAttendanceSummaryParams,
   GetOrganisationReportParams,
   GetProgrammeReportParams,
+  GetTutorAttendanceSummaryParams,
+  GetTutorDashboardCohortsParams,
+  GetTutorLowAttendanceLearnersParams,
+  GetTutorOutstandingRegistersParams,
   HealthStatus,
   Learner,
+  LearnerAttendanceSummaryListResponse,
   LearnerImportJob,
   LearnerImportJobRow,
   LearnerImportJobRowListResponse,
@@ -74,6 +88,7 @@ import type {
   LockRegisterInput,
   LoginInput,
   OrganisationReport,
+  OutstandingRegisterListResponse,
   ProgrammeAttendanceRow,
   RefreshRegisterInput,
   RegisterRefreshDiff,
@@ -82,6 +97,7 @@ import type {
   SettingsUpdate,
   Tutor,
   TutorAllocationGroup,
+  TutorCohortOverviewRow,
   TutorDashboard,
   TutorImportJob,
   TutorImportJobRow,
@@ -536,6 +552,801 @@ export function useGetTutorDashboard<TData = Awaited<ReturnType<typeof getTutorD
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetTutorDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTutorDashboardCohortsUrl = (params?: GetTutorDashboardCohortsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/tutor/cohorts?${stringifiedParams}` : `/api/dashboard/tutor/cohorts`
+}
+
+export const getTutorDashboardCohorts = async (params?: GetTutorDashboardCohortsParams, options?: RequestInit): Promise<TutorCohortOverviewRow[]> => {
+
+  return customFetch<TutorCohortOverviewRow[]>(getGetTutorDashboardCohortsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorDashboardCohortsQueryKey = (params?: GetTutorDashboardCohortsParams,) => {
+    return [
+    `/api/dashboard/tutor/cohorts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTutorDashboardCohortsQueryOptions = <TData = Awaited<ReturnType<typeof getTutorDashboardCohorts>>, TError = ErrorType<unknown>>(params?: GetTutorDashboardCohortsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorDashboardCohorts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorDashboardCohortsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorDashboardCohorts>>> = ({ signal }) => getTutorDashboardCohorts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorDashboardCohorts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorDashboardCohortsQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorDashboardCohorts>>>
+export type GetTutorDashboardCohortsQueryError = ErrorType<unknown>
+
+
+
+export function useGetTutorDashboardCohorts<TData = Awaited<ReturnType<typeof getTutorDashboardCohorts>>, TError = ErrorType<unknown>>(
+ params?: GetTutorDashboardCohortsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorDashboardCohorts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorDashboardCohortsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTutorOutstandingRegistersUrl = (params?: GetTutorOutstandingRegistersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/tutor/outstanding-registers?${stringifiedParams}` : `/api/dashboard/tutor/outstanding-registers`
+}
+
+export const getTutorOutstandingRegisters = async (params?: GetTutorOutstandingRegistersParams, options?: RequestInit): Promise<OutstandingRegisterListResponse> => {
+
+  return customFetch<OutstandingRegisterListResponse>(getGetTutorOutstandingRegistersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorOutstandingRegistersQueryKey = (params?: GetTutorOutstandingRegistersParams,) => {
+    return [
+    `/api/dashboard/tutor/outstanding-registers`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTutorOutstandingRegistersQueryOptions = <TData = Awaited<ReturnType<typeof getTutorOutstandingRegisters>>, TError = ErrorType<unknown>>(params?: GetTutorOutstandingRegistersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorOutstandingRegisters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorOutstandingRegistersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorOutstandingRegisters>>> = ({ signal }) => getTutorOutstandingRegisters(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorOutstandingRegisters>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorOutstandingRegistersQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorOutstandingRegisters>>>
+export type GetTutorOutstandingRegistersQueryError = ErrorType<unknown>
+
+
+
+export function useGetTutorOutstandingRegisters<TData = Awaited<ReturnType<typeof getTutorOutstandingRegisters>>, TError = ErrorType<unknown>>(
+ params?: GetTutorOutstandingRegistersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorOutstandingRegisters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorOutstandingRegistersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTutorLowAttendanceLearnersUrl = (params?: GetTutorLowAttendanceLearnersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/tutor/low-attendance-learners?${stringifiedParams}` : `/api/dashboard/tutor/low-attendance-learners`
+}
+
+export const getTutorLowAttendanceLearners = async (params?: GetTutorLowAttendanceLearnersParams, options?: RequestInit): Promise<LearnerAttendanceSummaryListResponse> => {
+
+  return customFetch<LearnerAttendanceSummaryListResponse>(getGetTutorLowAttendanceLearnersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorLowAttendanceLearnersQueryKey = (params?: GetTutorLowAttendanceLearnersParams,) => {
+    return [
+    `/api/dashboard/tutor/low-attendance-learners`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTutorLowAttendanceLearnersQueryOptions = <TData = Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>, TError = ErrorType<unknown>>(params?: GetTutorLowAttendanceLearnersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorLowAttendanceLearnersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>> = ({ signal }) => getTutorLowAttendanceLearners(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorLowAttendanceLearnersQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>>
+export type GetTutorLowAttendanceLearnersQueryError = ErrorType<unknown>
+
+
+
+export function useGetTutorLowAttendanceLearners<TData = Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>, TError = ErrorType<unknown>>(
+ params?: GetTutorLowAttendanceLearnersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorLowAttendanceLearners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorLowAttendanceLearnersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminDashboardTutorsUrl = (params?: GetAdminDashboardTutorsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/admin/tutors?${stringifiedParams}` : `/api/dashboard/admin/tutors`
+}
+
+export const getAdminDashboardTutors = async (params?: GetAdminDashboardTutorsParams, options?: RequestInit): Promise<AdminTutorOverviewListResponse> => {
+
+  return customFetch<AdminTutorOverviewListResponse>(getGetAdminDashboardTutorsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminDashboardTutorsQueryKey = (params?: GetAdminDashboardTutorsParams,) => {
+    return [
+    `/api/dashboard/admin/tutors`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminDashboardTutorsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDashboardTutors>>, TError = ErrorType<unknown>>(params?: GetAdminDashboardTutorsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboardTutors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminDashboardTutorsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDashboardTutors>>> = ({ signal }) => getAdminDashboardTutors(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboardTutors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminDashboardTutorsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminDashboardTutors>>>
+export type GetAdminDashboardTutorsQueryError = ErrorType<unknown>
+
+
+
+export function useGetAdminDashboardTutors<TData = Awaited<ReturnType<typeof getAdminDashboardTutors>>, TError = ErrorType<unknown>>(
+ params?: GetAdminDashboardTutorsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboardTutors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminDashboardTutorsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminDashboardCohortsUrl = (params?: GetAdminDashboardCohortsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/admin/cohorts?${stringifiedParams}` : `/api/dashboard/admin/cohorts`
+}
+
+export const getAdminDashboardCohorts = async (params?: GetAdminDashboardCohortsParams, options?: RequestInit): Promise<AdminCohortOverviewListResponse> => {
+
+  return customFetch<AdminCohortOverviewListResponse>(getGetAdminDashboardCohortsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminDashboardCohortsQueryKey = (params?: GetAdminDashboardCohortsParams,) => {
+    return [
+    `/api/dashboard/admin/cohorts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminDashboardCohortsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDashboardCohorts>>, TError = ErrorType<unknown>>(params?: GetAdminDashboardCohortsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboardCohorts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminDashboardCohortsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDashboardCohorts>>> = ({ signal }) => getAdminDashboardCohorts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboardCohorts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminDashboardCohortsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminDashboardCohorts>>>
+export type GetAdminDashboardCohortsQueryError = ErrorType<unknown>
+
+
+
+export function useGetAdminDashboardCohorts<TData = Awaited<ReturnType<typeof getAdminDashboardCohorts>>, TError = ErrorType<unknown>>(
+ params?: GetAdminDashboardCohortsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboardCohorts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminDashboardCohortsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminOutstandingRegistersUrl = (params?: GetAdminOutstandingRegistersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/admin/outstanding-registers?${stringifiedParams}` : `/api/dashboard/admin/outstanding-registers`
+}
+
+export const getAdminOutstandingRegisters = async (params?: GetAdminOutstandingRegistersParams, options?: RequestInit): Promise<OutstandingRegisterListResponse> => {
+
+  return customFetch<OutstandingRegisterListResponse>(getGetAdminOutstandingRegistersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminOutstandingRegistersQueryKey = (params?: GetAdminOutstandingRegistersParams,) => {
+    return [
+    `/api/dashboard/admin/outstanding-registers`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminOutstandingRegistersQueryOptions = <TData = Awaited<ReturnType<typeof getAdminOutstandingRegisters>>, TError = ErrorType<unknown>>(params?: GetAdminOutstandingRegistersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminOutstandingRegisters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminOutstandingRegistersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOutstandingRegisters>>> = ({ signal }) => getAdminOutstandingRegisters(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOutstandingRegisters>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminOutstandingRegistersQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminOutstandingRegisters>>>
+export type GetAdminOutstandingRegistersQueryError = ErrorType<unknown>
+
+
+
+export function useGetAdminOutstandingRegisters<TData = Awaited<ReturnType<typeof getAdminOutstandingRegisters>>, TError = ErrorType<unknown>>(
+ params?: GetAdminOutstandingRegistersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminOutstandingRegisters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminOutstandingRegistersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminLowAttendanceLearnersUrl = (params?: GetAdminLowAttendanceLearnersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/admin/low-attendance-learners?${stringifiedParams}` : `/api/dashboard/admin/low-attendance-learners`
+}
+
+export const getAdminLowAttendanceLearners = async (params?: GetAdminLowAttendanceLearnersParams, options?: RequestInit): Promise<LearnerAttendanceSummaryListResponse> => {
+
+  return customFetch<LearnerAttendanceSummaryListResponse>(getGetAdminLowAttendanceLearnersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminLowAttendanceLearnersQueryKey = (params?: GetAdminLowAttendanceLearnersParams,) => {
+    return [
+    `/api/dashboard/admin/low-attendance-learners`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminLowAttendanceLearnersQueryOptions = <TData = Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>, TError = ErrorType<unknown>>(params?: GetAdminLowAttendanceLearnersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminLowAttendanceLearnersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>> = ({ signal }) => getAdminLowAttendanceLearners(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminLowAttendanceLearnersQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>>
+export type GetAdminLowAttendanceLearnersQueryError = ErrorType<unknown>
+
+
+
+export function useGetAdminLowAttendanceLearners<TData = Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>, TError = ErrorType<unknown>>(
+ params?: GetAdminLowAttendanceLearnersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminLowAttendanceLearners>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminLowAttendanceLearnersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLearnerAttendanceSummaryUrl = (learnerId: number,
+    params?: GetLearnerAttendanceSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance-summary/learners/${learnerId}?${stringifiedParams}` : `/api/attendance-summary/learners/${learnerId}`
+}
+
+export const getLearnerAttendanceSummary = async (learnerId: number,
+    params?: GetLearnerAttendanceSummaryParams, options?: RequestInit): Promise<AttendanceSummaryResponse> => {
+
+  return customFetch<AttendanceSummaryResponse>(getGetLearnerAttendanceSummaryUrl(learnerId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLearnerAttendanceSummaryQueryKey = (learnerId: number,
+    params?: GetLearnerAttendanceSummaryParams,) => {
+    return [
+    `/api/attendance-summary/learners/${learnerId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetLearnerAttendanceSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getLearnerAttendanceSummary>>, TError = ErrorType<ErrorResponse>>(learnerId: number,
+    params?: GetLearnerAttendanceSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLearnerAttendanceSummaryQueryKey(learnerId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerAttendanceSummary>>> = ({ signal }) => getLearnerAttendanceSummary(learnerId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerAttendanceSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLearnerAttendanceSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerAttendanceSummary>>>
+export type GetLearnerAttendanceSummaryQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetLearnerAttendanceSummary<TData = Awaited<ReturnType<typeof getLearnerAttendanceSummary>>, TError = ErrorType<ErrorResponse>>(
+ learnerId: number,
+    params?: GetLearnerAttendanceSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLearnerAttendanceSummaryQueryOptions(learnerId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCohortAttendanceSummaryUrl = (cohortId: number,
+    params?: GetCohortAttendanceSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance-summary/cohorts/${cohortId}?${stringifiedParams}` : `/api/attendance-summary/cohorts/${cohortId}`
+}
+
+export const getCohortAttendanceSummary = async (cohortId: number,
+    params?: GetCohortAttendanceSummaryParams, options?: RequestInit): Promise<AttendanceSummaryResponse> => {
+
+  return customFetch<AttendanceSummaryResponse>(getGetCohortAttendanceSummaryUrl(cohortId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCohortAttendanceSummaryQueryKey = (cohortId: number,
+    params?: GetCohortAttendanceSummaryParams,) => {
+    return [
+    `/api/attendance-summary/cohorts/${cohortId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCohortAttendanceSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getCohortAttendanceSummary>>, TError = ErrorType<ErrorResponse>>(cohortId: number,
+    params?: GetCohortAttendanceSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortAttendanceSummaryQueryKey(cohortId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortAttendanceSummary>>> = ({ signal }) => getCohortAttendanceSummary(cohortId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: cohortId !== null && cohortId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohortAttendanceSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCohortAttendanceSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getCohortAttendanceSummary>>>
+export type GetCohortAttendanceSummaryQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetCohortAttendanceSummary<TData = Awaited<ReturnType<typeof getCohortAttendanceSummary>>, TError = ErrorType<ErrorResponse>>(
+ cohortId: number,
+    params?: GetCohortAttendanceSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCohortAttendanceSummaryQueryOptions(cohortId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTutorAttendanceSummaryUrl = (tutorId: number,
+    params?: GetTutorAttendanceSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance-summary/tutors/${tutorId}?${stringifiedParams}` : `/api/attendance-summary/tutors/${tutorId}`
+}
+
+export const getTutorAttendanceSummary = async (tutorId: number,
+    params?: GetTutorAttendanceSummaryParams, options?: RequestInit): Promise<AttendanceSummaryResponse> => {
+
+  return customFetch<AttendanceSummaryResponse>(getGetTutorAttendanceSummaryUrl(tutorId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorAttendanceSummaryQueryKey = (tutorId: number,
+    params?: GetTutorAttendanceSummaryParams,) => {
+    return [
+    `/api/attendance-summary/tutors/${tutorId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTutorAttendanceSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getTutorAttendanceSummary>>, TError = ErrorType<ErrorResponse>>(tutorId: number,
+    params?: GetTutorAttendanceSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorAttendanceSummaryQueryKey(tutorId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorAttendanceSummary>>> = ({ signal }) => getTutorAttendanceSummary(tutorId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tutorId !== null && tutorId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorAttendanceSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorAttendanceSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorAttendanceSummary>>>
+export type GetTutorAttendanceSummaryQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetTutorAttendanceSummary<TData = Awaited<ReturnType<typeof getTutorAttendanceSummary>>, TError = ErrorType<ErrorResponse>>(
+ tutorId: number,
+    params?: GetTutorAttendanceSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorAttendanceSummaryQueryOptions(tutorId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

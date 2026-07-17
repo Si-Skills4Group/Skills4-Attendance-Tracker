@@ -283,6 +283,16 @@ def require_learner_access(cur, learner_id: int, session: dict[str, Any]) -> dic
     return learner
 
 
+def require_tutor_access(cur, tutor_id: int, session: dict[str, Any]) -> dict[str, Any]:
+    cur.execute('SELECT id FROM tutors WHERE id = %s', (tutor_id,))
+    tutor = cur.fetchone()
+    if not tutor:
+        raise HTTPException(status_code=404, detail="Tutor not found")
+    if session.get("role") == "tutor" and tutor_id != session.get("tutorId"):
+        raise HTTPException(status_code=403, detail="Not allowed to access this tutor's data")
+    return tutor
+
+
 def require_attendance_access(cur, session_id: int, session: dict[str, Any]) -> dict[str, Any]:
     cur.execute(
         """

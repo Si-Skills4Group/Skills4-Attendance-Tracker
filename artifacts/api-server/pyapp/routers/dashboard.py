@@ -1,44 +1,64 @@
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..allocation_lib import expected_learners_count_sql
-from ..attendance_calc import compute_attendance_totals
-from ..attendance_data import get_records_for_learner
+from ..bud_progress import get_bud_progress_by_uln
+from ..attendance_metrics import (
+    Period,
+    fetch_attendance_metrics,
+    fetch_attendance_metrics_grouped,
+    fetch_register_completion,
+    is_low_attendance,
+    resolve_period,
+)
 from ..auth import require_admin, require_auth
 from ..db import get_cursor
 from .cohorts import COHORT_SELECT
+from .tutors import TUTOR_SELECT
 
 router = APIRouter(tags=["dashboard"])
 
 
-def _low_attendance_learners(cur, learner_ids: list[int], threshold: float) -> list[dict]:
-    if not learner_ids:
-        return []
-    cur.execute(
-        'SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef" '
-        "FROM learners WHERE id = ANY(%s)",
-        (learner_ids,),
+def _paginate(items: list, page: int, page_size: int) -> dict:
+    start = (page - 1) * page_size
+    return {"items": items[start : start + page_size], "total": len(items), "page": page, "pageSize": page_size}
+
+
+def _low_attendance_rows(cur, learners: list[dict], threshold: float, period_start: date, period_end: date) -> list[dict]:
+    """Batched (no N+1) replacement for the old per-learner-query
+    implementation -- one aggregate query for every learner in `learners`,
+    then filtered/shaped in Python from that single result set.
+
+    Bud progress is looked up separately (one batched query keyed on ULN,
+    see bud_progress.py) and merged in purely for display -- it never
+    affects is_low_attendance's decision, and a learner with no ULN or no
+    Bud match simply gets bud: None, never breaking this list."""
+    learner_ids = [learner["id"] for learner in learners]
+    metrics_by_learner = fetch_attendance_metrics_grouped(
+        cur, group_by="learner", group_ids=learner_ids, period_start=period_start, period_end=period_end
     )
-    learners = cur.fetchall()
+    flagged = [learner for learner in learners if is_low_attendance(metrics_by_learner[learner["id"]], threshold)]
+    bud_by_uln = get_bud_progress_by_uln(cur, [learner.get("uln") for learner in flagged])
+
     rows = []
-    for learner in learners:
-        totals = compute_attendance_totals(get_records_for_learner(learner["id"]))
-        if totals["sessionCount"] > 0 and totals["attendancePercentage"] < threshold:
-            rows.append(
-                {
-                    "learnerId": learner["id"],
-                    "learnerName": f"{learner['firstName']} {learner['lastName']}",
-                    "learnerRef": learner["learnerRef"],
-                    "totals": totals,
-                }
-            )
+    for learner in flagged:
+        rows.append(
+            {
+                "learnerId": learner["id"],
+                "learnerName": f"{learner['firstName']} {learner['lastName']}",
+                "learnerRef": learner["learnerRef"],
+                "cohortName": learner.get("cohortName"),
+                "metrics": metrics_by_learner[learner["id"]],
+                "bud": bud_by_uln.get(learner.get("uln")),
+            }
+        )
     return rows
 
 
 def _sessions_awaiting_completion(cur, cohort_ids: list[int] | None) -> list[dict]:
     today = date.today()
-    clauses = ["s.session_date <= %s"]
+    clauses = ["s.session_date <= %s", "s.status != 'cancelled'"]
     params: list = [today]
     if cohort_ids is not None:
         clauses.append("s.cohort_id = ANY(%s)")
@@ -97,12 +117,21 @@ def _recently_edited(cur, cohort_ids: list[int] | None, limit: int = 10) -> list
     return cur.fetchall()
 
 
+def _get_threshold(cur) -> float:
+    cur.execute("SELECT low_attendance_threshold FROM app_settings LIMIT 1")
+    settings_row = cur.fetchone()
+    return float(settings_row["low_attendance_threshold"]) if settings_row else 85.0
+
+
+def _resolve_period_or_400(period: Period, date_from: date | None, date_to: date | None) -> tuple[date, date]:
+    try:
+        return resolve_period(period, date_from, date_to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
 @router.get("/dashboard/admin")
 def get_admin_dashboard(_session: dict = Depends(require_admin)):
-    today = date.today()
-    week_ago = today - timedelta(days=7)
-    month_ago = today - timedelta(days=30)
-
     with get_cursor() as cur:
         cur.execute("SELECT count(*)::int AS count FROM learners WHERE status = 'active'")
         active_learners = cur.fetchone()["count"]
@@ -111,39 +140,37 @@ def get_admin_dashboard(_session: dict = Depends(require_admin)):
         cur.execute("SELECT count(*)::int AS count FROM cohorts WHERE active = true")
         active_cohorts = cur.fetchone()["count"]
 
-        def attendance_pct_since(since: date) -> float:
-            cur.execute(
-                """
-                SELECT ar.status, ar.hours_attended AS "hoursAttended",
-                       s.planned_duration_hours AS "plannedDurationHours"
-                FROM attendance_records ar
-                JOIN attendance_sessions s ON ar.session_id = s.id
-                WHERE s.session_date >= %s
-                """,
-                (since,),
-            )
-            return compute_attendance_totals(cur.fetchall())["attendancePercentage"]
-
-        pct_week = attendance_pct_since(week_ago)
-        pct_month = attendance_pct_since(month_ago)
+        # attendancePercentageWeek/Month are computed via the new minutes-
+        # based, cancelled-session-excluding, UK-calendar-anchored engine
+        # (current calendar week/month, not a rolling 7/30-day UTC window).
+        week_start, week_end = resolve_period("current_week")
+        month_start, month_end = resolve_period("current_month")
+        pct_week = fetch_attendance_metrics(
+            cur, scope="organisation", scope_id=None, period_start=week_start, period_end=week_end
+        ).attendancePercentage
+        pct_month = fetch_attendance_metrics(
+            cur, scope="organisation", scope_id=None, period_start=month_start, period_end=month_end
+        ).attendancePercentage
 
         sessions_awaiting = _sessions_awaiting_completion(cur, None)
         recent_edits = _recently_edited(cur, None)
 
-        cur.execute("SELECT organisation_name, low_attendance_threshold FROM app_settings LIMIT 1")
-        settings_row = cur.fetchone()
-        threshold = float(settings_row["low_attendance_threshold"]) if settings_row else 85.0
+        threshold = _get_threshold(cur)
 
-        cur.execute("SELECT id FROM learners WHERE status = 'active'")
-        active_learner_ids = [r["id"] for r in cur.fetchall()]
-        low_attendance = _low_attendance_learners(cur, active_learner_ids, threshold)
+        cur.execute(
+            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", '
+            'l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName" '
+            "FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id WHERE l.status = 'active'"
+        )
+        active_learner_rows = cur.fetchall()
+        low_attendance = _low_attendance_rows(cur, active_learner_rows, threshold, month_start, month_end)
 
     return {
         "activeLearners": active_learners,
         "activeTutors": active_tutors,
         "activeCohorts": active_cohorts,
-        "attendancePercentageWeek": pct_week,
-        "attendancePercentageMonth": pct_month,
+        "attendancePercentageWeek": pct_week if pct_week is not None else 0.0,
+        "attendancePercentageMonth": pct_month if pct_month is not None else 0.0,
         "sessionsAwaitingCompletion": sessions_awaiting,
         "recentlyEditedAttendance": recent_edits,
         "lowAttendanceLearners": low_attendance,
@@ -161,23 +188,22 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
         cohorts = cur.fetchall()
         cohort_ids = [c["id"] for c in cohorts]
 
+        month_start, month_end = resolve_period("current_month")
+        metrics_by_cohort = fetch_attendance_metrics_grouped(
+            cur, group_by="cohort", group_ids=cohort_ids, period_start=month_start, period_end=month_end
+        )
+
         cohort_summaries = []
         for cohort in cohorts:
             cur.execute("SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s", (cohort["id"],))
             learner_count = cur.fetchone()["count"]
-            cur.execute(
-                """
-                SELECT ar.status, ar.hours_attended AS "hoursAttended",
-                       s.planned_duration_hours AS "plannedDurationHours"
-                FROM attendance_records ar
-                JOIN attendance_sessions s ON ar.session_id = s.id
-                WHERE s.cohort_id = %s
-                """,
-                (cohort["id"],),
-            )
-            totals = compute_attendance_totals(cur.fetchall())
+            metrics = metrics_by_cohort.get(cohort["id"])
             cohort_summaries.append(
-                {"cohort": cohort, "learnerCount": learner_count, "attendancePercentage": totals["attendancePercentage"]}
+                {
+                    "cohort": cohort,
+                    "learnerCount": learner_count,
+                    "attendancePercentage": (metrics.attendancePercentage if metrics else None) or 0.0,
+                }
             )
 
         next_session = None
@@ -189,7 +215,7 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
                 FROM attendance_sessions s
                 JOIN cohorts c ON s.cohort_id = c.id
                 LEFT JOIN tutors t ON c.tutor_id = t.id
-                WHERE s.cohort_id = ANY(%s) AND s.session_date >= CURRENT_DATE
+                WHERE s.cohort_id = ANY(%s) AND s.session_date >= CURRENT_DATE AND s.status != 'cancelled'
                 ORDER BY s.session_date ASC
                 LIMIT 1
                 """,
@@ -199,13 +225,17 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
 
         sessions_awaiting = _sessions_awaiting_completion(cur, cohort_ids) if cohort_ids else []
 
-        cur.execute("SELECT low_attendance_threshold FROM app_settings LIMIT 1")
-        settings_row = cur.fetchone()
-        threshold = float(settings_row["low_attendance_threshold"]) if settings_row else 85.0
+        threshold = _get_threshold(cur)
 
-        cur.execute("SELECT id FROM learners WHERE tutor_id = %s AND status = 'active'", (tutor_id,))
-        learner_ids = [r["id"] for r in cur.fetchall()]
-        low_attendance = _low_attendance_learners(cur, learner_ids, threshold)
+        cur.execute(
+            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", '
+            'l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName" '
+            "FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id "
+            "WHERE l.tutor_id = %s AND l.status = 'active'",
+            (tutor_id,),
+        )
+        active_learner_rows = cur.fetchall()
+        low_attendance = _low_attendance_rows(cur, active_learner_rows, threshold, month_start, month_end)
 
     return {
         "cohorts": cohort_summaries,
@@ -213,3 +243,221 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
         "sessionsAwaitingCompletion": sessions_awaiting,
         "lowAttendanceLearners": low_attendance,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: detailed sub-endpoints, all period/date-range filterable.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/tutor/cohorts")
+def get_tutor_dashboard_cohorts(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    session: dict = Depends(require_auth),
+):
+    tutor_id = session.get("tutorId")
+    if not tutor_id:
+        raise HTTPException(status_code=403, detail="No tutor profile linked to this account")
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+
+    with get_cursor() as cur:
+        cur.execute(f"{COHORT_SELECT} WHERE c.tutor_id = %s", (tutor_id,))
+        cohorts = cur.fetchall()
+        cohort_ids = [c["id"] for c in cohorts]
+        threshold = _get_threshold(cur)
+
+        metrics_by_cohort = fetch_attendance_metrics_grouped(
+            cur, group_by="cohort", group_ids=cohort_ids, period_start=period_start, period_end=period_end
+        )
+
+        rows = []
+        for cohort in cohorts:
+            cur.execute("SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active'", (cohort["id"],))
+            learner_count = cur.fetchone()["count"]
+            cur.execute(
+                """
+                SELECT s.id, s.session_date AS "sessionDate"
+                FROM attendance_sessions s
+                WHERE s.cohort_id = %s AND s.session_date >= CURRENT_DATE AND s.status != 'cancelled'
+                ORDER BY s.session_date ASC LIMIT 1
+                """,
+                (cohort["id"],),
+            )
+            next_session = cur.fetchone()
+            completion = fetch_register_completion(
+                cur, scope="cohort", scope_id=cohort["id"], period_start=period_start, period_end=period_end
+            )
+            cur.execute("SELECT id, first_name AS \"firstName\", last_name AS \"lastName\", learner_ref AS \"learnerRef\", uln FROM learners WHERE cohort_id = %s AND status = 'active'", (cohort["id"],))
+            cohort_learners = cur.fetchall()
+            low_attendance_count = len(_low_attendance_rows(cur, cohort_learners, threshold, period_start, period_end))
+            metrics = metrics_by_cohort.get(cohort["id"])
+            rows.append(
+                {
+                    "cohort": cohort,
+                    "activeLearnerCount": learner_count,
+                    "nextSession": next_session,
+                    "attendancePercentage": metrics.attendancePercentage if metrics else None,
+                    "registerCompletion": completion,
+                    "lowAttendanceLearnerCount": low_attendance_count,
+                }
+            )
+    return rows
+
+
+@router.get("/dashboard/tutor/outstanding-registers")
+def get_tutor_outstanding_registers(page: int = 1, pageSize: int = 25, session: dict = Depends(require_auth)):
+    tutor_id = session.get("tutorId")
+    if not tutor_id:
+        raise HTTPException(status_code=403, detail="No tutor profile linked to this account")
+    with get_cursor() as cur:
+        cur.execute("SELECT id FROM cohorts WHERE tutor_id = %s", (tutor_id,))
+        cohort_ids = [r["id"] for r in cur.fetchall()]
+        rows = _sessions_awaiting_completion(cur, cohort_ids) if cohort_ids else []
+    return _paginate(rows, page, pageSize)
+
+
+@router.get("/dashboard/tutor/low-attendance-learners")
+def get_tutor_low_attendance_learners(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    page: int = 1,
+    pageSize: int = 25,
+    session: dict = Depends(require_auth),
+):
+    tutor_id = session.get("tutorId")
+    if not tutor_id:
+        raise HTTPException(status_code=403, detail="No tutor profile linked to this account")
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        threshold = _get_threshold(cur)
+        cur.execute(
+            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", '
+            'l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName" '
+            "FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id "
+            "WHERE l.tutor_id = %s AND l.status = 'active'",
+            (tutor_id,),
+        )
+        learners = cur.fetchall()
+        rows = _low_attendance_rows(cur, learners, threshold, period_start, period_end)
+    return _paginate(rows, page, pageSize)
+
+
+@router.get("/dashboard/admin/tutors")
+def get_admin_dashboard_tutors(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    page: int = 1,
+    pageSize: int = 25,
+    _session: dict = Depends(require_admin),
+):
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        cur.execute(f"{TUTOR_SELECT} WHERE active = true")
+        tutors = cur.fetchall()
+        tutor_ids = [t["id"] for t in tutors]
+        threshold = _get_threshold(cur)
+
+        metrics_by_tutor = fetch_attendance_metrics_grouped(
+            cur, group_by="tutor", group_ids=tutor_ids, period_start=period_start, period_end=period_end
+        )
+
+        rows = []
+        for tutor in tutors:
+            cur.execute("SELECT count(*)::int AS count FROM cohorts WHERE tutor_id = %s AND active = true", (tutor["id"],))
+            active_cohorts = cur.fetchone()["count"]
+            cur.execute("SELECT count(*)::int AS count FROM learners WHERE tutor_id = %s AND status = 'active'", (tutor["id"],))
+            active_learners = cur.fetchone()["count"]
+            completion = fetch_register_completion(
+                cur, scope="tutor", scope_id=tutor["id"], period_start=period_start, period_end=period_end
+            )
+            cur.execute(
+                'SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef" '
+                "FROM learners WHERE tutor_id = %s AND status = 'active'",
+                (tutor["id"],),
+            )
+            tutor_learners = cur.fetchall()
+            low_attendance_count = len(_low_attendance_rows(cur, tutor_learners, threshold, period_start, period_end))
+            metrics = metrics_by_tutor.get(tutor["id"])
+            rows.append(
+                {
+                    "tutorId": tutor["id"],
+                    "tutorName": f"{tutor['firstName']} {tutor['lastName']}",
+                    "activeCohorts": active_cohorts,
+                    "activeLearners": active_learners,
+                    "attendancePercentage": metrics.attendancePercentage if metrics else None,
+                    "registerCompletion": completion,
+                    "lowAttendanceLearnerCount": low_attendance_count,
+                }
+            )
+    return _paginate(rows, page, pageSize)
+
+
+@router.get("/dashboard/admin/cohorts")
+def get_admin_dashboard_cohorts(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    page: int = 1,
+    pageSize: int = 25,
+    _session: dict = Depends(require_admin),
+):
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        cur.execute(f"{COHORT_SELECT} WHERE c.active = true")
+        cohorts = cur.fetchall()
+        cohort_ids = [c["id"] for c in cohorts]
+
+        metrics_by_cohort = fetch_attendance_metrics_grouped(
+            cur, group_by="cohort", group_ids=cohort_ids, period_start=period_start, period_end=period_end
+        )
+
+        rows = []
+        for cohort in cohorts:
+            cur.execute("SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active'", (cohort["id"],))
+            active_learners = cur.fetchone()["count"]
+            completion = fetch_register_completion(
+                cur, scope="cohort", scope_id=cohort["id"], period_start=period_start, period_end=period_end
+            )
+            metrics = metrics_by_cohort.get(cohort["id"])
+            rows.append(
+                {
+                    "cohort": cohort,
+                    "activeLearnerCount": active_learners,
+                    "attendancePercentage": metrics.attendancePercentage if metrics else None,
+                    "registerCompletion": completion,
+                }
+            )
+    return _paginate(rows, page, pageSize)
+
+
+@router.get("/dashboard/admin/outstanding-registers")
+def get_admin_outstanding_registers(page: int = 1, pageSize: int = 25, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        rows = _sessions_awaiting_completion(cur, None)
+    return _paginate(rows, page, pageSize)
+
+
+@router.get("/dashboard/admin/low-attendance-learners")
+def get_admin_low_attendance_learners(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    page: int = 1,
+    pageSize: int = 25,
+    _session: dict = Depends(require_admin),
+):
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        threshold = _get_threshold(cur)
+        cur.execute(
+            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", '
+            'l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName" '
+            "FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id WHERE l.status = 'active'"
+        )
+        learners = cur.fetchall()
+        rows = _low_attendance_rows(cur, learners, threshold, period_start, period_end)
+    return _paginate(rows, page, pageSize)

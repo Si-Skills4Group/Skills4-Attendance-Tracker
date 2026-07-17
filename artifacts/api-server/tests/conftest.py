@@ -67,6 +67,48 @@ def db():
         yield cur
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _learner_progress_table_for_tests():
+    """public.learner_progress does not exist in attendance_test -- it's
+    populated by a separate, already-deployed sync service that only ever
+    targets the production `attendance` database (confirmed by inspection;
+    see pyapp/bud_progress.py's module docstring). This creates a matching
+    throwaway table shape *in attendance_test only*, session-scoped so any
+    test that happens to exercise a code path touching learner_progress
+    (e.g. dashboard.py's low-attendance list, which looks up Bud context for
+    every flagged learner) doesn't hit UndefinedTable, regardless of test
+    file/order. Never touches pyapp/bootstrap.py or the real production data."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS public.learner_progress (
+                learning_plan_id text NOT NULL,
+                apprentice_id text NOT NULL,
+                learner_name text,
+                learner_forename text,
+                learner_surname text,
+                learner_email text,
+                learner_mobile text,
+                learner_reference text,
+                unique_learner_number text,
+                start_date date,
+                tutor_name text,
+                tutor_id text,
+                last_submission_date timestamptz,
+                last_submission_by_learner timestamptz,
+                last_completed_activity date,
+                activity_progress numeric,
+                activities_overdue integer,
+                learning_plan_url text,
+                programme_name text,
+                status_desc text,
+                synced_at timestamptz
+            )
+            """
+        )
+    yield
+
+
 @pytest.fixture
 def request_factory():
     return FakeRequest

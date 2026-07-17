@@ -5,7 +5,7 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { LearnerAttendanceRow } from './learnerAttendanceRow';
+import type { LearnerAttendanceSummaryRow } from './learnerAttendanceSummaryRow';
 import type { RecentEdit } from './recentEdit';
 import type { SessionSummary } from './sessionSummary';
 
@@ -17,5 +17,5 @@ export interface AdminDashboard {
   attendancePercentageMonth: number;
   sessionsAwaitingCompletion: SessionSummary[];
   recentlyEditedAttendance: RecentEdit[];
-  lowAttendanceLearners: LearnerAttendanceRow[];
+  lowAttendanceLearners: LearnerAttendanceSummaryRow[];
 }

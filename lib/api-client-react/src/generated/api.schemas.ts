@@ -918,6 +918,52 @@ export interface CohortSummary {
   attendancePercentage: number;
 }
 
+export interface AttendanceMetrics {
+  periodStart: string;
+  periodEnd: string;
+  expectedMinutes: number;
+  attendedMinutes: number;
+  authorisedAbsenceMinutes: number;
+  authorisedAbsenceSessions: number;
+  unauthorisedAbsenceMinutes: number;
+  unauthorisedAbsenceSessions: number;
+  lateMinutes: number;
+  lateSessionCount: number;
+  averageMinutesLate: number | null;
+  missingRecordCount: number;
+  completedRegisterRowCount: number;
+  /** Null when expectedMinutes is zero -- never a fabricated 0%. */
+  attendancePercentage: number | null;
+  /** Percentage of applicable register rows that have an actual recorded status (vs missing). */
+  attendanceDataCompleteness: number | null;
+  /** True when there isn't enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule). */
+  insufficientData: boolean;
+  calculatedAt: string;
+}
+
+/**
+ * Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.
+ */
+export interface BudProgress {
+  activityProgress?: number | null;
+  activitiesOverdue?: number | null;
+  lastSubmissionDate?: string | null;
+  lastCompletedActivity?: string | null;
+  statusDesc?: string | null;
+  learningPlanUrl?: string | null;
+  syncedAt?: string | null;
+}
+
+export interface LearnerAttendanceSummaryRow {
+  learnerId: number;
+  learnerName: string;
+  learnerRef: string;
+  cohortName?: string | null;
+  metrics: AttendanceMetrics;
+  /** Null when no Bud sync match exists yet -- never breaks the row. */
+  bud?: BudProgress | null;
+}
+
 export interface AdminDashboard {
   activeLearners: number;
   activeTutors: number;
@@ -926,14 +972,85 @@ export interface AdminDashboard {
   attendancePercentageMonth: number;
   sessionsAwaitingCompletion: SessionSummary[];
   recentlyEditedAttendance: RecentEdit[];
-  lowAttendanceLearners: LearnerAttendanceRow[];
+  lowAttendanceLearners: LearnerAttendanceSummaryRow[];
 }
 
 export interface TutorDashboard {
   cohorts: CohortSummary[];
   nextSession: SessionSummary | null;
   sessionsAwaitingCompletion: SessionSummary[];
-  lowAttendanceLearners: LearnerAttendanceRow[];
+  lowAttendanceLearners: LearnerAttendanceSummaryRow[];
+}
+
+export interface RegisterCompletionSummary {
+  periodStart: string;
+  periodEnd: string;
+  notStarted: number;
+  inProgress: number;
+  completed: number;
+  locked: number;
+  /** Not-started/in-progress registers whose session date has already passed. */
+  outstanding: number;
+  completionPercentage: number | null;
+}
+
+export interface AttendanceSummaryResponse {
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+}
+
+export interface LearnerAttendanceSummaryListResponse {
+  items: LearnerAttendanceSummaryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface OutstandingRegisterListResponse {
+  items: SessionSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface TutorCohortOverviewRow {
+  cohort: Cohort;
+  activeLearnerCount: number;
+  nextSession: SessionSummary | null;
+  attendancePercentage: number | null;
+  registerCompletion: RegisterCompletionSummary;
+  lowAttendanceLearnerCount: number;
+}
+
+export interface AdminTutorOverviewRow {
+  tutorId: number;
+  tutorName: string;
+  activeCohorts: number;
+  activeLearners: number;
+  attendancePercentage: number | null;
+  registerCompletion: RegisterCompletionSummary;
+  lowAttendanceLearnerCount: number;
+}
+
+export interface AdminTutorOverviewListResponse {
+  items: AdminTutorOverviewRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminCohortOverviewRow {
+  cohort: Cohort;
+  activeLearnerCount: number;
+  attendancePercentage: number | null;
+  registerCompletion: RegisterCompletionSummary;
+}
+
+export interface AdminCohortOverviewListResponse {
+  items: AdminCohortOverviewRow[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface AuditLogEntry {
@@ -976,6 +1093,91 @@ export interface SettingsUpdate {
      */
   lowAttendanceThreshold?: number;
 }
+
+export type PeriodParamParameter = typeof PeriodParamParameter[keyof typeof PeriodParamParameter];
+
+
+export const PeriodParamParameter = {
+  current_week: 'current_week',
+  current_month: 'current_month',
+  previous_month: 'previous_month',
+  last_30_days: 'last_30_days',
+  custom: 'custom',
+} as const;
+
+export type DateFromParamParameter = string;
+
+export type DateToParamParameter = string;
+
+export type PageParamParameter = number;
+
+export type PageSizeParamParameter = number;
+
+export type GetTutorDashboardCohortsParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
+
+export type GetTutorOutstandingRegistersParams = {
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetTutorLowAttendanceLearnersParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetAdminDashboardTutorsParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetAdminDashboardCohortsParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetAdminOutstandingRegistersParams = {
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetAdminLowAttendanceLearnersParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetLearnerAttendanceSummaryParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
+
+export type GetCohortAttendanceSummaryParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
+
+export type GetTutorAttendanceSummaryParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
 
 export type ListTutorsParams = {
 active?: boolean;
