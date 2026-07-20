@@ -216,6 +216,69 @@ class TestFetchAttendanceMetrics:
         assert metrics.expectedMinutes == 0
         assert metrics.unauthorisedAbsenceMinutes == 0
 
+    def test_deleted_learner_minutes_are_excluded_from_cohort_scope(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        """A deleted learner's recorded minutes must disappear from the
+        cohort's aggregate total too, not just their own -- deleting a
+        learner must not leave a ghost contribution behind in any other
+        scope's rollup."""
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "present", hours_attended=7)
+
+        before = fetch_attendance_metrics(
+            db, scope="cohort", scope_id=cohort["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert before.expectedMinutes == 420
+
+        db.execute("UPDATE learners SET deleted_at = now() WHERE id = %s", (learner["id"],))
+
+        after = fetch_attendance_metrics(
+            db, scope="cohort", scope_id=cohort["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert after.expectedMinutes == 0
+        assert after.attendedMinutes == 0
+
+    def test_deleted_sessions_are_excluded(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "absent_unauthorised")
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session["id"],))
+
+        metrics = fetch_attendance_metrics(
+            db, scope="learner", scope_id=learner["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert metrics.expectedMinutes == 0
+        assert metrics.unauthorisedAbsenceMinutes == 0
+
+    def test_deleted_cohort_is_excluded_from_organisation_scope(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "present", hours_attended=7)
+        db.execute("UPDATE cohorts SET deleted_at = now() WHERE id = %s", (cohort["id"],))
+
+        metrics = fetch_attendance_metrics(
+            db, scope="organisation", scope_id=None, period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert metrics.expectedMinutes == 0
+
     def test_sessions_before_learner_start_are_excluded(
         self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
     ):

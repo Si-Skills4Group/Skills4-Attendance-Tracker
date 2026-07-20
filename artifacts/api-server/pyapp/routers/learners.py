@@ -79,6 +79,10 @@ class LearnerStatusChangeInput(BaseModel):
     reason: str | None = None
 
 
+class LearnerDeleteInput(BaseModel):
+    reason: str = Field(min_length=1)
+
+
 @router.get("/learners")
 def list_learners(
     search: str | None = None,
@@ -92,7 +96,7 @@ def list_learners(
     pageSize: int = 25,
     session: dict = Depends(require_auth),
 ):
-    clauses = []
+    clauses = ["l.deleted_at IS NULL"]
     params: list = []
     if session.get("role") == "tutor" and session.get("tutorId"):
         clauses.append("l.tutor_id = %s")
@@ -194,7 +198,7 @@ def create_learner(payload: LearnerInput, request: Request, session: dict = Depe
 def get_learner(learner_id: int, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
         apply_due_scheduled_allocations(cur)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s AND l.deleted_at IS NULL", (learner_id,))
         learner = cur.fetchone()
     if not learner:
         raise HTTPException(status_code=404, detail="Learner not found")
@@ -210,7 +214,7 @@ def _update_learner(cur, learner_id: int, payload: LearnerUpdate, request: Reque
     learner, so this function's own generic column handling doesn't need
     any import-specific carve-out to keep allocation changes out of CSV
     updates -- that guarantee lives entirely in the caller."""
-    cur.execute("SELECT * FROM learners WHERE id = %s", (learner_id,))
+    cur.execute("SELECT * FROM learners WHERE id = %s AND deleted_at IS NULL", (learner_id,))
     existing = cur.fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Learner not found")
@@ -287,7 +291,7 @@ def change_learner_status(
     learner_id: int, payload: LearnerStatusChangeInput, request: Request, _session: dict = Depends(require_admin)
 ):
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM learners WHERE id = %s", (learner_id,))
+        cur.execute("SELECT * FROM learners WHERE id = %s AND deleted_at IS NULL", (learner_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Learner not found")
@@ -322,6 +326,43 @@ def change_learner_status(
         new_value={"status": payload.status, "reason": payload.reason},
     )
     return full
+
+
+@router.post("/learners/{learner_id}/delete", status_code=204)
+def delete_learner(
+    learner_id: int, payload: LearnerDeleteInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM learners WHERE id = %s", (learner_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Learner not found")
+        if existing["deleted_at"] is not None:
+            raise HTTPException(status_code=400, detail="Learner is already deleted")
+
+        cur.execute(
+            "UPDATE learners SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, updated_at = now() WHERE id = %s",
+            (session["userId"], payload.reason, learner_id),
+        )
+        # A pending scheduled transfer for a learner who no longer exists in
+        # the system's view must not later be applied by the background
+        # scheduled-allocations job -- cancel it now rather than leaving it
+        # to fail (or silently reallocate a deleted learner) later.
+        cur.execute(
+            "UPDATE scheduled_allocations SET status = 'cancelled', cancelled_at = now(), cancelled_by = %s "
+            "WHERE learner_id = %s AND status = 'pending'",
+            (session["userId"], learner_id),
+        )
+
+    write_audit_log(
+        request,
+        action="delete_learner",
+        entity_type="learner",
+        entity_id=learner_id,
+        previous_value=existing,
+        new_value={"deletedAt": "now", "reason": payload.reason},
+    )
+    return None
 
 
 @router.get("/learners/{learner_id}/allocation-history")

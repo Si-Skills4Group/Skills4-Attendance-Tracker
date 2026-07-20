@@ -105,6 +105,11 @@ class SessionCancelInput(BaseModel):
     confirmWithAttendance: bool = False
 
 
+class SessionDeleteInput(BaseModel):
+    reason: str = Field(min_length=1)
+    confirmWithAttendance: bool = False
+
+
 class RefreshRegisterInput(BaseModel):
     confirm: bool = False
 
@@ -207,7 +212,9 @@ def list_attendance_sessions(
         clauses.append("s.status = %s")
         params.append(status)
 
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    clauses.append("s.deleted_at IS NULL")
+    clauses.append("c.deleted_at IS NULL")
+    where = f"WHERE {' AND '.join(clauses)}"
     with get_cursor() as cur:
         if cohortId is not None:
             # Explicit access check independent of the tutor-scoping filter
@@ -447,7 +454,7 @@ def cancel_attendance_session(
     session_id: int, payload: SessionCancelInput, request: Request, session: dict = Depends(require_admin)
 ):
     with get_cursor() as cur:
-        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Attendance session not found")
@@ -470,12 +477,60 @@ def cancel_attendance_session(
     return full
 
 
+@router.post("/attendance/sessions/{session_id}/delete", status_code=204)
+def delete_attendance_session(
+    session_id: int, payload: SessionDeleteInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM attendance_sessions WHERE id = %s", (session_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Attendance session not found")
+        if existing["deleted_at"] is not None:
+            raise HTTPException(status_code=400, detail="Session is already deleted")
+
+        # Mirrors cancel_session's own guard exactly: never hide recorded
+        # attendance out from under an admin without an explicit "yes,
+        # delete it anyway" confirmation -- the data is retained either way
+        # (soft delete), but disappearing from every report is a big enough
+        # consequence to warrant the same two-step confirm.
+        cur.execute("SELECT count(*)::int AS count FROM attendance_records WHERE session_id = %s", (session_id,))
+        recorded_count = cur.fetchone()["count"]
+        if recorded_count > 0 and not payload.confirmWithAttendance:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason": "attendance_already_recorded",
+                    "message": "This session already has recorded attendance. Confirm to delete anyway -- "
+                               "the recorded attendance will be preserved, not deleted, but the session will "
+                               "no longer appear in any report.",
+                    "recordedCount": recorded_count,
+                },
+            )
+
+        cur.execute(
+            "UPDATE attendance_sessions SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, "
+            "updated_at = now() WHERE id = %s",
+            (session["userId"], payload.reason, session_id),
+        )
+
+    write_audit_log(
+        request,
+        action="delete_session",
+        entity_type="attendance_session",
+        entity_id=session_id,
+        previous_value=existing,
+        new_value={"deletedAt": "now", "reason": payload.reason},
+    )
+    return None
+
+
 @router.post("/attendance/sessions/{session_id}/refresh-register")
 def refresh_session_register(
     session_id: int, payload: RefreshRegisterInput, request: Request, session: dict = Depends(require_admin)
 ):
     with get_cursor() as cur:
-        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Attendance session not found")
@@ -745,7 +800,7 @@ def lock_attendance_register(
     session_id: int, payload: LockRegisterInput, request: Request, session: dict = Depends(require_admin)
 ):
     with get_cursor() as cur:
-        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Attendance session not found")
@@ -786,7 +841,7 @@ def unlock_attendance_register(
     session_id: int, payload: UnlockRegisterInput, request: Request, session: dict = Depends(require_admin)
 ):
     with get_cursor() as cur:
-        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Attendance session not found")

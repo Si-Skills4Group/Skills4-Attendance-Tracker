@@ -121,11 +121,79 @@ def test_completing_a_learner_without_actual_end_date_is_rejected_by_endpoint(db
     assert exc.value.status_code == 400
 
 
-def test_learner_with_allocation_history_is_not_deleted_by_any_endpoint():
-    """There is deliberately no learner-delete endpoint in this API --
-    this documents that as an intentional design choice rather than an
-    oversight, satisfying 'do not permanently delete learners with
-    history' by construction."""
-    from pyapp.routers import learners as learners_router
+def test_deleting_a_learner_with_allocation_history_never_removes_the_row_or_history(db, request_factory, admin_user, learner_factory):
+    """delete_learner is a soft delete -- it must never physically remove
+    the learner row or any of their learner_allocation_history rows, since
+    apprenticeship attendance data is subject to funding/compliance audits.
+    This documents that guarantee by construction, replacing the earlier
+    (now superseded) design of having no delete endpoint at all."""
+    from pyapp.routers.learners import LearnerDeleteInput, delete_learner
 
-    assert not hasattr(learners_router, "delete_learner")
+    learner = learner_factory(status="active")
+    db.execute(
+        "INSERT INTO learner_allocation_history (learner_id, previous_tutor_id, new_tutor_id, effective_date, changed_by) "
+        "VALUES (%s, NULL, NULL, '2026-01-01', %s)",
+        (learner["id"], admin_user["userId"]),
+    )
+
+    delete_learner(learner["id"], LearnerDeleteInput(reason="Duplicate record"), request_factory(), admin_user)
+
+    db.execute("SELECT * FROM learners WHERE id = %s", (learner["id"],))
+    row = db.fetchone()
+    assert row is not None, "the learner row must still exist after deletion"
+    assert row["deleted_at"] is not None
+    assert row["deleted_by"] == admin_user["userId"]
+    assert row["deletion_reason"] == "Duplicate record"
+
+    db.execute("SELECT count(*) AS c FROM learner_allocation_history WHERE learner_id = %s", (learner["id"],))
+    assert db.fetchone()["c"] == 1, "allocation history must never be removed by a delete"
+
+
+def test_deleting_an_already_deleted_learner_is_rejected(db, request_factory, admin_user, learner_factory):
+    from pyapp.routers.learners import LearnerDeleteInput, delete_learner
+
+    learner = learner_factory(status="active")
+    delete_learner(learner["id"], LearnerDeleteInput(reason="First deletion"), request_factory(), admin_user)
+
+    with pytest.raises(HTTPException) as exc:
+        delete_learner(learner["id"], LearnerDeleteInput(reason="Second attempt"), request_factory(), admin_user)
+    assert exc.value.status_code == 400
+
+
+def test_deleting_a_nonexistent_learner_404s(request_factory, admin_user):
+    from pyapp.routers.learners import LearnerDeleteInput, delete_learner
+
+    with pytest.raises(HTTPException) as exc:
+        delete_learner(999999999, LearnerDeleteInput(reason="N/A"), request_factory(), admin_user)
+    assert exc.value.status_code == 404
+
+
+def test_deleted_learner_no_longer_appears_in_listings_or_lookups(db, request_factory, admin_user, learner_factory):
+    from pyapp.routers.learners import LearnerDeleteInput, delete_learner, get_learner, list_learners
+
+    learner = learner_factory(status="active")
+    delete_learner(learner["id"], LearnerDeleteInput(reason="Removing"), request_factory(), admin_user)
+
+    with pytest.raises(HTTPException) as exc:
+        get_learner(learner["id"], admin_user)
+    assert exc.value.status_code == 404
+
+    listed = list_learners(session=admin_user)
+    assert learner["id"] not in {row["id"] for row in listed["items"]}
+
+
+def test_deleting_a_learner_cancels_their_pending_scheduled_transfer(db, request_factory, admin_user, learner_factory):
+    from pyapp.routers.learners import LearnerDeleteInput, delete_learner
+
+    learner = learner_factory(status="active")
+    db.execute(
+        "INSERT INTO scheduled_allocations (learner_id, new_tutor_id, new_cohort_id, effective_date, created_by, status) "
+        "VALUES (%s, NULL, NULL, '2099-01-01', %s, 'pending') RETURNING id",
+        (learner["id"], admin_user["userId"]),
+    )
+    scheduled_id = db.fetchone()["id"]
+
+    delete_learner(learner["id"], LearnerDeleteInput(reason="Leaving programme"), request_factory(), admin_user)
+
+    db.execute("SELECT status FROM scheduled_allocations WHERE id = %s", (scheduled_id,))
+    assert db.fetchone()["status"] == "cancelled"

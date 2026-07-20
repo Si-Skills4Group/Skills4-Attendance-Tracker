@@ -2,10 +2,14 @@ import pytest
 from fastapi import HTTPException
 
 from pyapp.routers.cohorts import (
+    CohortDeleteInput,
     CohortInput,
     CohortUpdate,
     create_cohort,
     deactivate_cohort,
+    delete_cohort,
+    get_cohort,
+    list_cohorts,
     update_cohort,
 )
 
@@ -134,3 +138,95 @@ def test_delivery_day_must_be_a_known_value():
 
     with pytest.raises(pydantic.ValidationError):
         CohortInput(**_base_cohort_kwargs(deliveryDay="funday"))
+
+
+def test_deleting_an_empty_cohort_never_removes_the_row(db, request_factory, admin_user, cohort_factory):
+    cohort = cohort_factory()
+
+    delete_cohort(cohort["id"], CohortDeleteInput(reason="Set up in error"), request_factory(), admin_user)
+
+    db.execute("SELECT * FROM cohorts WHERE id = %s", (cohort["id"],))
+    row = db.fetchone()
+    assert row is not None, "the cohort row must still exist after deletion"
+    assert row["deleted_at"] is not None
+    assert row["deleted_by"] == admin_user["userId"]
+    assert row["deletion_reason"] == "Set up in error"
+
+
+def test_deleting_a_cohort_with_an_active_learner_is_blocked(db, request_factory, admin_user, cohort_factory, learner_factory):
+    cohort = cohort_factory()
+    learner_factory(cohort_id=cohort["id"], status="active")
+
+    with pytest.raises(HTTPException) as exc:
+        delete_cohort(cohort["id"], CohortDeleteInput(reason="Try anyway"), request_factory(), admin_user)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error"] == "cohort_not_empty"
+    assert exc.value.detail["activeLearnerCount"] == 1
+
+
+def test_deleting_a_cohort_with_a_session_is_blocked(db, request_factory, admin_user, cohort_factory, attendance_session_factory):
+    cohort = cohort_factory()
+    attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+    with pytest.raises(HTTPException) as exc:
+        delete_cohort(cohort["id"], CohortDeleteInput(reason="Try anyway"), request_factory(), admin_user)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error"] == "cohort_not_empty"
+    assert exc.value.detail["sessionCount"] == 1
+
+
+def test_cohort_can_be_deleted_once_its_learners_and_sessions_are_cleared(
+    db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+):
+    cohort = cohort_factory()
+    learner = learner_factory(cohort_id=cohort["id"], status="active")
+    session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+    db.execute("UPDATE learners SET status = 'withdrawn', withdrawal_date = '2026-01-01' WHERE id = %s", (learner["id"],))
+    db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session["id"],))
+
+    delete_cohort(cohort["id"], CohortDeleteInput(reason="No longer needed"), request_factory(), admin_user)
+
+    db.execute("SELECT deleted_at FROM cohorts WHERE id = %s", (cohort["id"],))
+    assert db.fetchone()["deleted_at"] is not None
+
+
+def test_deleting_an_already_deleted_cohort_is_rejected(db, request_factory, admin_user, cohort_factory):
+    cohort = cohort_factory()
+    delete_cohort(cohort["id"], CohortDeleteInput(reason="First"), request_factory(), admin_user)
+
+    with pytest.raises(HTTPException) as exc:
+        delete_cohort(cohort["id"], CohortDeleteInput(reason="Second"), request_factory(), admin_user)
+    assert exc.value.status_code == 400
+
+
+def test_deleting_a_nonexistent_cohort_404s(request_factory, admin_user):
+    with pytest.raises(HTTPException) as exc:
+        delete_cohort(999999999, CohortDeleteInput(reason="N/A"), request_factory(), admin_user)
+    assert exc.value.status_code == 404
+
+
+def test_deleted_cohort_no_longer_appears_in_listings_or_lookups(db, request_factory, admin_user, cohort_factory):
+    cohort = cohort_factory()
+    delete_cohort(cohort["id"], CohortDeleteInput(reason="Removing"), request_factory(), admin_user)
+
+    with pytest.raises(HTTPException) as exc:
+        get_cohort(cohort["id"], session=admin_user)
+    assert exc.value.status_code == 404
+
+    listed = list_cohorts(session=admin_user)
+    assert cohort["id"] not in {row["id"] for row in listed}
+
+
+def test_cohort_delete_is_audited(db, request_factory, admin_user, cohort_factory):
+    cohort = cohort_factory()
+    delete_cohort(cohort["id"], CohortDeleteInput(reason="Duplicate cohort"), request_factory(), admin_user)
+
+    db.execute(
+        "SELECT new_value FROM audit_logs WHERE entity_type = 'cohort' AND entity_id = %s AND action = 'delete_cohort' "
+        "ORDER BY id DESC LIMIT 1",
+        (cohort["id"],),
+    )
+    row = db.fetchone()
+    assert row is not None
+    assert "Duplicate cohort" in row["new_value"]

@@ -41,8 +41,12 @@ def apply_due_scheduled_allocations(cur, as_of: date | None = None) -> list[int]
         if cur.rowcount == 0:
             continue
 
+        # Defensive: a pending transfer is cancelled when its learner is
+        # deleted (see routers/learners.py::delete_learner), so this should
+        # never actually match a deleted learner -- but treat one the same
+        # as "not found" rather than resurrecting them into an allocation.
         cur.execute(
-            'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = %s',
+            'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = %s AND deleted_at IS NULL',
             (row["learnerId"],),
         )
         learner = cur.fetchone()

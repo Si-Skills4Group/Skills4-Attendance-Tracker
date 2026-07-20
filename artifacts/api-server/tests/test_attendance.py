@@ -15,8 +15,10 @@ from pyapp.routers.attendance import (
     RefreshRegisterInput,
     RegisterEntryInput,
     SessionCancelInput,
+    SessionDeleteInput,
     cancel_attendance_session,
     create_attendance_session,
+    delete_attendance_session,
     get_attendance_session,
     get_session_expected_learners,
     list_attendance_sessions,
@@ -102,6 +104,15 @@ class TestLearnerEligibilityRespectsLifecycle:
             status="completed", actual_end_date="2026-02-01",
         )
         assert learners_expected_in_cohort_as_of(db, cohort["id"], datetime.date(2026, 1, 15)) == [learner["id"]]
+
+    def test_deleted_learner_is_excluded_even_though_otherwise_eligible(self, db, cohort_factory, learner_factory):
+        """A deleted learner would otherwise be fully eligible (started,
+        not withdrawn) -- deletion must still exclude them from being
+        expected at any future session."""
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        db.execute("UPDATE learners SET deleted_at = now() WHERE id = %s", (learner["id"],))
+        assert learners_expected_in_cohort_as_of(db, cohort["id"], datetime.date(2026, 2, 1)) == []
 
     def test_expected_learners_count_sql_agrees_with_the_python_helper(
         self, db, cohort_factory, learner_factory,
@@ -565,6 +576,96 @@ class TestSessionCancellation:
         with pytest.raises(HTTPException) as exc:
             cancel_attendance_session(session["id"], SessionCancelInput(reason="Second"), request_factory(), admin_user)
         assert exc.value.status_code == 400
+
+
+class TestSessionDeletion:
+    def test_reason_is_required(self):
+        with pytest.raises(pydantic.ValidationError):
+            SessionDeleteInput(reason="")
+
+    def test_deleting_marks_session_deleted_and_preserves_it(
+        self, db, request_factory, admin_user, cohort_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        delete_attendance_session(
+            session["id"], SessionDeleteInput(reason="Session no longer needed"), request_factory(), admin_user,
+        )
+
+        db.execute("SELECT * FROM attendance_sessions WHERE id = %s", (session["id"],))
+        row = db.fetchone()
+        assert row is not None, "the session row must still exist after deletion"
+        assert row["deleted_at"] is not None
+        assert row["deleted_by"] == admin_user["userId"]
+        assert row["deletion_reason"] == "Session no longer needed"
+
+    def test_deleting_with_recorded_attendance_requires_confirmation_and_preserves_it(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            request_factory(), admin_user,
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            delete_attendance_session(session["id"], SessionDeleteInput(reason="Weather"), request_factory(), admin_user)
+        assert exc.value.status_code == 409
+        assert exc.value.detail["reason"] == "attendance_already_recorded"
+
+        delete_attendance_session(
+            session["id"], SessionDeleteInput(reason="Weather", confirmWithAttendance=True), request_factory(), admin_user,
+        )
+
+        db.execute(
+            "SELECT status FROM attendance_records WHERE session_id = %s AND learner_id = %s",
+            (session["id"], learner["id"]),
+        )
+        assert db.fetchone()["status"] == "present"
+
+    def test_deleting_an_already_deleted_session_is_rejected(
+        self, request_factory, admin_user, cohort_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        delete_attendance_session(session["id"], SessionDeleteInput(reason="First"), request_factory(), admin_user)
+
+        with pytest.raises(HTTPException) as exc:
+            delete_attendance_session(session["id"], SessionDeleteInput(reason="Second"), request_factory(), admin_user)
+        assert exc.value.status_code == 400
+
+    def test_deleting_a_nonexistent_session_404s(self, request_factory, admin_user):
+        with pytest.raises(HTTPException) as exc:
+            delete_attendance_session(999999999, SessionDeleteInput(reason="N/A"), request_factory(), admin_user)
+        assert exc.value.status_code == 404
+
+    def test_deleted_session_no_longer_appears_in_listings(
+        self, request_factory, admin_user, cohort_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        delete_attendance_session(session["id"], SessionDeleteInput(reason="Removing"), request_factory(), admin_user)
+
+        listed = list_attendance_sessions(cohortId=cohort["id"], tutorId=None, dateFrom=None, dateTo=None, session=admin_user)
+        assert session["id"] not in {row["id"] for row in listed}
+
+    def test_session_delete_is_audited(self, db, request_factory, admin_user, cohort_factory, attendance_session_factory):
+        cohort = cohort_factory()
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        delete_attendance_session(session["id"], SessionDeleteInput(reason="Duplicate session"), request_factory(), admin_user)
+
+        db.execute(
+            "SELECT new_value FROM audit_logs WHERE entity_type = 'attendance_session' AND entity_id = %s "
+            "AND action = 'delete_session' ORDER BY id DESC LIMIT 1",
+            (session["id"],),
+        )
+        row = db.fetchone()
+        assert row is not None
+        assert "Duplicate session" in row["new_value"]
 
 
 class TestSessionEditConfirmation:

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useGetLearner, useCreateLearner, useUpdateLearner, useChangeLearnerStatus, useGetLearnerAllocationHistory, LearnerStatus, getGetLearnerQueryKey, getGetLearnerAllocationHistoryQueryKey } from "@workspace/api-client-react";
+import { useGetLearner, useCreateLearner, useUpdateLearner, useChangeLearnerStatus, useDeleteLearner, useGetLearnerAllocationHistory, useGetCurrentUser, LearnerStatus, getGetLearnerQueryKey, getGetLearnerAllocationHistoryQueryKey } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw } from "lucide-react";
+import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2 } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -66,6 +66,11 @@ export default function LearnerDetailPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [deleteReason, setDeleteReason] = React.useState("");
+
+  const { data: currentUser } = useGetCurrentUser();
+  const isAdmin = currentUser?.role === "admin";
 
   const { data: learner, isLoading: isLoadingLearner } = useGetLearner(learnerId, {
     query: { enabled: !isNew, queryKey: getGetLearnerQueryKey(learnerId) }
@@ -78,6 +83,7 @@ export default function LearnerDetailPage() {
   const createMutation = useCreateLearner();
   const updateMutation = useUpdateLearner();
   const changeStatusMutation = useChangeLearnerStatus();
+  const deleteMutation = useDeleteLearner();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const form = useForm<z.infer<typeof learnerSchema>>({
@@ -181,6 +187,17 @@ export default function LearnerDetailPage() {
     });
   };
 
+  const onDeleteLearner = () => {
+    deleteMutation.mutate({ id: learnerId, data: { reason: deleteReason.trim() } }, {
+      onSuccess: () => {
+        toast({ title: "Learner deleted" });
+        setDeleteDialogOpen(false);
+        setLocation("/learners");
+      },
+      onError: (err) => toast({ title: "Could not delete learner", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
   if (!isNew && isLoadingLearner) {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
@@ -213,6 +230,11 @@ export default function LearnerDetailPage() {
           {!isNew && (
             <Button variant="outline" onClick={() => setStatusDialogOpen(true)}>
               <RefreshCw className="w-4 h-4 mr-2" /> Change Status
+            </Button>
+          )}
+          {!isNew && isAdmin && (
+            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteDialogOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete Learner
             </Button>
           )}
           <Button onClick={() => form.handleSubmit(onSubmit)()} disabled={isSaving} className="hover-elevate shadow-sm">
@@ -314,6 +336,11 @@ export default function LearnerDetailPage() {
                   {!isNew && (
                     <Button type="button" variant="outline" onClick={() => setStatusDialogOpen(true)}>
                       Change Status
+                    </Button>
+                  )}
+                  {!isNew && isAdmin && (
+                    <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteDialogOpen(true)}>
+                      Delete Learner
                     </Button>
                   )}
                   <Button type="submit" disabled={isSaving}>
@@ -441,6 +468,36 @@ export default function LearnerDetailPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) setDeleteReason(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Learner</DialogTitle>
+            <DialogDescription>
+              This learner's row and attendance history are preserved, never removed -- but they will
+              immediately disappear from every listing and report, and their minutes will no longer
+              count toward any cohort, tutor, or organisation total.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="delete-learner-reason">Reason</Label>
+            <Textarea
+              id="delete-learner-reason"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              rows={3}
+              placeholder="Why is this learner being deleted?"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Go Back</Button>
+            <Button variant="destructive" onClick={onDeleteLearner} disabled={deleteMutation.isPending || !deleteReason.trim()}>
+              {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete Learner
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -105,7 +105,7 @@ def list_cohorts(
     level: str | None = None,
     session: dict = Depends(require_auth),
 ):
-    clauses = []
+    clauses = ["c.deleted_at IS NULL"]
     params: list = []
     if session.get("role") == "tutor" and session.get("tutorId"):
         clauses.append("c.tutor_id = %s")
@@ -144,7 +144,7 @@ def list_cohort_summary(
     ("Level 1") view -- computed as a handful of grouped queries over the
     filtered cohort_ids, not per-cohort, so this stays O(1) queries
     regardless of how many cohorts are returned."""
-    clauses = []
+    clauses = ["c.deleted_at IS NULL"]
     params: list = []
     if session.get("role") == "tutor" and session.get("tutorId"):
         clauses.append("c.tutor_id = %s")
@@ -176,7 +176,7 @@ def list_cohort_summary(
             cur.execute(
                 """
                 SELECT cohort_id AS "cohortId", count(*)::int AS count
-                FROM learners WHERE cohort_id = ANY(%s) AND status = 'active'
+                FROM learners WHERE cohort_id = ANY(%s) AND status = 'active' AND deleted_at IS NULL
                 GROUP BY cohort_id
                 """,
                 (cohort_ids,),
@@ -187,7 +187,7 @@ def list_cohort_summary(
                 """
                 SELECT cohort_id AS "cohortId", count(*)::int AS count
                 FROM attendance_sessions
-                WHERE cohort_id = ANY(%s) AND session_date >= CURRENT_DATE AND status != 'cancelled'
+                WHERE cohort_id = ANY(%s) AND session_date >= CURRENT_DATE AND status != 'cancelled' AND deleted_at IS NULL
                 GROUP BY cohort_id
                 """,
                 (cohort_ids,),
@@ -200,7 +200,7 @@ def list_cohort_summary(
             # own register page shows (rather than a live-recomputed one
             # that could disagree after a backdated allocation correction).
             cur.execute(
-                "SELECT id FROM attendance_sessions WHERE cohort_id = ANY(%s) AND session_date <= CURRENT_DATE",
+                "SELECT id FROM attendance_sessions WHERE cohort_id = ANY(%s) AND session_date <= CURRENT_DATE AND deleted_at IS NULL",
                 (cohort_ids,),
             )
             ensure_expected_learners_snapshots_bulk(cur, [row["id"] for row in cur.fetchall()])
@@ -209,7 +209,7 @@ def list_cohort_summary(
                 """
                 SELECT s.cohort_id AS "cohortId", count(*)::int AS count
                 FROM attendance_sessions s
-                WHERE s.cohort_id = ANY(%s) AND s.session_date <= CURRENT_DATE AND s.status != 'cancelled'
+                WHERE s.cohort_id = ANY(%s) AND s.session_date <= CURRENT_DATE AND s.status != 'cancelled' AND s.deleted_at IS NULL
                   AND (SELECT count(*) FROM attendance_records WHERE session_id = s.id)
                       < (SELECT count(*) FROM session_expected_learners WHERE session_id = s.id)
                 GROUP BY s.cohort_id
@@ -264,14 +264,16 @@ def create_cohort(payload: CohortInput, request: Request, _session: dict = Depen
 @router.get("/cohorts/{cohort_id}")
 def get_cohort(cohort_id: int, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
-        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s AND c.deleted_at IS NULL", (cohort_id,))
         cohort = cur.fetchone()
         if not cohort:
             raise HTTPException(status_code=404, detail="Cohort not found")
         if session.get("role") == "tutor" and cohort["tutorId"] != session.get("tutorId"):
             raise HTTPException(status_code=403, detail="Not allowed to view this cohort")
 
-        cur.execute("SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s", (cohort_id,))
+        cur.execute(
+            "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND deleted_at IS NULL", (cohort_id,)
+        )
         count = cur.fetchone()["count"]
 
     return {**cohort, "learnerCount": count}
@@ -280,7 +282,7 @@ def get_cohort(cohort_id: int, session: dict = Depends(require_auth)):
 @router.patch("/cohorts/{cohort_id}")
 def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, _session: dict = Depends(require_admin)):
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM cohorts WHERE id = %s", (cohort_id,))
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Cohort not found")
@@ -331,7 +333,7 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, _sess
 @router.post("/cohorts/{cohort_id}/activate")
 def activate_cohort(cohort_id: int, request: Request, _session: dict = Depends(require_admin)):
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM cohorts WHERE id = %s", (cohort_id,))
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Cohort not found")
@@ -348,7 +350,7 @@ def activate_cohort(cohort_id: int, request: Request, _session: dict = Depends(r
 @router.post("/cohorts/{cohort_id}/deactivate")
 def deactivate_cohort(cohort_id: int, request: Request, _session: dict = Depends(require_admin)):
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM cohorts WHERE id = %s", (cohort_id,))
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Cohort not found")
@@ -362,11 +364,63 @@ def deactivate_cohort(cohort_id: int, request: Request, _session: dict = Depends
     return full
 
 
+class CohortDeleteInput(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+@router.post("/cohorts/{cohort_id}/delete", status_code=204)
+def delete_cohort(cohort_id: int, payload: CohortDeleteInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM cohorts WHERE id = %s", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        if existing["deleted_at"] is not None:
+            raise HTTPException(status_code=400, detail="Cohort is already deleted")
+
+        cur.execute(
+            "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active' AND deleted_at IS NULL",
+            (cohort_id,),
+        )
+        active_learner_count = cur.fetchone()["count"]
+        cur.execute(
+            "SELECT count(*)::int AS count FROM attendance_sessions WHERE cohort_id = %s AND deleted_at IS NULL",
+            (cohort_id,),
+        )
+        session_count = cur.fetchone()["count"]
+        if active_learner_count > 0 or session_count > 0:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "cohort_not_empty",
+                    "message": "This cohort still has active learners or attendance sessions. "
+                               "Reassign/withdraw its learners and delete its sessions before deleting the cohort.",
+                    "activeLearnerCount": active_learner_count,
+                    "sessionCount": session_count,
+                },
+            )
+
+        cur.execute(
+            "UPDATE cohorts SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, updated_at = now() WHERE id = %s",
+            (session["userId"], payload.reason, cohort_id),
+        )
+
+    write_audit_log(
+        request,
+        action="delete_cohort",
+        entity_type="cohort",
+        entity_id=cohort_id,
+        previous_value=existing,
+        new_value={"deletedAt": "now", "reason": payload.reason},
+    )
+    return None
+
+
 @router.get("/cohorts/{cohort_id}/learners")
 def get_cohort_learners(cohort_id: int, session: dict = Depends(require_auth)):
     from ..learners_query import LEARNERS_WITH_NAMES_SELECT
 
     with get_cursor() as cur:
         require_cohort_access(cur, cohort_id, session)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.cohort_id = %s", (cohort_id,))
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.cohort_id = %s AND l.deleted_at IS NULL", (cohort_id,))
         return cur.fetchall()

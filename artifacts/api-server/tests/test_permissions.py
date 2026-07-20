@@ -183,6 +183,25 @@ class TestEndpointsRejectTutorsOverHttp:
         response = client.get("/api/users")
         assert response.status_code == 200
 
+    def test_tutor_cannot_delete_a_learner(self, client, monkeypatch, learner_factory):
+        learner = learner_factory()
+        _as_tutor(monkeypatch)
+        response = client.post(f"/api/learners/{learner['id']}/delete", json={"reason": "Should be denied"})
+        assert response.status_code == 403
+
+    def test_tutor_cannot_delete_a_cohort(self, client, monkeypatch, cohort_factory):
+        cohort = cohort_factory()
+        _as_tutor(monkeypatch)
+        response = client.post(f"/api/cohorts/{cohort['id']}/delete", json={"reason": "Should be denied"})
+        assert response.status_code == 403
+
+    def test_tutor_cannot_delete_an_attendance_session(self, client, monkeypatch, admin_user, cohort_factory, attendance_session_factory):
+        cohort = cohort_factory()
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        _as_tutor(monkeypatch)
+        response = client.post(f"/api/attendance/sessions/{session['id']}/delete", json={"reason": "Should be denied"})
+        assert response.status_code == 403
+
     def _as_tutor_via_dependency_override(self, client, tutor_id):
         """require_auth is wired directly as Depends(require_auth) on
         GET /cohorts/{id} and GET /attendance/sessions (unlike

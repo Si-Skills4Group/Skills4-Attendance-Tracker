@@ -35,7 +35,7 @@ def _ensure_tutor_active(cur, tutor_id: int | None) -> None:
 def _ensure_cohort_active(cur, cohort_id: int | None) -> None:
     if cohort_id is None:
         return
-    cur.execute("SELECT active FROM cohorts WHERE id = %s", (cohort_id,))
+    cur.execute("SELECT active FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
     cohort = cur.fetchone()
     if not cohort:
         raise HTTPException(status_code=400, detail="Cohort not found")
@@ -47,7 +47,7 @@ def _ensure_cohort_active(cur, cohort_id: int | None) -> None:
 def unallocated_learners(_session: dict = Depends(require_admin)):
     with get_cursor() as cur:
         apply_due_scheduled_allocations(cur)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.tutor_id IS NULL")
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.tutor_id IS NULL AND l.deleted_at IS NULL")
         return cur.fetchall()
 
 
@@ -57,9 +57,9 @@ def allocation_by_tutor(_session: dict = Depends(require_admin)):
         apply_due_scheduled_allocations(cur)
         cur.execute('SELECT id, first_name AS "firstName", last_name AS "lastName" FROM tutors')
         tutors = cur.fetchall()
-        cur.execute('SELECT id, name, tutor_id AS "tutorId" FROM cohorts')
+        cur.execute('SELECT id, name, tutor_id AS "tutorId" FROM cohorts WHERE deleted_at IS NULL')
         cohorts = cur.fetchall()
-        cur.execute(LEARNERS_WITH_NAMES_SELECT)
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.deleted_at IS NULL")
         learners = cur.fetchall()
 
     result = []
@@ -97,7 +97,7 @@ def allocate_learners(payload: AllocationInput, request: Request, session: dict 
         _ensure_cohort_active(cur, payload.cohortId)
 
         cur.execute(
-            'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = ANY(%s)',
+            'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = ANY(%s) AND deleted_at IS NULL',
             (payload.learnerIds,),
         )
         learners = cur.fetchall()

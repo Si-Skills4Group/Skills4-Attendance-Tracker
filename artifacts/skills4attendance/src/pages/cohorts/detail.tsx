@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
+import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useDeleteCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
 import { useLocation, useParams, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,9 +13,19 @@ import { Combobox } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, Users } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Users, Trash2 } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -49,7 +59,9 @@ export default function CohortDetailPage() {
 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [deleteReason, setDeleteReason] = React.useState("");
+
   const { data: cohort, isLoading: isLoadingCohort } = useGetCohort(cohortId, {
     query: { enabled: !isNew, queryKey: getGetCohortQueryKey(cohortId) }
   });
@@ -66,6 +78,7 @@ export default function CohortDetailPage() {
   const updateMutation = useUpdateCohort();
   const activateMutation = useActivateCohort();
   const deactivateMutation = useDeactivateCohort();
+  const deleteMutation = useDeleteCohort();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const handleToggleActive = (newActive: boolean) => {
@@ -148,6 +161,29 @@ export default function CohortDetailPage() {
     }
   };
 
+  const onDeleteCohort = () => {
+    deleteMutation.mutate({ id: cohortId, data: { reason: deleteReason.trim() } }, {
+      onSuccess: () => {
+        toast({ title: "Cohort deleted" });
+        setDeleteDialogOpen(false);
+        setLocation("/cohorts");
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+        if (status === 409 && detail?.error === "cohort_not_empty") {
+          toast({
+            title: "Cohort is not empty",
+            description: `${detail.activeLearnerCount} active learner(s) and ${detail.sessionCount} session(s) must be cleared first.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        toast({ title: "Could not delete cohort", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
   if (!isNew && isLoadingCohort) {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
@@ -184,10 +220,15 @@ export default function CohortDetailPage() {
           </div>
         </div>
         {!isNew && isAdmin && (
-          <Button onClick={() => form.handleSubmit(onSubmit)()} disabled={isSaving} className="hover-elevate shadow-sm">
-            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Save Changes
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteDialogOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete Cohort
+            </Button>
+            <Button onClick={() => form.handleSubmit(onSubmit)()} disabled={isSaving} className="hover-elevate shadow-sm">
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save Changes
+            </Button>
+          </div>
         )}
       </div>
 
@@ -332,6 +373,36 @@ export default function CohortDetailPage() {
           )}
         </Tabs>
       </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) setDeleteReason(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Cohort</DialogTitle>
+            <DialogDescription>
+              The cohort record is preserved, never removed -- but it will immediately disappear from
+              every listing and report. A cohort with active learners or any attendance sessions cannot
+              be deleted; reassign/withdraw its learners and delete its sessions first.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="delete-cohort-reason">Reason</Label>
+            <Textarea
+              id="delete-cohort-reason"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              rows={3}
+              placeholder="Why is this cohort being deleted?"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Go Back</Button>
+            <Button variant="destructive" onClick={onDeleteCohort} disabled={deleteMutation.isPending || !deleteReason.trim()}>
+              {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete Cohort
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

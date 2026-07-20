@@ -971,6 +971,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /learners/{id}/delete:
+    post:
+      operationId: deleteLearner
+      tags: [learners]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearnerDeleteInput"
+      responses:
+        "204":
+          description: Learner soft-deleted -- retained for audit, hidden from every report and listing
+        "400":
+          description: Already deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /learners/{id}/allocation-history:
     get:
       operationId: getLearnerAllocationHistory
@@ -1155,6 +1185,42 @@ paths:
                 $ref: "#/components/schemas/Cohort"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/delete:
+    post:
+      operationId: deleteCohort
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CohortDeleteInput"
+      responses:
+        "204":
+          description: Cohort soft-deleted -- retained for audit, hidden from every report and listing
+        "400":
+          description: Already deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Cohort still has active learners or attendance sessions
           content:
             application/json:
               schema:
@@ -1446,6 +1512,42 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Attendance already recorded, confirm to cancel anyway
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/delete:
+    post:
+      operationId: deleteAttendanceSession
+      tags: [attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionDeleteInput"
+      responses:
+        "204":
+          description: Session soft-deleted -- retained for audit, hidden from every report and listing
+        "400":
+          description: Already deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Attendance already recorded, confirm to delete anyway
           content:
             application/json:
               schema:
@@ -2784,6 +2886,12 @@ components:
         withdrawalDate: { type: string, format: date }
         reason: { type: string }
 
+    LearnerDeleteInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
     LearnerListResponse:
       type: object
       required: [items, total, page, pageSize]
@@ -3204,6 +3312,12 @@ components:
         active: { type: boolean }
         externalSystemId: { type: ["string", "null"] }
 
+    CohortDeleteInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
     AllocationHistoryEntry:
       type: object
       required:
@@ -3384,6 +3498,13 @@ components:
         confirmChange: { type: boolean, default: false }
 
     SessionCancelInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+        confirmWithAttendance: { type: boolean, default: false }
+
+    SessionDeleteInput:
       type: object
       required: [reason]
       properties:

@@ -195,6 +195,9 @@ def fetch_attendance_metrics(
     scope_sql, scope_params = _scope_clause(scope, scope_id)
     clauses = [
         "s.status != 'cancelled'",
+        "s.deleted_at IS NULL",
+        "c.deleted_at IS NULL",
+        "l.deleted_at IS NULL",
         "s.session_date >= %s",
         "s.session_date <= %s",
         scope_sql,
@@ -210,6 +213,7 @@ def fetch_attendance_metrics(
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
         JOIN session_expected_learners sel ON sel.session_id = s.id
+        JOIN learners l ON l.id = sel.learner_id
         LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
         WHERE {' AND '.join(clauses)}
         """,
@@ -262,8 +266,10 @@ def fetch_attendance_metrics_grouped(
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
         JOIN session_expected_learners sel ON sel.session_id = s.id
+        JOIN learners l ON l.id = sel.learner_id
         LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
-        WHERE s.status != 'cancelled' AND s.session_date >= %s AND s.session_date <= %s
+        WHERE s.status != 'cancelled' AND s.deleted_at IS NULL AND c.deleted_at IS NULL AND l.deleted_at IS NULL
+          AND s.session_date >= %s AND s.session_date <= %s
           AND {column} = ANY(%s){extra_clause}
         GROUP BY {column}
         """,
@@ -294,16 +300,21 @@ def _fetch_metrics_by_string_key(
     organisation-report breakdowns -- same formula/columns as every other
     aggregate here, just GROUP BY a cohort/learner attribute string instead
     of an entity id, and returning every distinct value seen (not a
-    pre-known id list, unlike fetch_attendance_metrics_grouped)."""
+    pre-known id list, unlike fetch_attendance_metrics_grouped). Always
+    joins learners (even for the programme/level breakdowns, which don't
+    need it for the group key itself) so a deleted learner's minutes never
+    contribute to any breakdown."""
     cur.execute(
         f"""
         SELECT {key_sql} AS "groupKey", {_METRICS_SELECT_COLUMNS}
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
         JOIN session_expected_learners sel ON sel.session_id = s.id
+        JOIN learners l ON l.id = sel.learner_id
         {extra_join}
         LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
-        WHERE s.status != 'cancelled' AND s.session_date >= %s AND s.session_date <= %s
+        WHERE s.status != 'cancelled' AND s.deleted_at IS NULL AND c.deleted_at IS NULL AND l.deleted_at IS NULL
+          AND s.session_date >= %s AND s.session_date <= %s
         GROUP BY {key_sql}
         """,
         [period_start, period_end],
@@ -323,7 +334,7 @@ def fetch_attendance_metrics_by_employer(cur, *, period_start: date, period_end:
     return _fetch_metrics_by_string_key(
         cur,
         key_sql="COALESCE(l.employer, 'Unspecified')",
-        extra_join="JOIN learners l ON l.id = sel.learner_id",
+        extra_join="",
         period_start=period_start,
         period_end=period_end,
     )
@@ -361,7 +372,15 @@ def fetch_attendance_metrics_by_period_bucket(
     minutes in range are omitted (there is nothing to report for a week/
     month that didn't happen), rather than padded with empty rows."""
     scope_sql, scope_params = _scope_clause(scope, scope_id)
-    clauses = ["s.status != 'cancelled'", "s.session_date >= %s", "s.session_date <= %s", scope_sql]
+    clauses = [
+        "s.status != 'cancelled'",
+        "s.deleted_at IS NULL",
+        "c.deleted_at IS NULL",
+        "l.deleted_at IS NULL",
+        "s.session_date >= %s",
+        "s.session_date <= %s",
+        scope_sql,
+    ]
     params: list = [period_start, period_end, *scope_params]
 
     cur.execute(
@@ -370,6 +389,7 @@ def fetch_attendance_metrics_by_period_bucket(
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
         JOIN session_expected_learners sel ON sel.session_id = s.id
+        JOIN learners l ON l.id = sel.learner_id
         LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
         WHERE {' AND '.join(clauses)}
         GROUP BY 1
@@ -422,7 +442,8 @@ def fetch_register_completion(
                 (SELECT count(*)::int FROM session_expected_learners sel WHERE sel.session_id = s.id) AS expected_count
             FROM attendance_sessions s
             JOIN cohorts c ON s.cohort_id = c.id
-            WHERE s.status != 'cancelled' AND s.session_date >= %s AND s.session_date <= %s AND {scope_sql}
+            WHERE s.status != 'cancelled' AND s.deleted_at IS NULL AND c.deleted_at IS NULL
+              AND s.session_date >= %s AND s.session_date <= %s AND {scope_sql}
         )
         SELECT
             count(*) FILTER (WHERE register_locked_at IS NULL AND recorded_count = 0) AS "notStarted",

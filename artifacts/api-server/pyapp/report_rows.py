@@ -69,7 +69,7 @@ def fetch_learner_session_history(
     cohort, so a transfer never rewrites history here."""
     where = (
         "sel.learner_id = %(learnerId)s AND s.session_date >= %(periodStart)s "
-        "AND s.session_date <= %(periodEnd)s AND s.status != 'cancelled'"
+        "AND s.session_date <= %(periodEnd)s AND s.status != 'cancelled' AND s.deleted_at IS NULL"
     )
     params = {"learnerId": learner_id, "periodStart": period_start, "periodEnd": period_end}
 
@@ -135,7 +135,8 @@ def fetch_absence_rows(
         tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level, employer=employer, learner_id=learner_id
     )
     where = " AND ".join(
-        ["s.status != 'cancelled'", "s.session_date >= %(periodStart)s", "s.session_date <= %(periodEnd)s",
+        ["s.status != 'cancelled'", "s.deleted_at IS NULL", "c.deleted_at IS NULL", "l.deleted_at IS NULL",
+         "s.session_date >= %(periodStart)s", "s.session_date <= %(periodEnd)s",
          "ar.status = %(absenceType)s", *extra_clauses]
     )
     params = {"periodStart": period_start, "periodEnd": period_end, "absenceType": absence_type, **extra_params}
@@ -187,7 +188,8 @@ def fetch_lateness_rows(
         tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level, employer=employer, learner_id=learner_id
     )
     where = " AND ".join(
-        ["s.status != 'cancelled'", "s.session_date >= %(periodStart)s", "s.session_date <= %(periodEnd)s",
+        ["s.status != 'cancelled'", "s.deleted_at IS NULL", "c.deleted_at IS NULL", "l.deleted_at IS NULL",
+         "s.session_date >= %(periodStart)s", "s.session_date <= %(periodEnd)s",
          "ar.status = 'late'", *extra_clauses]
     )
     params = {"periodStart": period_start, "periodEnd": period_end, **extra_params}
@@ -239,7 +241,10 @@ def fetch_register_completion_rows(
     the overdue-incomplete subset) to every register status, with full
     filtering. Register status is derived with the exact same branch order
     as routers/attendance.py::_compute_register_status -- keep in sync."""
-    clauses = ["s.session_date >= %(periodStart)s", "s.session_date <= %(periodEnd)s"]
+    clauses = [
+        "s.session_date >= %(periodStart)s", "s.session_date <= %(periodEnd)s",
+        "s.deleted_at IS NULL", "c.deleted_at IS NULL",
+    ]
     params: dict = {"periodStart": period_start, "periodEnd": period_end}
     if tutor_id is not None:
         clauses.append("c.tutor_id = %(tutorId)s")

@@ -42,6 +42,7 @@ import type {
   CancelScheduledAllocationResult,
   Cohort,
   CohortCardSummary,
+  CohortDeleteInput,
   CohortDetail,
   CohortInput,
   CohortReportResponse,
@@ -83,6 +84,7 @@ import type {
   LatenessReportResponse,
   Learner,
   LearnerAttendanceSummaryListResponse,
+  LearnerDeleteInput,
   LearnerImportJob,
   LearnerImportJobRow,
   LearnerImportJobRowListResponse,
@@ -113,6 +115,7 @@ import type {
   RegisterRefreshDiff,
   RegisterRefreshResult,
   SessionCancelInput,
+  SessionDeleteInput,
   SettingsUpdate,
   Tutor,
   TutorAllocationGroup,
@@ -3265,6 +3268,72 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getChangeLearnerStatusMutationOptions(options));
     }
 
+export const getDeleteLearnerUrl = (id: number,) => {
+
+
+
+
+  return `/api/learners/${id}/delete`
+}
+
+export const deleteLearner = async (id: number,
+    learnerDeleteInput: LearnerDeleteInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteLearnerUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(learnerDeleteInput)
+  }
+);}
+
+
+
+
+
+export const getDeleteLearnerMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLearner>>, TError,{id: number;data: BodyType<LearnerDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLearner>>, TError,{id: number;data: BodyType<LearnerDeleteInput>}, TContext> => {
+
+const mutationKey = ['deleteLearner'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLearner>>, {id: number;data: BodyType<LearnerDeleteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteLearner(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLearnerMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLearner>>>
+    export type DeleteLearnerMutationBody = BodyType<LearnerDeleteInput>
+    export type DeleteLearnerMutationError = ErrorType<ErrorResponse>
+
+    export const useDeleteLearner = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLearner>>, TError,{id: number;data: BodyType<LearnerDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLearner>>,
+        TError,
+        {id: number;data: BodyType<LearnerDeleteInput>},
+        TContext
+      > => {
+      return useMutation(getDeleteLearnerMutationOptions(options));
+    }
+
 export const getGetLearnerAllocationHistoryUrl = (id: number,) => {
 
 
@@ -3825,6 +3894,72 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getDeactivateCohortMutationOptions(options));
+    }
+
+export const getDeleteCohortUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/delete`
+}
+
+export const deleteCohort = async (id: number,
+    cohortDeleteInput: CohortDeleteInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCohortUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cohortDeleteInput)
+  }
+);}
+
+
+
+
+
+export const getDeleteCohortMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCohort>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCohort>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext> => {
+
+const mutationKey = ['deleteCohort'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCohort>>, {id: number;data: BodyType<CohortDeleteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteCohort(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCohortMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCohort>>>
+    export type DeleteCohortMutationBody = BodyType<CohortDeleteInput>
+    export type DeleteCohortMutationError = ErrorType<ErrorResponse>
+
+    export const useDeleteCohort = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCohort>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCohort>>,
+        TError,
+        {id: number;data: BodyType<CohortDeleteInput>},
+        TContext
+      > => {
+      return useMutation(getDeleteCohortMutationOptions(options));
     }
 
 export const getGetCohortLearnersUrl = (id: number,) => {
@@ -4673,6 +4808,72 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCancelAttendanceSessionMutationOptions(options));
+    }
+
+export const getDeleteAttendanceSessionUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/delete`
+}
+
+export const deleteAttendanceSession = async (id: number,
+    sessionDeleteInput: SessionDeleteInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAttendanceSessionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sessionDeleteInput)
+  }
+);}
+
+
+
+
+
+export const getDeleteAttendanceSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAttendanceSession>>, TError,{id: number;data: BodyType<SessionDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAttendanceSession>>, TError,{id: number;data: BodyType<SessionDeleteInput>}, TContext> => {
+
+const mutationKey = ['deleteAttendanceSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAttendanceSession>>, {id: number;data: BodyType<SessionDeleteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteAttendanceSession(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAttendanceSessionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAttendanceSession>>>
+    export type DeleteAttendanceSessionMutationBody = BodyType<SessionDeleteInput>
+    export type DeleteAttendanceSessionMutationError = ErrorType<ErrorResponse>
+
+    export const useDeleteAttendanceSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAttendanceSession>>, TError,{id: number;data: BodyType<SessionDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAttendanceSession>>,
+        TError,
+        {id: number;data: BodyType<SessionDeleteInput>},
+        TContext
+      > => {
+      return useMutation(getDeleteAttendanceSessionMutationOptions(options));
     }
 
 export const getGetSessionExpectedLearnersUrl = (id: number,) => {

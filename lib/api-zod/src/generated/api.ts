@@ -1366,6 +1366,20 @@ export const ChangeLearnerStatusResponse = zod.object({
 })
 
 
+export const DeleteLearnerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const DeleteLearnerBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const DeleteLearnerResponse = zod.void()
+
+
 export const GetLearnerAllocationHistoryParams = zod.object({
   "id": zod.coerce.number()
 })
@@ -1605,6 +1619,20 @@ export const DeactivateCohortResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
+
+
+export const DeleteCohortParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const DeleteCohortBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const DeleteCohortResponse = zod.void()
 
 
 export const GetCohortLearnersParams = zod.object({
@@ -2011,6 +2039,21 @@ export const CancelAttendanceSessionResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
+
+
+export const DeleteAttendanceSessionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const deleteAttendanceSessionBodyConfirmWithAttendanceDefault = false;
+
+export const DeleteAttendanceSessionBody = zod.object({
+  "reason": zod.string().min(1),
+  "confirmWithAttendance": zod.boolean().default(deleteAttendanceSessionBodyConfirmWithAttendanceDefault)
+})
+
+export const DeleteAttendanceSessionResponse = zod.void()
 
 
 export const GetSessionExpectedLearnersParams = zod.object({

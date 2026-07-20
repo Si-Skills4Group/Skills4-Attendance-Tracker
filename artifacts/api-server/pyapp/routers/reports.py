@@ -147,7 +147,7 @@ def get_learner_report(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         require_learner_access(cur, learner_id, session)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s AND l.deleted_at IS NULL", (learner_id,))
         learner = cur.fetchone()
         if not learner:
             raise HTTPException(status_code=404, detail="Learner not found")
@@ -180,7 +180,7 @@ def export_learner_report(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         require_learner_access(cur, learner_id, session)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s AND l.deleted_at IS NULL", (learner_id,))
         learner = cur.fetchone()
         if not learner:
             raise HTTPException(status_code=404, detail="Learner not found")
@@ -214,7 +214,9 @@ def _cohort_learner_breakdown(cur, cohort_id: int, period_start: date, period_en
         SELECT DISTINCT sel.learner_id
         FROM session_expected_learners sel
         JOIN attendance_sessions s ON s.id = sel.session_id
+        JOIN learners l ON l.id = sel.learner_id
         WHERE s.cohort_id = %s AND s.session_date >= %s AND s.session_date <= %s AND s.status != 'cancelled'
+          AND s.deleted_at IS NULL AND l.deleted_at IS NULL
         """,
         (cohort_id, period_start, period_end),
     )
@@ -225,7 +227,8 @@ def _cohort_learner_breakdown(cur, cohort_id: int, period_start: date, period_en
         cur, group_by="learner", group_ids=learner_ids, period_start=period_start, period_end=period_end, fixed_cohort_id=cohort_id
     )
     cur.execute(
-        'SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef" FROM learners WHERE id = ANY(%s)',
+        'SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef" '
+        "FROM learners WHERE id = ANY(%s) AND deleted_at IS NULL",
         (learner_ids,),
     )
     names = {r["id"]: r for r in cur.fetchall()}
@@ -253,14 +256,17 @@ def get_cohort_report(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         require_cohort_access(cur, cohort_id, session)
-        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s AND c.deleted_at IS NULL", (cohort_id,))
         cohort = cur.fetchone()
         if not cohort:
             raise HTTPException(status_code=404, detail="Cohort not found")
 
         metrics = fetch_attendance_metrics(cur, scope="cohort", scope_id=cohort_id, period_start=period_start, period_end=period_end)
         completion = fetch_register_completion(cur, scope="cohort", scope_id=cohort_id, period_start=period_start, period_end=period_end)
-        cur.execute("SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active'", (cohort_id,))
+        cur.execute(
+            "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active' AND deleted_at IS NULL",
+            (cohort_id,),
+        )
         active_learner_count = cur.fetchone()["count"]
 
         breakdown_all = _cohort_learner_breakdown(cur, cohort_id, period_start, period_end)
@@ -290,7 +296,7 @@ def export_cohort_report(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         require_cohort_access(cur, cohort_id, session)
-        cur.execute("SELECT id FROM cohorts WHERE id = %s", (cohort_id,))
+        cur.execute("SELECT id FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Cohort not found")
         breakdown = _cohort_learner_breakdown(cur, cohort_id, period_start, period_end)
@@ -328,21 +334,24 @@ def get_tutor_report(
         metrics = fetch_attendance_metrics(cur, scope="tutor", scope_id=tutor_id, period_start=period_start, period_end=period_end)
         completion = fetch_register_completion(cur, scope="tutor", scope_id=tutor_id, period_start=period_start, period_end=period_end)
 
-        cur.execute(f"{COHORT_SELECT} WHERE c.tutor_id = %s", (tutor_id,))
+        cur.execute(f"{COHORT_SELECT} WHERE c.tutor_id = %s AND c.deleted_at IS NULL", (tutor_id,))
         cohorts = cur.fetchall()
         metrics_by_cohort = fetch_attendance_metrics_grouped(
             cur, group_by="cohort", group_ids=[c["id"] for c in cohorts], period_start=period_start, period_end=period_end
         )
         cohort_breakdown = [{"cohort": c, "metrics": metrics_by_cohort[c["id"]]} for c in cohorts]
 
-        cur.execute("SELECT count(*)::int AS count FROM learners WHERE tutor_id = %s AND status = 'active'", (tutor_id,))
+        cur.execute(
+            "SELECT count(*)::int AS count FROM learners WHERE tutor_id = %s AND status = 'active' AND deleted_at IS NULL",
+            (tutor_id,),
+        )
         active_learners = cur.fetchone()["count"]
 
         threshold = _get_threshold(cur)
         cur.execute(
             'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", l.learner_ref AS "learnerRef", '
             'l.uln, c.name AS "cohortName" FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id '
-            "WHERE l.tutor_id = %s AND l.status = 'active'",
+            "WHERE l.tutor_id = %s AND l.status = 'active' AND l.deleted_at IS NULL",
             (tutor_id,),
         )
         tutor_learners = cur.fetchall()
@@ -371,7 +380,7 @@ def export_tutor_report(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         require_tutor_access(cur, tutor_id, session)
-        cur.execute(f"{COHORT_SELECT} WHERE c.tutor_id = %s", (tutor_id,))
+        cur.execute(f"{COHORT_SELECT} WHERE c.tutor_id = %s AND c.deleted_at IS NULL", (tutor_id,))
         cohorts = cur.fetchall()
         metrics_by_cohort = fetch_attendance_metrics_grouped(
             cur, group_by="cohort", group_ids=[c["id"] for c in cohorts], period_start=period_start, period_end=period_end
@@ -401,7 +410,7 @@ def _organisation_breakdowns(cur, period_start: date, period_end: date) -> dict:
         {"tutorId": t["id"], "tutorName": f"{t['firstName']} {t['lastName']}", "metrics": metrics_by_tutor[t["id"]]} for t in tutors
     ]
 
-    cur.execute(f"{COHORT_SELECT} WHERE c.active = true")
+    cur.execute(f"{COHORT_SELECT} WHERE c.active = true AND c.deleted_at IS NULL")
     cohorts = cur.fetchall()
     metrics_by_cohort = fetch_attendance_metrics_grouped(
         cur, group_by="cohort", group_ids=[c["id"] for c in cohorts], period_start=period_start, period_end=period_end
@@ -433,14 +442,15 @@ def get_organisation_report(
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
-        cur.execute("SELECT count(*)::int AS count FROM learners WHERE status = 'active'")
+        cur.execute("SELECT count(*)::int AS count FROM learners WHERE status = 'active' AND deleted_at IS NULL")
         active_learners = cur.fetchone()["count"]
         cur.execute("SELECT count(*)::int AS count FROM tutors WHERE active = true")
         active_tutors = cur.fetchone()["count"]
-        cur.execute("SELECT count(*)::int AS count FROM cohorts WHERE active = true")
+        cur.execute("SELECT count(*)::int AS count FROM cohorts WHERE active = true AND deleted_at IS NULL")
         active_cohorts = cur.fetchone()["count"]
         cur.execute(
-            "SELECT count(*)::int AS count FROM attendance_sessions WHERE session_date >= %s AND session_date <= %s AND status != 'cancelled'",
+            "SELECT count(*)::int AS count FROM attendance_sessions "
+            "WHERE session_date >= %s AND session_date <= %s AND status != 'cancelled' AND deleted_at IS NULL",
             (period_start, period_end),
         )
         sessions_in_period = cur.fetchone()["count"]
@@ -649,21 +659,27 @@ def _attendance_hours_items(cur, session: dict, *, groupBy: AttendanceHoursGroup
         if cohort_id:
             cohort_ids = [cohort_id]
         elif tutor_id:
-            cur.execute("SELECT id FROM cohorts WHERE tutor_id = %s", (tutor_id,))
+            cur.execute("SELECT id FROM cohorts WHERE tutor_id = %s AND deleted_at IS NULL", (tutor_id,))
             cohort_ids = [r["id"] for r in cur.fetchall()]
         else:
-            cur.execute("SELECT id FROM cohorts WHERE active = true")
+            cur.execute("SELECT id FROM cohorts WHERE active = true AND deleted_at IS NULL")
             cohort_ids = [r["id"] for r in cur.fetchall()]
-        cur.execute("SELECT id, name FROM cohorts WHERE id = ANY(%s)", (cohort_ids,))
+        cur.execute("SELECT id, name FROM cohorts WHERE id = ANY(%s) AND deleted_at IS NULL", (cohort_ids,))
         cohorts = cur.fetchall()
-        data = fetch_attendance_metrics_grouped(cur, group_by="cohort", group_ids=cohort_ids, period_start=period_start, period_end=period_end)
+        data = fetch_attendance_metrics_grouped(cur, group_by="cohort", group_ids=[c["id"] for c in cohorts], period_start=period_start, period_end=period_end)
         return [{"key": str(c["id"]), "label": c["name"], "metrics": data[c["id"]]} for c in cohorts]
 
     # groupBy == "learner"
     if cohort_id:
-        cur.execute('SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners WHERE cohort_id = %s AND status = %s', (cohort_id, "active"))
+        cur.execute(
+            'SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners '
+            "WHERE cohort_id = %s AND status = %s AND deleted_at IS NULL", (cohort_id, "active"),
+        )
     elif tutor_id:
-        cur.execute('SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners WHERE tutor_id = %s AND status = %s', (tutor_id, "active"))
+        cur.execute(
+            'SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners '
+            "WHERE tutor_id = %s AND status = %s AND deleted_at IS NULL", (tutor_id, "active"),
+        )
     else:
         raise HTTPException(status_code=400, detail="groupBy=learner requires a tutorId or cohortId filter")
     learners = cur.fetchall()

@@ -409,6 +409,26 @@ CREATE INDEX IF NOT EXISTS idx_user_sessions_expire ON user_sessions (expire);
 CREATE INDEX IF NOT EXISTS idx_learners_employer ON learners (employer);
 CREATE INDEX IF NOT EXISTS idx_allocation_history_new_tutor ON learner_allocation_history (new_tutor_id);
 
+-- Admin soft-delete for learners, cohorts, and attendance sessions. Never a
+-- hard delete -- no table in this schema has foreign keys, and apprenticeship
+-- attendance data is subject to funding/compliance audits, so rows and their
+-- history are always retained; deleted_at just makes them stop appearing
+-- everywhere (reports, dashboards, listings, future session rosters).
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS deleted_by integer;
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS deletion_reason text;
+CREATE INDEX IF NOT EXISTS idx_learners_deleted_at ON learners (deleted_at);
+
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS deleted_by integer;
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS deletion_reason text;
+CREATE INDEX IF NOT EXISTS idx_cohorts_deleted_at ON cohorts (deleted_at);
+
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS deleted_by integer;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS deletion_reason text;
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_deleted_at ON attendance_sessions (deleted_at);
+
 INSERT INTO app_settings (id, organisation_name, low_attendance_threshold)
 VALUES (1, 'Skills4Group', 85)
 ON CONFLICT (id) DO NOTHING;

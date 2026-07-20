@@ -294,6 +294,11 @@ export interface LearnerStatusChangeInput {
   reason?: string;
 }
 
+export interface LearnerDeleteInput {
+  /** @minLength 1 */
+  reason: string;
+}
+
 export interface LearnerListResponse {
   items: Learner[];
   total: number;
@@ -628,6 +633,11 @@ export interface CohortUpdate {
   externalSystemId?: string | null;
 }
 
+export interface CohortDeleteInput {
+  /** @minLength 1 */
+  reason: string;
+}
+
 export interface AllocationHistoryEntry {
   id: number;
   learnerId: number;
@@ -758,6 +768,12 @@ export interface AttendanceSessionUpdate {
 }
 
 export interface SessionCancelInput {
+  /** @minLength 1 */
+  reason: string;
+  confirmWithAttendance?: boolean;
+}
+
+export interface SessionDeleteInput {
   /** @minLength 1 */
   reason: string;
   confirmWithAttendance?: boolean;

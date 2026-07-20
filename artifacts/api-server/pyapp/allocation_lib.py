@@ -58,7 +58,11 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
 
     Also excludes learners who, as of that date, hadn't started yet, or had
     already withdrawn/completed -- cohort-history resolution alone doesn't
-    know about a learner's own start/end lifecycle."""
+    know about a learner's own start/end lifecycle. And excludes learners an
+    admin has since deleted -- the sole gatekeeper for whether a deleted
+    learner keeps getting added to a *future* session's expected roster;
+    without this, deleting a learner wouldn't stop them being expected
+    tomorrow."""
     cur.execute(
         """
         SELECT l.id
@@ -73,6 +77,7 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
             l.cohort_id
         ) = %(cohort_id)s
         AND l.start_date <= %(as_of)s
+        AND l.deleted_at IS NULL
         AND NOT (l.status = 'withdrawn' AND l.withdrawal_date IS NOT NULL AND l.withdrawal_date <= %(as_of)s)
         AND NOT (l.status = 'completed' AND l.actual_end_date IS NOT NULL AND l.actual_end_date <= %(as_of)s)
         """,
@@ -100,6 +105,7 @@ def expected_learners_count_sql(cohort_id_column: str, as_of_date_column: str) -
             exp_l.cohort_id
         ) = {cohort_id_column}
         AND exp_l.start_date <= {as_of_date_column}
+        AND exp_l.deleted_at IS NULL
         AND NOT (exp_l.status = 'withdrawn' AND exp_l.withdrawal_date IS NOT NULL AND exp_l.withdrawal_date <= {as_of_date_column})
         AND NOT (exp_l.status = 'completed' AND exp_l.actual_end_date IS NOT NULL AND exp_l.actual_end_date <= {as_of_date_column})
     )"""

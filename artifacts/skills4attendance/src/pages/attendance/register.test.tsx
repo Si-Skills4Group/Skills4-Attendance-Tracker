@@ -34,6 +34,7 @@ let mockRegister: { data: any; isLoading: boolean };
 let mockCurrentUser: { data: any };
 const mockUpdateMutate = vi.fn();
 const mockCancelMutate = vi.fn();
+const mockDeleteMutate = vi.fn();
 const mockRefreshMutate = vi.fn();
 const mockSaveMutate = vi.fn();
 const mockCompleteMutate = vi.fn();
@@ -51,6 +52,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useUnlockAttendanceRegister: () => ({ mutate: mockUnlockMutate, isPending: false }),
   useUpdateAttendanceSession: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useCancelAttendanceSession: () => ({ mutate: mockCancelMutate, isPending: false }),
+  useDeleteAttendanceSession: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useRefreshSessionRegister: () => ({ mutate: mockRefreshMutate, isPending: false }),
   getGetAttendanceSessionQueryKey: (id: number) => ['getAttendanceSession', id],
 }));
@@ -76,6 +78,7 @@ describe('RegisterPage', () => {
     mockCompletePending = false;
     mockUpdateMutate.mockReset();
     mockCancelMutate.mockReset();
+    mockDeleteMutate.mockReset();
     mockRefreshMutate.mockReset();
     mockSaveMutate.mockReset();
     mockCompleteMutate.mockReset();
@@ -149,6 +152,56 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByText(/already has recorded attendance/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /cancel anyway/i })).toBeInTheDocument();
+  });
+
+  it('offers a Delete Session action for admins but not tutors', () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockCurrentUser = { data: { role: 'admin' } };
+    renderAtLocation();
+    expect(screen.getByRole('button', { name: /delete session/i })).toBeInTheDocument();
+  });
+
+  it('hides the Delete Session action for tutors', () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    renderAtLocation();
+    expect(screen.queryByRole('button', { name: /delete session/i })).not.toBeInTheDocument();
+  });
+
+  it('requires a reason to delete and shows a confirmation step when attendance already exists', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockDeleteMutate.mockImplementation((_payload, { onError }: any) => {
+      onError({ status: 409, data: { reason: 'attendance_already_recorded' } });
+    });
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /delete session/i }));
+    const confirmButton = screen.getByRole('button', { name: /^delete session$/i });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Reason'), 'Duplicate entry');
+    expect(confirmButton).toBeEnabled();
+    await user.click(confirmButton);
+
+    expect(await screen.findByText(/already has recorded attendance/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /delete anyway/i })).toBeInTheDocument();
+  });
+
+  it('deletes a session with no recorded attendance without needing confirmation', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockDeleteMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess());
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /delete session/i }));
+    await user.type(screen.getByLabelText('Reason'), 'Duplicate entry');
+    await user.click(screen.getByRole('button', { name: /^delete session$/i }));
+
+    expect(mockDeleteMutate).toHaveBeenCalledWith(
+      { id: 200, data: { reason: 'Duplicate entry', confirmWithAttendance: false } },
+      expect.anything(),
+    );
   });
 
   it('shows a clear banner and read-only register for a cancelled session', () => {

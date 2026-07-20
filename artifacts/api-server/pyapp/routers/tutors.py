@@ -15,7 +15,9 @@ TUTOR_SELECT = (
 
 
 def _active_cohorts_for_tutor(cur, tutor_id: int) -> list:
-    cur.execute('SELECT id, name FROM cohorts WHERE tutor_id = %s AND active = true', (tutor_id,))
+    cur.execute(
+        'SELECT id, name FROM cohorts WHERE tutor_id = %s AND active = true AND deleted_at IS NULL', (tutor_id,)
+    )
     return cur.fetchall()
 
 

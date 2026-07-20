@@ -7,6 +7,7 @@ import {
   useUnlockAttendanceRegister,
   useUpdateAttendanceSession,
   useCancelAttendanceSession,
+  useDeleteAttendanceSession,
   useRefreshSessionRegister,
   useGetCurrentUser,
   AttendanceStatus,
@@ -35,7 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
 import {
   Loader2, Save, ArrowLeft, CheckCircle2, Clock, CalendarDays, Users, Pencil, Ban, RefreshCw,
-  ChevronDown, Lock, Unlock, ShieldCheck, AlertTriangle,
+  ChevronDown, Lock, Unlock, ShieldCheck, AlertTriangle, Trash2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { RegisterStatusBadge } from "@/components/status-badges";
@@ -103,6 +104,7 @@ export default function RegisterPage() {
   const unlockMutation = useUnlockAttendanceRegister();
   const updateMutation = useUpdateAttendanceSession();
   const cancelMutation = useCancelAttendanceSession();
+  const deleteMutation = useDeleteAttendanceSession();
   const refreshMutation = useRefreshSessionRegister();
 
   // ---------------------------------------------------------------------
@@ -505,6 +507,37 @@ export default function RegisterPage() {
   };
 
   // ---------------------------------------------------------------------
+  // Delete session (admin-only)
+  // ---------------------------------------------------------------------
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteReason, setDeleteReason] = React.useState("");
+  const [deleteNeedsConfirm, setDeleteNeedsConfirm] = React.useState(false);
+
+  const submitDelete = (confirmWithAttendance = false) => {
+    deleteMutation.mutate({
+      id: sessionId,
+      data: { reason: deleteReason.trim(), confirmWithAttendance },
+    }, {
+      onSuccess: () => {
+        toast({ title: "Session deleted" });
+        setDeleteOpen(false);
+        setDeleteReason("");
+        setDeleteNeedsConfirm(false);
+        setLocation("/attendance");
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const reason = (err as { data?: { reason?: string } } | undefined)?.data?.reason;
+        if (status === 409 && reason === "attendance_already_recorded") {
+          setDeleteNeedsConfirm(true);
+        } else {
+          toast({ title: "Could not delete session", description: getErrorMessage(err), variant: "destructive" });
+        }
+      },
+    });
+  };
+
+  // ---------------------------------------------------------------------
   // Refresh expected learners (unchanged from Phase 6)
   // ---------------------------------------------------------------------
   const [refreshOpen, setRefreshOpen] = React.useState(false);
@@ -658,6 +691,11 @@ export default function RegisterPage() {
             {isAdmin && !isCancelled && !isLocked && (
               <Button variant="outline" onClick={() => setCancelOpen(true)} className="shadow-sm text-destructive hover:text-destructive">
                 <Ban className="w-4 h-4 mr-2" /> Cancel Session
+              </Button>
+            )}
+            {isAdmin && !isLocked && (
+              <Button variant="outline" onClick={() => setDeleteOpen(true)} className="shadow-sm text-destructive hover:text-destructive">
+                <Trash2 className="w-4 h-4 mr-2" /> Delete Session
               </Button>
             )}
           </div>
@@ -1000,6 +1038,39 @@ export default function RegisterPage() {
             >
               {cancelMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {cancelNeedsConfirm ? "Cancel Anyway" : "Cancel Session"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={(o) => { setDeleteOpen(o); if (!o) { setDeleteReason(""); setDeleteNeedsConfirm(false); } }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Session</DialogTitle>
+            <DialogDescription>The session record and any recorded attendance are preserved, never deleted -- but the session will disappear from every listing and report.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {deleteNeedsConfirm && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-md">
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  This session already has recorded attendance. Confirm to delete anyway -- the recorded attendance will be preserved, not deleted, but the session will no longer appear in any report.
+                </p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="delete-session-reason">Reason</Label>
+              <Textarea id="delete-session-reason" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} rows={3} placeholder="Why is this session being deleted?" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Go Back</Button>
+            <Button
+              variant="destructive"
+              onClick={() => submitDelete(deleteNeedsConfirm)}
+              disabled={deleteMutation.isPending || !deleteReason.trim()}
+            >
+              {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {deleteNeedsConfirm ? "Delete Anyway" : "Delete Session"}
             </Button>
           </DialogFooter>
         </DialogContent>

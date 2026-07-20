@@ -264,7 +264,7 @@ def require_tutor(request: Request) -> dict[str, Any]:
 
 
 def require_cohort_access(cur, cohort_id: int, session: dict[str, Any]) -> dict[str, Any]:
-    cur.execute('SELECT id, tutor_id AS "tutorId" FROM cohorts WHERE id = %s', (cohort_id,))
+    cur.execute('SELECT id, tutor_id AS "tutorId" FROM cohorts WHERE id = %s AND deleted_at IS NULL', (cohort_id,))
     cohort = cur.fetchone()
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
@@ -274,7 +274,10 @@ def require_cohort_access(cur, cohort_id: int, session: dict[str, Any]) -> dict[
 
 
 def require_learner_access(cur, learner_id: int, session: dict[str, Any]) -> dict[str, Any]:
-    cur.execute('SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = %s', (learner_id,))
+    cur.execute(
+        'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = %s AND deleted_at IS NULL',
+        (learner_id,),
+    )
     learner = cur.fetchone()
     if not learner:
         raise HTTPException(status_code=404, detail="Learner not found")
@@ -299,7 +302,7 @@ def require_attendance_access(cur, session_id: int, session: dict[str, Any]) -> 
         SELECT s.id, s.cohort_id AS "cohortId", c.tutor_id AS "tutorId"
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
-        WHERE s.id = %s
+        WHERE s.id = %s AND s.deleted_at IS NULL AND c.deleted_at IS NULL
         """,
         (session_id,),
     )
