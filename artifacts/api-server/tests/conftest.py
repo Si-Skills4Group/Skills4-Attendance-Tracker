@@ -50,6 +50,17 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _clear_dependency_overrides_after_test():
+    """app is a module-level singleton, so app.dependency_overrides is a
+    mutable dict shared across every test's client -- without this, an
+    override set via app.dependency_overrides in one test (e.g. a fake
+    require_auth) would silently leak into the next test if that test
+    forgot its own try/finally cleanup."""
+    yield
+    app.dependency_overrides.clear()
+
+
 class FakeRequest:
     """Minimal stand-in for fastapi.Request, sufficient for write_audit_log
     and for calling router functions directly as plain Python functions."""

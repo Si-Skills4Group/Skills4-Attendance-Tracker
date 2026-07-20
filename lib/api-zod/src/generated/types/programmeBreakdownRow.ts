@@ -5,9 +5,9 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { AttendanceTotals } from './attendanceTotals';
+import type { AttendanceMetrics } from './attendanceMetrics';
 
-export interface ProgrammeAttendanceRow {
+export interface ProgrammeBreakdownRow {
   programme: string;
-  totals: AttendanceTotals;
+  metrics: AttendanceMetrics;
 }

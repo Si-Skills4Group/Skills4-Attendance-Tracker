@@ -25,6 +25,15 @@ const AttendancePage = React.lazy(() => import("@/pages/attendance/index"));
 const CohortSessionsPage = React.lazy(() => import("@/pages/attendance/cohort-sessions"));
 const RegisterPage = React.lazy(() => import("@/pages/attendance/register"));
 const ReportsPage = React.lazy(() => import("@/pages/reports"));
+const LearnerReportPage = React.lazy(() => import("@/pages/reports/learners"));
+const CohortReportPage = React.lazy(() => import("@/pages/reports/cohorts"));
+const TutorReportPage = React.lazy(() => import("@/pages/reports/tutors"));
+const OrganisationReportPage = React.lazy(() => import("@/pages/reports/organisation"));
+const AbsenceReportPage = React.lazy(() => import("@/pages/reports/absence"));
+const LatenessReportPage = React.lazy(() => import("@/pages/reports/lateness"));
+const AttendanceHoursReportPage = React.lazy(() => import("@/pages/reports/attendance-hours"));
+const RegisterCompletionReportPage = React.lazy(() => import("@/pages/reports/register-completion"));
+const AllocationHistoryReportPage = React.lazy(() => import("@/pages/reports/allocation-history"));
 const AuditLogPage = React.lazy(() => import("@/pages/audit-log"));
 const SettingsPage = React.lazy(() => import("@/pages/settings"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
@@ -58,6 +67,15 @@ function ProtectedRouter() {
           <Route path="/attendance/cohorts/:id" component={CohortSessionsPage} />
           <Route path="/attendance/:id" component={RegisterPage} />
           <Route path="/reports" component={ReportsPage} />
+          <Route path="/reports/learners" component={LearnerReportPage} />
+          <Route path="/reports/cohorts" component={CohortReportPage} />
+          <Route path="/reports/tutors" component={TutorReportPage} />
+          <Route path="/reports/organisation" component={OrganisationReportPage} />
+          <Route path="/reports/absence" component={AbsenceReportPage} />
+          <Route path="/reports/lateness" component={LatenessReportPage} />
+          <Route path="/reports/attendance-hours" component={AttendanceHoursReportPage} />
+          <Route path="/reports/register-completion" component={RegisterCompletionReportPage} />
+          <Route path="/reports/allocation-history" component={AllocationHistoryReportPage} />
           <Route path="/audit-log" component={AuditLogPage} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/" component={() => {

@@ -6,14 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ExportReportReportType = typeof ExportReportReportType[keyof typeof ExportReportReportType];
+export type AttendanceHoursGroupBy = typeof AttendanceHoursGroupBy[keyof typeof AttendanceHoursGroupBy];
 
 
-export const ExportReportReportType = {
+export const AttendanceHoursGroupBy = {
   learner: 'learner',
   cohort: 'cohort',
   tutor: 'tutor',
-  organisation: 'organisation',
   programme: 'programme',
-  'allocation-history': 'allocation-history',
+  employer: 'employer',
+  week: 'week',
+  month: 'month',
 } as const;

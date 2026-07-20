@@ -20,13 +20,16 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AbsenceReportResponse,
   AdminCohortOverviewListResponse,
   AdminDashboard,
   AdminTutorOverviewListResponse,
   AllocationHistoryEntry,
+  AllocationHistoryReportResponse,
   AllocationInput,
   AllocationResult,
   AppSettings,
+  AttendanceHoursReportResponse,
   AttendanceRegister,
   AttendanceRegisterInput,
   AttendanceSession,
@@ -41,27 +44,43 @@ import type {
   CohortCardSummary,
   CohortDetail,
   CohortInput,
-  CohortReport,
+  CohortReportResponse,
   CohortUpdate,
   CompleteRegisterInput,
   CsvContent,
   DeactivateTutorParams,
   ErrorResponse,
   ExpectedLearner,
-  ExportReportParams,
+  ExportAbsenceReportParams,
+  ExportAllocationHistoryReportParams,
+  ExportAttendanceHoursReportParams,
+  ExportCohortReportParams,
+  ExportLatenessReportParams,
+  ExportLearnerReportParams,
+  ExportOrganisationReportParams,
+  ExportRegisterCompletionReportParams,
+  ExportTutorReportParams,
+  GetAbsenceReportParams,
   GetAdminDashboardCohortsParams,
   GetAdminDashboardTutorsParams,
   GetAdminLowAttendanceLearnersParams,
   GetAdminOutstandingRegistersParams,
+  GetAllocationHistoryReportParams,
+  GetAttendanceHoursReportParams,
   GetCohortAttendanceSummaryParams,
+  GetCohortReportV2Params,
+  GetLatenessReportParams,
   GetLearnerAttendanceSummaryParams,
-  GetOrganisationReportParams,
-  GetProgrammeReportParams,
+  GetLearnerReportV2Params,
+  GetOrganisationReportV2Params,
+  GetRegisterCompletionReportParams,
   GetTutorAttendanceSummaryParams,
   GetTutorDashboardCohortsParams,
   GetTutorLowAttendanceLearnersParams,
   GetTutorOutstandingRegistersParams,
+  GetTutorReportV2Params,
   HealthStatus,
+  LatenessReportResponse,
   Learner,
   LearnerAttendanceSummaryListResponse,
   LearnerImportJob,
@@ -71,7 +90,7 @@ import type {
   LearnerImportRowResolveInput,
   LearnerInput,
   LearnerListResponse,
-  LearnerReport,
+  LearnerReportResponse,
   LearnerStatusChangeInput,
   LearnerUpdate,
   ListAllocationHistoryParams,
@@ -87,10 +106,10 @@ import type {
   ListUsersParams,
   LockRegisterInput,
   LoginInput,
-  OrganisationReport,
+  OrganisationReportResponse,
   OutstandingRegisterListResponse,
-  ProgrammeAttendanceRow,
   RefreshRegisterInput,
+  RegisterCompletionReportResponse,
   RegisterRefreshDiff,
   RegisterRefreshResult,
   SessionCancelInput,
@@ -105,7 +124,7 @@ import type {
   TutorImportResult,
   TutorImportRowResolveInput,
   TutorInput,
-  TutorReport,
+  TutorReportResponse,
   TutorUpdate,
   UnlockRegisterInput,
   UploadLearnerImportBody,
@@ -5187,17 +5206,26 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getMarkAllPresentMutationOptions(options));
     }
 
-export const getGetLearnerReportUrl = (id: number,) => {
+export const getGetLearnerReportV2Url = (learnerId: number,
+    params?: GetLearnerReportV2Params,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/reports/learner/${id}`
+  return stringifiedParams.length > 0 ? `/api/reports/learner/${learnerId}?${stringifiedParams}` : `/api/reports/learner/${learnerId}`
 }
 
-export const getLearnerReport = async (id: number, options?: RequestInit): Promise<LearnerReport> => {
+export const getLearnerReportV2 = async (learnerId: number,
+    params?: GetLearnerReportV2Params, options?: RequestInit): Promise<LearnerReportResponse> => {
 
-  return customFetch<LearnerReport>(getGetLearnerReportUrl(id),
+  return customFetch<LearnerReportResponse>(getGetLearnerReportV2Url(learnerId,params),
   {
     ...options,
     method: 'GET'
@@ -5210,42 +5238,45 @@ export const getLearnerReport = async (id: number, options?: RequestInit): Promi
 
 
 
-export const getGetLearnerReportQueryKey = (id: number,) => {
+export const getGetLearnerReportV2QueryKey = (learnerId: number,
+    params?: GetLearnerReportV2Params,) => {
     return [
-    `/api/reports/learner/${id}`
+    `/api/reports/learner/${learnerId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetLearnerReportQueryOptions = <TData = Awaited<ReturnType<typeof getLearnerReport>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetLearnerReportV2QueryOptions = <TData = Awaited<ReturnType<typeof getLearnerReportV2>>, TError = ErrorType<ErrorResponse>>(learnerId: number,
+    params?: GetLearnerReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetLearnerReportQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetLearnerReportV2QueryKey(learnerId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerReport>>> = ({ signal }) => getLearnerReport(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerReportV2>>> = ({ signal }) => getLearnerReportV2(learnerId,params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerReportV2>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetLearnerReportQueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerReport>>>
-export type GetLearnerReportQueryError = ErrorType<unknown>
+export type GetLearnerReportV2QueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerReportV2>>>
+export type GetLearnerReportV2QueryError = ErrorType<ErrorResponse>
 
 
 
-export function useGetLearnerReport<TData = Awaited<ReturnType<typeof getLearnerReport>>, TError = ErrorType<unknown>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetLearnerReportV2<TData = Awaited<ReturnType<typeof getLearnerReportV2>>, TError = ErrorType<ErrorResponse>>(
+ learnerId: number,
+    params?: GetLearnerReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetLearnerReportQueryOptions(id,options)
+  const queryOptions = getGetLearnerReportV2QueryOptions(learnerId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -5258,17 +5289,26 @@ export function useGetLearnerReport<TData = Awaited<ReturnType<typeof getLearner
 
 
 
-export const getGetCohortReportUrl = (id: number,) => {
+export const getExportLearnerReportUrl = (learnerId: number,
+    params?: ExportLearnerReportParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/reports/cohort/${id}`
+  return stringifiedParams.length > 0 ? `/api/reports/learner/${learnerId}/export?${stringifiedParams}` : `/api/reports/learner/${learnerId}/export`
 }
 
-export const getCohortReport = async (id: number, options?: RequestInit): Promise<CohortReport> => {
+export const exportLearnerReport = async (learnerId: number,
+    params?: ExportLearnerReportParams, options?: RequestInit): Promise<string> => {
 
-  return customFetch<CohortReport>(getGetCohortReportUrl(id),
+  return customFetch<string>(getExportLearnerReportUrl(learnerId,params),
   {
     ...options,
     method: 'GET'
@@ -5281,42 +5321,45 @@ export const getCohortReport = async (id: number, options?: RequestInit): Promis
 
 
 
-export const getGetCohortReportQueryKey = (id: number,) => {
+export const getExportLearnerReportQueryKey = (learnerId: number,
+    params?: ExportLearnerReportParams,) => {
     return [
-    `/api/reports/cohort/${id}`
+    `/api/reports/learner/${learnerId}/export`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetCohortReportQueryOptions = <TData = Awaited<ReturnType<typeof getCohortReport>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getExportLearnerReportQueryOptions = <TData = Awaited<ReturnType<typeof exportLearnerReport>>, TError = ErrorType<ErrorResponse>>(learnerId: number,
+    params?: ExportLearnerReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportLearnerReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetCohortReportQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getExportLearnerReportQueryKey(learnerId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortReport>>> = ({ signal }) => getCohortReport(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportLearnerReport>>> = ({ signal }) => exportLearnerReport(learnerId,params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohortReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportLearnerReport>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetCohortReportQueryResult = NonNullable<Awaited<ReturnType<typeof getCohortReport>>>
-export type GetCohortReportQueryError = ErrorType<unknown>
+export type ExportLearnerReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportLearnerReport>>>
+export type ExportLearnerReportQueryError = ErrorType<ErrorResponse>
 
 
 
-export function useGetCohortReport<TData = Awaited<ReturnType<typeof getCohortReport>>, TError = ErrorType<unknown>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useExportLearnerReport<TData = Awaited<ReturnType<typeof exportLearnerReport>>, TError = ErrorType<ErrorResponse>>(
+ learnerId: number,
+    params?: ExportLearnerReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportLearnerReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetCohortReportQueryOptions(id,options)
+  const queryOptions = getExportLearnerReportQueryOptions(learnerId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -5329,17 +5372,26 @@ export function useGetCohortReport<TData = Awaited<ReturnType<typeof getCohortRe
 
 
 
-export const getGetTutorReportUrl = (id: number,) => {
+export const getGetCohortReportV2Url = (cohortId: number,
+    params?: GetCohortReportV2Params,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/reports/tutor/${id}`
+  return stringifiedParams.length > 0 ? `/api/reports/cohort/${cohortId}?${stringifiedParams}` : `/api/reports/cohort/${cohortId}`
 }
 
-export const getTutorReport = async (id: number, options?: RequestInit): Promise<TutorReport> => {
+export const getCohortReportV2 = async (cohortId: number,
+    params?: GetCohortReportV2Params, options?: RequestInit): Promise<CohortReportResponse> => {
 
-  return customFetch<TutorReport>(getGetTutorReportUrl(id),
+  return customFetch<CohortReportResponse>(getGetCohortReportV2Url(cohortId,params),
   {
     ...options,
     method: 'GET'
@@ -5352,42 +5404,45 @@ export const getTutorReport = async (id: number, options?: RequestInit): Promise
 
 
 
-export const getGetTutorReportQueryKey = (id: number,) => {
+export const getGetCohortReportV2QueryKey = (cohortId: number,
+    params?: GetCohortReportV2Params,) => {
     return [
-    `/api/reports/tutor/${id}`
+    `/api/reports/cohort/${cohortId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetTutorReportQueryOptions = <TData = Awaited<ReturnType<typeof getTutorReport>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetCohortReportV2QueryOptions = <TData = Awaited<ReturnType<typeof getCohortReportV2>>, TError = ErrorType<ErrorResponse>>(cohortId: number,
+    params?: GetCohortReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetTutorReportQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetCohortReportV2QueryKey(cohortId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorReport>>> = ({ signal }) => getTutorReport(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCohortReportV2>>> = ({ signal }) => getCohortReportV2(cohortId,params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: cohortId !== null && cohortId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCohortReportV2>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetTutorReportQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorReport>>>
-export type GetTutorReportQueryError = ErrorType<unknown>
+export type GetCohortReportV2QueryResult = NonNullable<Awaited<ReturnType<typeof getCohortReportV2>>>
+export type GetCohortReportV2QueryError = ErrorType<ErrorResponse>
 
 
 
-export function useGetTutorReport<TData = Awaited<ReturnType<typeof getTutorReport>>, TError = ErrorType<unknown>>(
- id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetCohortReportV2<TData = Awaited<ReturnType<typeof getCohortReportV2>>, TError = ErrorType<ErrorResponse>>(
+ cohortId: number,
+    params?: GetCohortReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCohortReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetTutorReportQueryOptions(id,options)
+  const queryOptions = getGetCohortReportV2QueryOptions(cohortId,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -5400,7 +5455,256 @@ export function useGetTutorReport<TData = Awaited<ReturnType<typeof getTutorRepo
 
 
 
-export const getGetOrganisationReportUrl = (params?: GetOrganisationReportParams,) => {
+export const getExportCohortReportUrl = (cohortId: number,
+    params?: ExportCohortReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/cohort/${cohortId}/export?${stringifiedParams}` : `/api/reports/cohort/${cohortId}/export`
+}
+
+export const exportCohortReport = async (cohortId: number,
+    params?: ExportCohortReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportCohortReportUrl(cohortId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCohortReportQueryKey = (cohortId: number,
+    params?: ExportCohortReportParams,) => {
+    return [
+    `/api/reports/cohort/${cohortId}/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportCohortReportQueryOptions = <TData = Awaited<ReturnType<typeof exportCohortReport>>, TError = ErrorType<ErrorResponse>>(cohortId: number,
+    params?: ExportCohortReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCohortReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCohortReportQueryKey(cohortId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCohortReport>>> = ({ signal }) => exportCohortReport(cohortId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: cohortId !== null && cohortId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCohortReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportCohortReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportCohortReport>>>
+export type ExportCohortReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportCohortReport<TData = Awaited<ReturnType<typeof exportCohortReport>>, TError = ErrorType<ErrorResponse>>(
+ cohortId: number,
+    params?: ExportCohortReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportCohortReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportCohortReportQueryOptions(cohortId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTutorReportV2Url = (tutorId: number,
+    params?: GetTutorReportV2Params,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/tutor/${tutorId}?${stringifiedParams}` : `/api/reports/tutor/${tutorId}`
+}
+
+export const getTutorReportV2 = async (tutorId: number,
+    params?: GetTutorReportV2Params, options?: RequestInit): Promise<TutorReportResponse> => {
+
+  return customFetch<TutorReportResponse>(getGetTutorReportV2Url(tutorId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorReportV2QueryKey = (tutorId: number,
+    params?: GetTutorReportV2Params,) => {
+    return [
+    `/api/reports/tutor/${tutorId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTutorReportV2QueryOptions = <TData = Awaited<ReturnType<typeof getTutorReportV2>>, TError = ErrorType<ErrorResponse>>(tutorId: number,
+    params?: GetTutorReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorReportV2QueryKey(tutorId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorReportV2>>> = ({ signal }) => getTutorReportV2(tutorId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tutorId !== null && tutorId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorReportV2>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorReportV2QueryResult = NonNullable<Awaited<ReturnType<typeof getTutorReportV2>>>
+export type GetTutorReportV2QueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetTutorReportV2<TData = Awaited<ReturnType<typeof getTutorReportV2>>, TError = ErrorType<ErrorResponse>>(
+ tutorId: number,
+    params?: GetTutorReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorReportV2QueryOptions(tutorId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportTutorReportUrl = (tutorId: number,
+    params?: ExportTutorReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/tutor/${tutorId}/export?${stringifiedParams}` : `/api/reports/tutor/${tutorId}/export`
+}
+
+export const exportTutorReport = async (tutorId: number,
+    params?: ExportTutorReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportTutorReportUrl(tutorId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportTutorReportQueryKey = (tutorId: number,
+    params?: ExportTutorReportParams,) => {
+    return [
+    `/api/reports/tutor/${tutorId}/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportTutorReportQueryOptions = <TData = Awaited<ReturnType<typeof exportTutorReport>>, TError = ErrorType<ErrorResponse>>(tutorId: number,
+    params?: ExportTutorReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportTutorReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportTutorReportQueryKey(tutorId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportTutorReport>>> = ({ signal }) => exportTutorReport(tutorId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: tutorId !== null && tutorId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportTutorReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportTutorReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportTutorReport>>>
+export type ExportTutorReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportTutorReport<TData = Awaited<ReturnType<typeof exportTutorReport>>, TError = ErrorType<ErrorResponse>>(
+ tutorId: number,
+    params?: ExportTutorReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportTutorReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportTutorReportQueryOptions(tutorId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOrganisationReportV2Url = (params?: GetOrganisationReportV2Params,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -5415,9 +5719,9 @@ export const getGetOrganisationReportUrl = (params?: GetOrganisationReportParams
   return stringifiedParams.length > 0 ? `/api/reports/organisation?${stringifiedParams}` : `/api/reports/organisation`
 }
 
-export const getOrganisationReport = async (params?: GetOrganisationReportParams, options?: RequestInit): Promise<OrganisationReport> => {
+export const getOrganisationReportV2 = async (params?: GetOrganisationReportV2Params, options?: RequestInit): Promise<OrganisationReportResponse> => {
 
-  return customFetch<OrganisationReport>(getGetOrganisationReportUrl(params),
+  return customFetch<OrganisationReportResponse>(getGetOrganisationReportV2Url(params),
   {
     ...options,
     method: 'GET'
@@ -5430,42 +5734,42 @@ export const getOrganisationReport = async (params?: GetOrganisationReportParams
 
 
 
-export const getGetOrganisationReportQueryKey = (params?: GetOrganisationReportParams,) => {
+export const getGetOrganisationReportV2QueryKey = (params?: GetOrganisationReportV2Params,) => {
     return [
     `/api/reports/organisation`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetOrganisationReportQueryOptions = <TData = Awaited<ReturnType<typeof getOrganisationReport>>, TError = ErrorType<unknown>>(params?: GetOrganisationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrganisationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetOrganisationReportV2QueryOptions = <TData = Awaited<ReturnType<typeof getOrganisationReportV2>>, TError = ErrorType<ErrorResponse>>(params?: GetOrganisationReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrganisationReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetOrganisationReportQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetOrganisationReportV2QueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrganisationReport>>> = ({ signal }) => getOrganisationReport(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrganisationReportV2>>> = ({ signal }) => getOrganisationReportV2(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrganisationReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrganisationReportV2>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetOrganisationReportQueryResult = NonNullable<Awaited<ReturnType<typeof getOrganisationReport>>>
-export type GetOrganisationReportQueryError = ErrorType<unknown>
+export type GetOrganisationReportV2QueryResult = NonNullable<Awaited<ReturnType<typeof getOrganisationReportV2>>>
+export type GetOrganisationReportV2QueryError = ErrorType<ErrorResponse>
 
 
 
-export function useGetOrganisationReport<TData = Awaited<ReturnType<typeof getOrganisationReport>>, TError = ErrorType<unknown>>(
- params?: GetOrganisationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrganisationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetOrganisationReportV2<TData = Awaited<ReturnType<typeof getOrganisationReportV2>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetOrganisationReportV2Params, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOrganisationReportV2>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetOrganisationReportQueryOptions(params,options)
+  const queryOptions = getGetOrganisationReportV2QueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -5478,7 +5782,7 @@ export function useGetOrganisationReport<TData = Awaited<ReturnType<typeof getOr
 
 
 
-export const getGetProgrammeReportUrl = (params?: GetProgrammeReportParams,) => {
+export const getExportOrganisationReportUrl = (params?: ExportOrganisationReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -5490,12 +5794,12 @@ export const getGetProgrammeReportUrl = (params?: GetProgrammeReportParams,) => 
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/reports/programme?${stringifiedParams}` : `/api/reports/programme`
+  return stringifiedParams.length > 0 ? `/api/reports/organisation/export?${stringifiedParams}` : `/api/reports/organisation/export`
 }
 
-export const getProgrammeReport = async (params?: GetProgrammeReportParams, options?: RequestInit): Promise<ProgrammeAttendanceRow[]> => {
+export const exportOrganisationReport = async (params?: ExportOrganisationReportParams, options?: RequestInit): Promise<string> => {
 
-  return customFetch<ProgrammeAttendanceRow[]>(getGetProgrammeReportUrl(params),
+  return customFetch<string>(getExportOrganisationReportUrl(params),
   {
     ...options,
     method: 'GET'
@@ -5508,42 +5812,42 @@ export const getProgrammeReport = async (params?: GetProgrammeReportParams, opti
 
 
 
-export const getGetProgrammeReportQueryKey = (params?: GetProgrammeReportParams,) => {
+export const getExportOrganisationReportQueryKey = (params?: ExportOrganisationReportParams,) => {
     return [
-    `/api/reports/programme`, ...(params ? [params] : [])
+    `/api/reports/organisation/export`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetProgrammeReportQueryOptions = <TData = Awaited<ReturnType<typeof getProgrammeReport>>, TError = ErrorType<unknown>>(params?: GetProgrammeReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProgrammeReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getExportOrganisationReportQueryOptions = <TData = Awaited<ReturnType<typeof exportOrganisationReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportOrganisationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportOrganisationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetProgrammeReportQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getExportOrganisationReportQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgrammeReport>>> = ({ signal }) => getProgrammeReport(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportOrganisationReport>>> = ({ signal }) => exportOrganisationReport(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProgrammeReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportOrganisationReport>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetProgrammeReportQueryResult = NonNullable<Awaited<ReturnType<typeof getProgrammeReport>>>
-export type GetProgrammeReportQueryError = ErrorType<unknown>
+export type ExportOrganisationReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportOrganisationReport>>>
+export type ExportOrganisationReportQueryError = ErrorType<ErrorResponse>
 
 
 
-export function useGetProgrammeReport<TData = Awaited<ReturnType<typeof getProgrammeReport>>, TError = ErrorType<unknown>>(
- params?: GetProgrammeReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProgrammeReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useExportOrganisationReport<TData = Awaited<ReturnType<typeof exportOrganisationReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportOrganisationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportOrganisationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetProgrammeReportQueryOptions(params,options)
+  const queryOptions = getExportOrganisationReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -5556,7 +5860,7 @@ export function useGetProgrammeReport<TData = Awaited<ReturnType<typeof getProgr
 
 
 
-export const getExportReportUrl = (params: ExportReportParams,) => {
+export const getGetAbsenceReportUrl = (params: GetAbsenceReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -5568,12 +5872,12 @@ export const getExportReportUrl = (params: ExportReportParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/reports/export?${stringifiedParams}` : `/api/reports/export`
+  return stringifiedParams.length > 0 ? `/api/reports/absence?${stringifiedParams}` : `/api/reports/absence`
 }
 
-export const exportReport = async (params: ExportReportParams, options?: RequestInit): Promise<CsvContent> => {
+export const getAbsenceReport = async (params: GetAbsenceReportParams, options?: RequestInit): Promise<AbsenceReportResponse> => {
 
-  return customFetch<CsvContent>(getExportReportUrl(params),
+  return customFetch<AbsenceReportResponse>(getGetAbsenceReportUrl(params),
   {
     ...options,
     method: 'GET'
@@ -5586,42 +5890,744 @@ export const exportReport = async (params: ExportReportParams, options?: Request
 
 
 
-export const getExportReportQueryKey = (params?: ExportReportParams,) => {
+export const getGetAbsenceReportQueryKey = (params?: GetAbsenceReportParams,) => {
     return [
-    `/api/reports/export`, ...(params ? [params] : [])
+    `/api/reports/absence`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getExportReportQueryOptions = <TData = Awaited<ReturnType<typeof exportReport>>, TError = ErrorType<unknown>>(params: ExportReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetAbsenceReportQueryOptions = <TData = Awaited<ReturnType<typeof getAbsenceReport>>, TError = ErrorType<ErrorResponse>>(params: GetAbsenceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAbsenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getExportReportQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetAbsenceReportQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportReport>>> = ({ signal }) => exportReport(params, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAbsenceReport>>> = ({ signal }) => getAbsenceReport(params, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportReport>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAbsenceReport>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type ExportReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportReport>>>
-export type ExportReportQueryError = ErrorType<unknown>
+export type GetAbsenceReportQueryResult = NonNullable<Awaited<ReturnType<typeof getAbsenceReport>>>
+export type GetAbsenceReportQueryError = ErrorType<ErrorResponse>
 
 
 
-export function useExportReport<TData = Awaited<ReturnType<typeof exportReport>>, TError = ErrorType<unknown>>(
- params: ExportReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetAbsenceReport<TData = Awaited<ReturnType<typeof getAbsenceReport>>, TError = ErrorType<ErrorResponse>>(
+ params: GetAbsenceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAbsenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getExportReportQueryOptions(params,options)
+  const queryOptions = getGetAbsenceReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportAbsenceReportUrl = (params: ExportAbsenceReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/absence/export?${stringifiedParams}` : `/api/reports/absence/export`
+}
+
+export const exportAbsenceReport = async (params: ExportAbsenceReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportAbsenceReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAbsenceReportQueryKey = (params?: ExportAbsenceReportParams,) => {
+    return [
+    `/api/reports/absence/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportAbsenceReportQueryOptions = <TData = Awaited<ReturnType<typeof exportAbsenceReport>>, TError = ErrorType<ErrorResponse>>(params: ExportAbsenceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAbsenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAbsenceReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAbsenceReport>>> = ({ signal }) => exportAbsenceReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAbsenceReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAbsenceReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportAbsenceReport>>>
+export type ExportAbsenceReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportAbsenceReport<TData = Awaited<ReturnType<typeof exportAbsenceReport>>, TError = ErrorType<ErrorResponse>>(
+ params: ExportAbsenceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAbsenceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAbsenceReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLatenessReportUrl = (params?: GetLatenessReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/lateness?${stringifiedParams}` : `/api/reports/lateness`
+}
+
+export const getLatenessReport = async (params?: GetLatenessReportParams, options?: RequestInit): Promise<LatenessReportResponse> => {
+
+  return customFetch<LatenessReportResponse>(getGetLatenessReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLatenessReportQueryKey = (params?: GetLatenessReportParams,) => {
+    return [
+    `/api/reports/lateness`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetLatenessReportQueryOptions = <TData = Awaited<ReturnType<typeof getLatenessReport>>, TError = ErrorType<ErrorResponse>>(params?: GetLatenessReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLatenessReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLatenessReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLatenessReport>>> = ({ signal }) => getLatenessReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLatenessReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLatenessReportQueryResult = NonNullable<Awaited<ReturnType<typeof getLatenessReport>>>
+export type GetLatenessReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetLatenessReport<TData = Awaited<ReturnType<typeof getLatenessReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetLatenessReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLatenessReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLatenessReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportLatenessReportUrl = (params?: ExportLatenessReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/lateness/export?${stringifiedParams}` : `/api/reports/lateness/export`
+}
+
+export const exportLatenessReport = async (params?: ExportLatenessReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportLatenessReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportLatenessReportQueryKey = (params?: ExportLatenessReportParams,) => {
+    return [
+    `/api/reports/lateness/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportLatenessReportQueryOptions = <TData = Awaited<ReturnType<typeof exportLatenessReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportLatenessReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportLatenessReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportLatenessReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportLatenessReport>>> = ({ signal }) => exportLatenessReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportLatenessReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportLatenessReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportLatenessReport>>>
+export type ExportLatenessReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportLatenessReport<TData = Awaited<ReturnType<typeof exportLatenessReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportLatenessReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportLatenessReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportLatenessReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAttendanceHoursReportUrl = (params?: GetAttendanceHoursReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/attendance-hours?${stringifiedParams}` : `/api/reports/attendance-hours`
+}
+
+export const getAttendanceHoursReport = async (params?: GetAttendanceHoursReportParams, options?: RequestInit): Promise<AttendanceHoursReportResponse> => {
+
+  return customFetch<AttendanceHoursReportResponse>(getGetAttendanceHoursReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceHoursReportQueryKey = (params?: GetAttendanceHoursReportParams,) => {
+    return [
+    `/api/reports/attendance-hours`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAttendanceHoursReportQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceHoursReport>>, TError = ErrorType<ErrorResponse>>(params?: GetAttendanceHoursReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceHoursReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceHoursReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceHoursReport>>> = ({ signal }) => getAttendanceHoursReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceHoursReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceHoursReportQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceHoursReport>>>
+export type GetAttendanceHoursReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetAttendanceHoursReport<TData = Awaited<ReturnType<typeof getAttendanceHoursReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetAttendanceHoursReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceHoursReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceHoursReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportAttendanceHoursReportUrl = (params?: ExportAttendanceHoursReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/attendance-hours/export?${stringifiedParams}` : `/api/reports/attendance-hours/export`
+}
+
+export const exportAttendanceHoursReport = async (params?: ExportAttendanceHoursReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportAttendanceHoursReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAttendanceHoursReportQueryKey = (params?: ExportAttendanceHoursReportParams,) => {
+    return [
+    `/api/reports/attendance-hours/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportAttendanceHoursReportQueryOptions = <TData = Awaited<ReturnType<typeof exportAttendanceHoursReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportAttendanceHoursReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAttendanceHoursReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAttendanceHoursReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAttendanceHoursReport>>> = ({ signal }) => exportAttendanceHoursReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAttendanceHoursReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAttendanceHoursReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportAttendanceHoursReport>>>
+export type ExportAttendanceHoursReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportAttendanceHoursReport<TData = Awaited<ReturnType<typeof exportAttendanceHoursReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportAttendanceHoursReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAttendanceHoursReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAttendanceHoursReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRegisterCompletionReportUrl = (params?: GetRegisterCompletionReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/register-completion?${stringifiedParams}` : `/api/reports/register-completion`
+}
+
+export const getRegisterCompletionReport = async (params?: GetRegisterCompletionReportParams, options?: RequestInit): Promise<RegisterCompletionReportResponse> => {
+
+  return customFetch<RegisterCompletionReportResponse>(getGetRegisterCompletionReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRegisterCompletionReportQueryKey = (params?: GetRegisterCompletionReportParams,) => {
+    return [
+    `/api/reports/register-completion`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetRegisterCompletionReportQueryOptions = <TData = Awaited<ReturnType<typeof getRegisterCompletionReport>>, TError = ErrorType<ErrorResponse>>(params?: GetRegisterCompletionReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRegisterCompletionReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRegisterCompletionReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRegisterCompletionReport>>> = ({ signal }) => getRegisterCompletionReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRegisterCompletionReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRegisterCompletionReportQueryResult = NonNullable<Awaited<ReturnType<typeof getRegisterCompletionReport>>>
+export type GetRegisterCompletionReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetRegisterCompletionReport<TData = Awaited<ReturnType<typeof getRegisterCompletionReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetRegisterCompletionReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRegisterCompletionReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRegisterCompletionReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportRegisterCompletionReportUrl = (params?: ExportRegisterCompletionReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/register-completion/export?${stringifiedParams}` : `/api/reports/register-completion/export`
+}
+
+export const exportRegisterCompletionReport = async (params?: ExportRegisterCompletionReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportRegisterCompletionReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportRegisterCompletionReportQueryKey = (params?: ExportRegisterCompletionReportParams,) => {
+    return [
+    `/api/reports/register-completion/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportRegisterCompletionReportQueryOptions = <TData = Awaited<ReturnType<typeof exportRegisterCompletionReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportRegisterCompletionReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportRegisterCompletionReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportRegisterCompletionReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportRegisterCompletionReport>>> = ({ signal }) => exportRegisterCompletionReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportRegisterCompletionReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportRegisterCompletionReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportRegisterCompletionReport>>>
+export type ExportRegisterCompletionReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportRegisterCompletionReport<TData = Awaited<ReturnType<typeof exportRegisterCompletionReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportRegisterCompletionReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportRegisterCompletionReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportRegisterCompletionReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAllocationHistoryReportUrl = (params?: GetAllocationHistoryReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/allocation-history?${stringifiedParams}` : `/api/reports/allocation-history`
+}
+
+export const getAllocationHistoryReport = async (params?: GetAllocationHistoryReportParams, options?: RequestInit): Promise<AllocationHistoryReportResponse> => {
+
+  return customFetch<AllocationHistoryReportResponse>(getGetAllocationHistoryReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAllocationHistoryReportQueryKey = (params?: GetAllocationHistoryReportParams,) => {
+    return [
+    `/api/reports/allocation-history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAllocationHistoryReportQueryOptions = <TData = Awaited<ReturnType<typeof getAllocationHistoryReport>>, TError = ErrorType<ErrorResponse>>(params?: GetAllocationHistoryReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationHistoryReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAllocationHistoryReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllocationHistoryReport>>> = ({ signal }) => getAllocationHistoryReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAllocationHistoryReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAllocationHistoryReportQueryResult = NonNullable<Awaited<ReturnType<typeof getAllocationHistoryReport>>>
+export type GetAllocationHistoryReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetAllocationHistoryReport<TData = Awaited<ReturnType<typeof getAllocationHistoryReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetAllocationHistoryReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationHistoryReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAllocationHistoryReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportAllocationHistoryReportUrl = (params?: ExportAllocationHistoryReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/allocation-history/export?${stringifiedParams}` : `/api/reports/allocation-history/export`
+}
+
+export const exportAllocationHistoryReport = async (params?: ExportAllocationHistoryReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportAllocationHistoryReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAllocationHistoryReportQueryKey = (params?: ExportAllocationHistoryReportParams,) => {
+    return [
+    `/api/reports/allocation-history/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportAllocationHistoryReportQueryOptions = <TData = Awaited<ReturnType<typeof exportAllocationHistoryReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportAllocationHistoryReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAllocationHistoryReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAllocationHistoryReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAllocationHistoryReport>>> = ({ signal }) => exportAllocationHistoryReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAllocationHistoryReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAllocationHistoryReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportAllocationHistoryReport>>>
+export type ExportAllocationHistoryReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportAllocationHistoryReport<TData = Awaited<ReturnType<typeof exportAllocationHistoryReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportAllocationHistoryReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAllocationHistoryReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAllocationHistoryReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

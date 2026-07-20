@@ -843,55 +843,345 @@ export interface AttendanceRegister {
   entries: RegisterEntry[];
 }
 
-export interface AttendanceTotals {
-  scheduledHours: number;
-  attendedHours: number;
-  authorisedAbsenceHours: number;
-  unauthorisedAbsenceHours: number;
-  lateCount: number;
-  sessionCount: number;
-  attendancePercentage: number;
+export type AbsenceType = typeof AbsenceType[keyof typeof AbsenceType];
+
+
+export const AbsenceType = {
+  authorised: 'authorised',
+  unauthorised: 'unauthorised',
+} as const;
+
+export type RegisterStatusFilter = typeof RegisterStatusFilter[keyof typeof RegisterStatusFilter];
+
+
+export const RegisterStatusFilter = {
+  not_started: 'not_started',
+  in_progress: 'in_progress',
+  completed: 'completed',
+  locked: 'locked',
+  cancelled: 'cancelled',
+} as const;
+
+export type AttendanceHoursGroupBy = typeof AttendanceHoursGroupBy[keyof typeof AttendanceHoursGroupBy];
+
+
+export const AttendanceHoursGroupBy = {
+  learner: 'learner',
+  cohort: 'cohort',
+  tutor: 'tutor',
+  programme: 'programme',
+  employer: 'employer',
+  week: 'week',
+  month: 'month',
+} as const;
+
+export interface LearnerSessionHistoryRow {
+  sessionId: number;
+  sessionDate: string;
+  /** @nullable */
+  title: string | null;
+  plannedDurationHours: number;
+  cohortId: number;
+  cohortName: string;
+  tutorName: string;
+  /** Null when no register row was ever recorded for this session -- missing data, never treated as absence. */
+  status: AttendanceStatus | null;
+  /** @nullable */
+  hoursAttended: number | null;
+  /** @nullable */
+  minutesLate: number | null;
+  /** @nullable */
+  registerLockedAt: string | null;
+  registerStatus: RegisterStatus;
 }
 
-export interface LearnerAttendanceRow {
+export interface LearnerSessionHistoryListResponse {
+  items: LearnerSessionHistoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AttendanceMetrics {
+  periodStart: string;
+  periodEnd: string;
+  expectedMinutes: number;
+  attendedMinutes: number;
+  authorisedAbsenceMinutes: number;
+  authorisedAbsenceSessions: number;
+  unauthorisedAbsenceMinutes: number;
+  unauthorisedAbsenceSessions: number;
+  lateMinutes: number;
+  lateSessionCount: number;
+  averageMinutesLate: number | null;
+  missingRecordCount: number;
+  completedRegisterRowCount: number;
+  /** Null when expectedMinutes is zero -- never a fabricated 0%. */
+  attendancePercentage: number | null;
+  /** Percentage of applicable register rows that have an actual recorded status (vs missing). */
+  attendanceDataCompleteness: number | null;
+  /** True when there isn't enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule). */
+  insufficientData: boolean;
+  calculatedAt: string;
+}
+
+export interface RegisterCompletionSummary {
+  periodStart: string;
+  periodEnd: string;
+  notStarted: number;
+  inProgress: number;
+  completed: number;
+  locked: number;
+  /** Not-started/in-progress registers whose session date has already passed. */
+  outstanding: number;
+  completionPercentage: number | null;
+}
+
+/**
+ * Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.
+ */
+export interface BudProgress {
+  activityProgress?: number | null;
+  activitiesOverdue?: number | null;
+  lastSubmissionDate?: string | null;
+  lastCompletedActivity?: string | null;
+  statusDesc?: string | null;
+  learningPlanUrl?: string | null;
+  syncedAt?: string | null;
+}
+
+export interface LearnerReportResponse {
+  learner: Learner;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+  bud: BudProgress | null;
+  sessionHistory: LearnerSessionHistoryListResponse;
+}
+
+export interface CohortLearnerBreakdownRow {
+  learnerId: number;
+  learnerName: string;
+  /** @nullable */
+  learnerRef: string | null;
+  metrics: AttendanceMetrics;
+}
+
+export interface CohortLearnerBreakdownListResponse {
+  items: CohortLearnerBreakdownRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CohortReportResponse {
+  cohort: Cohort;
+  activeLearnerCount: number;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+  learnerBreakdown: CohortLearnerBreakdownListResponse;
+}
+
+export interface TutorCohortBreakdownRow {
+  cohort: Cohort;
+  metrics: AttendanceMetrics;
+}
+
+export interface LearnerAttendanceSummaryRow {
   learnerId: number;
   learnerName: string;
   learnerRef: string;
-  totals: AttendanceTotals;
+  cohortName?: string | null;
+  metrics: AttendanceMetrics;
+  /** Null when no Bud sync match exists yet -- never breaks the row. */
+  bud?: BudProgress | null;
 }
 
-export interface CohortAttendanceRow {
+export interface TutorReportResponse {
+  tutor: Tutor;
+  activeCohorts: number;
+  activeLearners: number;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+  cohortBreakdown: TutorCohortBreakdownRow[];
+  lowAttendanceLearners: LearnerAttendanceSummaryRow[];
+}
+
+export interface OrganisationTutorBreakdownRow {
+  tutorId: number;
+  tutorName: string;
+  metrics: AttendanceMetrics;
+}
+
+export interface OrganisationCohortBreakdownRow {
+  cohort: Cohort;
+  metrics: AttendanceMetrics;
+}
+
+export interface ProgrammeBreakdownRow {
+  programme: string;
+  metrics: AttendanceMetrics;
+}
+
+export interface LevelBreakdownRow {
+  level: string;
+  metrics: AttendanceMetrics;
+}
+
+export interface EmployerBreakdownRow {
+  employer: string;
+  metrics: AttendanceMetrics;
+}
+
+export interface OrganisationReportResponse {
+  activeLearners: number;
+  activeTutors: number;
+  activeCohorts: number;
+  sessionsInPeriod: number;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+  tutorBreakdown: OrganisationTutorBreakdownRow[];
+  cohortBreakdown: OrganisationCohortBreakdownRow[];
+  programmeBreakdown: ProgrammeBreakdownRow[];
+  levelBreakdown: LevelBreakdownRow[];
+  employerBreakdown: EmployerBreakdownRow[];
+}
+
+export interface AbsenceRow {
+  learnerId: number;
+  learnerName: string;
+  learnerRef: string;
+  /** @nullable */
+  employer: string | null;
+  sessionId: number;
+  sessionDate: string;
   cohortId: number;
   cohortName: string;
-  totals: AttendanceTotals;
+  tutorName: string;
+  status: AttendanceStatus;
+  plannedDurationHours: number;
 }
 
-export interface ProgrammeAttendanceRow {
-  programme: string;
-  totals: AttendanceTotals;
+export interface AbsenceReportResponse {
+  items: AbsenceRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  metrics: AttendanceMetrics;
 }
 
-export interface LearnerReport {
-  learner: Learner;
-  totals: AttendanceTotals;
+export interface LatenessRow {
+  learnerId: number;
+  learnerName: string;
+  learnerRef: string;
+  sessionId: number;
+  sessionDate: string;
+  /** @nullable */
+  plannedStartTime: string | null;
+  cohortId: number;
+  cohortName: string;
+  tutorName: string;
+  minutesLate: number;
+  /** @nullable */
+  hoursAttended: number | null;
 }
 
-export interface CohortReport {
-  cohort: Cohort;
-  totals: AttendanceTotals;
-  learnerBreakdown: LearnerAttendanceRow[];
+export interface LatenessReportResponse {
+  items: LatenessRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  metrics: AttendanceMetrics;
 }
 
-export interface TutorReport {
-  tutor: Tutor;
-  totals: AttendanceTotals;
-  cohortBreakdown: CohortAttendanceRow[];
+export interface AttendanceHoursItem {
+  key: string;
+  label: string;
+  /** @nullable */
+  periodStart?: string | null;
+  /** @nullable */
+  periodEnd?: string | null;
+  metrics: AttendanceMetrics;
 }
 
-export interface OrganisationReport {
-  totals: AttendanceTotals;
-  programmeBreakdown: ProgrammeAttendanceRow[];
-  cohortBreakdown: CohortAttendanceRow[];
+export interface AttendanceHoursReportResponse {
+  groupBy: AttendanceHoursGroupBy;
+  items: AttendanceHoursItem[];
+}
+
+export interface RegisterCompletionRow {
+  sessionId: number;
+  sessionDate: string;
+  /** @nullable */
+  title: string | null;
+  cohortId: number;
+  cohortName: string;
+  tutorName: string;
+  registerStatus: RegisterStatus;
+  expectedCount: number;
+  recordedCount: number;
+  missingRowCount: number;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  completedByName: string | null;
+  /** @nullable */
+  registerLockedAt: string | null;
+  /** @nullable */
+  lockedByName: string | null;
+  /**
+     * Days overdue for not_started/in_progress sessions on or before today; null otherwise.
+     * @nullable
+     */
+  outstandingDays: number | null;
+}
+
+export interface RegisterCompletionReportResponse {
+  items: RegisterCompletionRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  registerCompletion: RegisterCompletionSummary;
+}
+
+export interface AllocationHistoryRow {
+  id: number;
+  learnerId: number;
+  learnerName: string;
+  /** @nullable */
+  previousTutorId: number | null;
+  /** @nullable */
+  previousTutorName: string | null;
+  /** @nullable */
+  newTutorId: number | null;
+  /** @nullable */
+  newTutorName: string | null;
+  /** @nullable */
+  previousCohortId: number | null;
+  /** @nullable */
+  previousCohortName: string | null;
+  /** @nullable */
+  newCohortId: number | null;
+  /** @nullable */
+  newCohortName: string | null;
+  effectiveDate: string;
+  /**
+     * The next chronological transfer's effective date for this learner, or null if this is their current allocation.
+     * @nullable
+     */
+  effectiveTo: string | null;
+  /** @nullable */
+  transferReason: string | null;
+  changedBy: number;
+  changedByName: string;
+  changedDate: string;
+}
+
+export interface AllocationHistoryReportResponse {
+  items: AllocationHistoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  notice: string;
 }
 
 export interface SessionSummary {
@@ -918,52 +1208,6 @@ export interface CohortSummary {
   attendancePercentage: number;
 }
 
-export interface AttendanceMetrics {
-  periodStart: string;
-  periodEnd: string;
-  expectedMinutes: number;
-  attendedMinutes: number;
-  authorisedAbsenceMinutes: number;
-  authorisedAbsenceSessions: number;
-  unauthorisedAbsenceMinutes: number;
-  unauthorisedAbsenceSessions: number;
-  lateMinutes: number;
-  lateSessionCount: number;
-  averageMinutesLate: number | null;
-  missingRecordCount: number;
-  completedRegisterRowCount: number;
-  /** Null when expectedMinutes is zero -- never a fabricated 0%. */
-  attendancePercentage: number | null;
-  /** Percentage of applicable register rows that have an actual recorded status (vs missing). */
-  attendanceDataCompleteness: number | null;
-  /** True when there isn't enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule). */
-  insufficientData: boolean;
-  calculatedAt: string;
-}
-
-/**
- * Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.
- */
-export interface BudProgress {
-  activityProgress?: number | null;
-  activitiesOverdue?: number | null;
-  lastSubmissionDate?: string | null;
-  lastCompletedActivity?: string | null;
-  statusDesc?: string | null;
-  learningPlanUrl?: string | null;
-  syncedAt?: string | null;
-}
-
-export interface LearnerAttendanceSummaryRow {
-  learnerId: number;
-  learnerName: string;
-  learnerRef: string;
-  cohortName?: string | null;
-  metrics: AttendanceMetrics;
-  /** Null when no Bud sync match exists yet -- never breaks the row. */
-  bud?: BudProgress | null;
-}
-
 export interface AdminDashboard {
   activeLearners: number;
   activeTutors: number;
@@ -980,18 +1224,6 @@ export interface TutorDashboard {
   nextSession: SessionSummary | null;
   sessionsAwaitingCompletion: SessionSummary[];
   lowAttendanceLearners: LearnerAttendanceSummaryRow[];
-}
-
-export interface RegisterCompletionSummary {
-  periodStart: string;
-  periodEnd: string;
-  notStarted: number;
-  inProgress: number;
-  completed: number;
-  locked: number;
-  /** Not-started/in-progress registers whose session date has already passed. */
-  outstanding: number;
-  completionPercentage: number | null;
 }
 
 export interface AttendanceSummaryResponse {
@@ -1112,6 +1344,18 @@ export type DateToParamParameter = string;
 export type PageParamParameter = number;
 
 export type PageSizeParamParameter = number;
+
+export type TutorIdQueryParamParameter = number;
+
+export type CohortIdQueryParamParameter = number;
+
+export type LearnerIdQueryParamParameter = number;
+
+export type ProgrammeQueryParamParameter = string;
+
+export type LevelQueryParamParameter = string;
+
+export type EmployerQueryParamParameter = string;
 
 export type GetTutorDashboardCohortsParams = {
 period?: PeriodParamParameter;
@@ -1252,39 +1496,182 @@ status?: SessionStatus;
 registerStatus?: RegisterStatus;
 };
 
-export type GetOrganisationReportParams = {
-dateFrom?: string;
-dateTo?: string;
-programme?: string;
+export type GetLearnerReportV2Params = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
 };
 
-export type GetProgrammeReportParams = {
-dateFrom?: string;
-dateTo?: string;
+export type ExportLearnerReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
 };
 
-export type ExportReportParams = {
-reportType: ExportReportReportType;
-entityId?: number;
-dateFrom?: string;
-dateTo?: string;
-tutorId?: number;
-cohortId?: number;
-programme?: string;
-status?: LearnerStatus;
+export type GetCohortReportV2Params = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
 };
 
-export type ExportReportReportType = typeof ExportReportReportType[keyof typeof ExportReportReportType];
+export type ExportCohortReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
+
+export type GetTutorReportV2Params = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
+
+export type ExportTutorReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
+
+export type GetOrganisationReportV2Params = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+programme?: ProgrammeQueryParamParameter;
+};
+
+export type ExportOrganisationReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+breakdown?: ExportOrganisationReportBreakdown;
+};
+
+export type ExportOrganisationReportBreakdown = typeof ExportOrganisationReportBreakdown[keyof typeof ExportOrganisationReportBreakdown];
 
 
-export const ExportReportReportType = {
-  learner: 'learner',
-  cohort: 'cohort',
+export const ExportOrganisationReportBreakdown = {
   tutor: 'tutor',
-  organisation: 'organisation',
+  cohort: 'cohort',
   programme: 'programme',
-  'allocation-history': 'allocation-history',
+  level: 'level',
+  employer: 'employer',
 } as const;
+
+export type GetAbsenceReportParams = {
+absenceType: AbsenceType;
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+programme?: ProgrammeQueryParamParameter;
+level?: LevelQueryParamParameter;
+employer?: EmployerQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type ExportAbsenceReportParams = {
+absenceType: AbsenceType;
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+programme?: ProgrammeQueryParamParameter;
+level?: LevelQueryParamParameter;
+employer?: EmployerQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
+};
+
+export type GetLatenessReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+programme?: ProgrammeQueryParamParameter;
+level?: LevelQueryParamParameter;
+employer?: EmployerQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type ExportLatenessReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+programme?: ProgrammeQueryParamParameter;
+level?: LevelQueryParamParameter;
+employer?: EmployerQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
+};
+
+export type GetAttendanceHoursReportParams = {
+groupBy?: AttendanceHoursGroupBy;
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+};
+
+export type ExportAttendanceHoursReportParams = {
+groupBy?: AttendanceHoursGroupBy;
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+};
+
+export type GetRegisterCompletionReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+registerStatus?: RegisterStatusFilter;
+overdueOnly?: boolean;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type ExportRegisterCompletionReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+registerStatus?: RegisterStatusFilter;
+overdueOnly?: boolean;
+};
+
+export type GetAllocationHistoryReportParams = {
+learnerId?: LearnerIdQueryParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type ExportAllocationHistoryReportParams = {
+learnerId?: LearnerIdQueryParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+};
 
 export type ListUsersParams = {
 search?: string;

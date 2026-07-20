@@ -77,7 +77,7 @@ if auth_settings.auth_mode == "local":
 async def http_exception_handler(_request: Request, exc: HTTPException):
     detail = exc.detail
     body = detail if isinstance(detail, dict) else {"error": detail}
-    return JSONResponse(status_code=exc.status_code, content=body)
+    return JSONResponse(status_code=exc.status_code, content=body, headers=exc.headers)
 
 
 @app.exception_handler(RequestValidationError)

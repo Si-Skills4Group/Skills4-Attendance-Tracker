@@ -1,9 +1,12 @@
-"""Phase 8 attendance-calculation engine.
+"""Phase 8/9 attendance-calculation engine.
 
-This is a *new*, minutes-based, non-rounding formula living alongside (not
-replacing) attendance_calc.py -- which keeps backing the existing, tested
-/reports/* endpoints exactly as before. This module is the single source of
-truth for every new dashboard/attendance-summary endpoint.
+This is the minutes-based, non-rounding formula that both the dashboards
+(Phase 8) and the reporting module (Phase 9, routers/reports.py) are built
+on -- attendance_calc.py/attendance_data.py (the old hours-based formula)
+are no longer used by any endpoint after Phase 9's migration; this module is
+the single source of truth for every dashboard/report/attendance-summary
+endpoint, so dashboard and report totals reconcile under identical filters
+by construction, not by coincidence.
 
 Unlike attendance_data.py's get_records_for_*() helpers (which only ever
 select rows that already exist in attendance_records, and therefore cannot
@@ -229,15 +232,30 @@ def fetch_attendance_metrics_grouped(
     group_ids: list[int],
     period_start: date,
     period_end: date,
+    fixed_cohort_id: int | None = None,
 ) -> dict[int, AttendanceMetrics]:
     """One aggregate query for many learners/cohorts/tutors at once, each
     bucketed via GROUP BY -- the batched twin of fetch_attendance_metrics,
-    used wherever a dashboard needs a metric per-entity across a list
-    (e.g. the low-attendance-learners list) instead of the N+1 pattern the
-    old dashboard.py._low_attendance_learners used."""
+    used wherever a dashboard/report needs a metric per-entity across a
+    list (e.g. the low-attendance-learners list, or a cohort report's
+    per-learner breakdown) instead of the N+1 pattern the old
+    dashboard.py._low_attendance_learners used.
+
+    fixed_cohort_id (group_by="learner" only) scopes each learner's totals
+    to sessions belonging to that one cohort -- without it, a learner's
+    metrics would be their lifetime total across every cohort they've ever
+    been expected in, which is the wrong question for "how did this
+    learner do *in this cohort*"."""
     if not group_ids:
         return {}
     column = _GROUP_BY_COLUMN[group_by]
+    extra_clause = ""
+    extra_params: list = []
+    if fixed_cohort_id is not None:
+        if group_by != "learner":
+            raise ValueError("fixed_cohort_id is only meaningful when group_by='learner'")
+        extra_clause = " AND s.cohort_id = %s"
+        extra_params = [fixed_cohort_id]
     cur.execute(
         f"""
         SELECT {column} AS "groupId", {_METRICS_SELECT_COLUMNS}
@@ -246,10 +264,10 @@ def fetch_attendance_metrics_grouped(
         JOIN session_expected_learners sel ON sel.session_id = s.id
         LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
         WHERE s.status != 'cancelled' AND s.session_date >= %s AND s.session_date <= %s
-          AND {column} = ANY(%s)
+          AND {column} = ANY(%s){extra_clause}
         GROUP BY {column}
         """,
-        [period_start, period_end, group_ids],
+        [period_start, period_end, group_ids, *extra_params],
     )
     results = {row["groupId"]: _row_to_metrics(row, period_start, period_end) for row in cur.fetchall()}
     # Entities with zero matching rows (e.g. a learner with no expected
@@ -267,6 +285,104 @@ def fetch_attendance_metrics_grouped(
     for group_id in group_ids:
         results.setdefault(group_id, empty)
     return results
+
+
+def _fetch_metrics_by_string_key(
+    cur, *, key_sql: str, extra_join: str, period_start: date, period_end: date
+) -> dict[str, AttendanceMetrics]:
+    """Shared implementation behind the by-programme/by-level/by-employer
+    organisation-report breakdowns -- same formula/columns as every other
+    aggregate here, just GROUP BY a cohort/learner attribute string instead
+    of an entity id, and returning every distinct value seen (not a
+    pre-known id list, unlike fetch_attendance_metrics_grouped)."""
+    cur.execute(
+        f"""
+        SELECT {key_sql} AS "groupKey", {_METRICS_SELECT_COLUMNS}
+        FROM attendance_sessions s
+        JOIN cohorts c ON s.cohort_id = c.id
+        JOIN session_expected_learners sel ON sel.session_id = s.id
+        {extra_join}
+        LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
+        WHERE s.status != 'cancelled' AND s.session_date >= %s AND s.session_date <= %s
+        GROUP BY {key_sql}
+        """,
+        [period_start, period_end],
+    )
+    return {row["groupKey"]: _row_to_metrics(row, period_start, period_end) for row in cur.fetchall()}
+
+
+def fetch_attendance_metrics_by_programme(cur, *, period_start: date, period_end: date) -> dict[str, AttendanceMetrics]:
+    return _fetch_metrics_by_string_key(cur, key_sql="c.programme", extra_join="", period_start=period_start, period_end=period_end)
+
+
+def fetch_attendance_metrics_by_level(cur, *, period_start: date, period_end: date) -> dict[str, AttendanceMetrics]:
+    return _fetch_metrics_by_string_key(cur, key_sql="c.level", extra_join="", period_start=period_start, period_end=period_end)
+
+
+def fetch_attendance_metrics_by_employer(cur, *, period_start: date, period_end: date) -> dict[str, AttendanceMetrics]:
+    return _fetch_metrics_by_string_key(
+        cur,
+        key_sql="COALESCE(l.employer, 'Unspecified')",
+        extra_join="JOIN learners l ON l.id = sel.learner_id",
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+
+class AttendanceMetricsBucket(BaseModel):
+    bucketStart: date
+    bucketEnd: date
+    metrics: AttendanceMetrics
+
+
+def _bucket_end(bucket: Literal["week", "month"], bucket_start: date) -> date:
+    if bucket == "week":
+        return bucket_start.fromordinal(bucket_start.toordinal() + 6)
+    next_month = (
+        bucket_start.replace(year=bucket_start.year + 1, month=1)
+        if bucket_start.month == 12
+        else bucket_start.replace(month=bucket_start.month + 1)
+    )
+    return next_month.fromordinal(next_month.toordinal() - 1)
+
+
+def fetch_attendance_metrics_by_period_bucket(
+    cur,
+    *,
+    bucket: Literal["week", "month"],
+    scope: Scope,
+    scope_id: int | None,
+    period_start: date,
+    period_end: date,
+) -> list[AttendanceMetricsBucket]:
+    """The attendance-hours report's week/month grouping -- same formula,
+    same SELECT columns as fetch_attendance_metrics, just GROUP BY a
+    date_trunc'd bucket instead of an entity id. Buckets with zero expected
+    minutes in range are omitted (there is nothing to report for a week/
+    month that didn't happen), rather than padded with empty rows."""
+    scope_sql, scope_params = _scope_clause(scope, scope_id)
+    clauses = ["s.status != 'cancelled'", "s.session_date >= %s", "s.session_date <= %s", scope_sql]
+    params: list = [period_start, period_end, *scope_params]
+
+    cur.execute(
+        f"""
+        SELECT date_trunc(%s, s.session_date)::date AS "bucketStart", {_METRICS_SELECT_COLUMNS}
+        FROM attendance_sessions s
+        JOIN cohorts c ON s.cohort_id = c.id
+        JOIN session_expected_learners sel ON sel.session_id = s.id
+        LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
+        WHERE {' AND '.join(clauses)}
+        GROUP BY 1
+        ORDER BY 1
+        """,
+        [bucket, *params],
+    )
+    buckets = []
+    for row in cur.fetchall():
+        bucket_start = row["bucketStart"]
+        metrics = _row_to_metrics(row, bucket_start, _bucket_end(bucket, bucket_start))
+        buckets.append(AttendanceMetricsBucket(bucketStart=bucket_start, bucketEnd=_bucket_end(bucket, bucket_start), metrics=metrics))
+    return buckets
 
 
 def _register_completion_scope_clause(scope: Scope, scope_id: int | None) -> tuple[str, list]:

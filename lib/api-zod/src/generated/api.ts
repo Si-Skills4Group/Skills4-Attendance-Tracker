@@ -2366,11 +2366,23 @@ export const MarkAllPresentResponse = zod.object({
 })
 
 
-export const GetLearnerReportParams = zod.object({
-  "id": zod.coerce.number()
+export const GetLearnerReportV2Params = zod.object({
+  "learnerId": zod.coerce.number()
 })
 
-export const GetLearnerReportResponse = zod.object({
+export const getLearnerReportV2QueryPeriodDefault = `current_month`;
+export const getLearnerReportV2QueryPageDefault = 1;
+export const getLearnerReportV2QueryPageSizeDefault = 25;
+
+export const GetLearnerReportV2QueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getLearnerReportV2QueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "page": zod.coerce.number().default(getLearnerReportV2QueryPageDefault),
+  "pageSize": zod.coerce.number().default(getLearnerReportV2QueryPageSizeDefault)
+})
+
+export const GetLearnerReportV2Response = zod.object({
   "learner": zod.object({
   "id": zod.number(),
   "learnerRef": zod.string(),
@@ -2394,23 +2406,98 @@ export const GetLearnerReportResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+}),
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
+}),
+  "bud": zod.union([zod.object({
+  "activityProgress": zod.union([zod.number(),zod.null()]).optional(),
+  "activitiesOverdue": zod.union([zod.number(),zod.null()]).optional(),
+  "lastSubmissionDate": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "lastCompletedActivity": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "statusDesc": zod.union([zod.string(),zod.null()]).optional(),
+  "learningPlanUrl": zod.union([zod.string(),zod.null()]).optional(),
+  "syncedAt": zod.union([zod.coerce.date(),zod.null()]).optional()
+}).describe('Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.'),zod.null()]),
+  "sessionHistory": zod.object({
+  "items": zod.array(zod.object({
+  "sessionId": zod.number(),
+  "sessionDate": zod.coerce.date(),
+  "title": zod.string().nullable(),
+  "plannedDurationHours": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorName": zod.string(),
+  "status": zod.union([zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn']),zod.null()]).describe('Null when no register row was ever recorded for this session -- missing data, never treated as absence.'),
+  "hoursAttended": zod.number().nullable(),
+  "minutesLate": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked'])
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
 })
 
 
-export const GetCohortReportParams = zod.object({
-  "id": zod.coerce.number()
+export const ExportLearnerReportParams = zod.object({
+  "learnerId": zod.coerce.number()
 })
 
-export const GetCohortReportResponse = zod.object({
+export const exportLearnerReportQueryPeriodDefault = `current_month`;
+
+export const ExportLearnerReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportLearnerReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional()
+})
+
+export const ExportLearnerReportResponse = zod.unknown()
+
+
+export const GetCohortReportV2Params = zod.object({
+  "cohortId": zod.coerce.number()
+})
+
+export const getCohortReportV2QueryPeriodDefault = `current_month`;
+export const getCohortReportV2QueryPageDefault = 1;
+export const getCohortReportV2QueryPageSizeDefault = 25;
+
+export const GetCohortReportV2QueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getCohortReportV2QueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "page": zod.coerce.number().default(getCohortReportV2QueryPageDefault),
+  "pageSize": zod.coerce.number().default(getCohortReportV2QueryPageSizeDefault)
+})
+
+export const GetCohortReportV2Response = zod.object({
   "cohort": zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -2428,37 +2515,96 @@ export const GetCohortReportResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "activeLearnerCount": zod.number(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 }),
-  "learnerBreakdown": zod.array(zod.object({
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
+}),
+  "learnerBreakdown": zod.object({
+  "items": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string(),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "learnerRef": zod.string().nullable(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 })
-}))
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
 })
 
 
-export const GetTutorReportParams = zod.object({
-  "id": zod.coerce.number()
+export const ExportCohortReportParams = zod.object({
+  "cohortId": zod.coerce.number()
 })
 
-export const GetTutorReportResponse = zod.object({
+export const exportCohortReportQueryPeriodDefault = `current_month`;
+
+export const ExportCohortReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportCohortReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional()
+})
+
+export const ExportCohortReportResponse = zod.unknown()
+
+
+export const GetTutorReportV2Params = zod.object({
+  "tutorId": zod.coerce.number()
+})
+
+export const getTutorReportV2QueryPeriodDefault = `current_month`;
+
+export const GetTutorReportV2QueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getTutorReportV2QueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional()
+})
+
+export const GetTutorReportV2Response = zod.object({
   "tutor": zod.object({
   "id": zod.number(),
   "userId": zod.number(),
@@ -2472,110 +2618,634 @@ export const GetTutorReportResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "activeCohorts": zod.number(),
+  "activeLearners": zod.number(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+}),
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
 }),
   "cohortBreakdown": zod.array(zod.object({
-  "cohortId": zod.number(),
-  "cohortName": zod.string(),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "cohort": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 })
+})),
+  "lowAttendanceLearners": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string(),
+  "cohortName": zod.union([zod.string(),zod.null()]).optional(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+}),
+  "bud": zod.union([zod.object({
+  "activityProgress": zod.union([zod.number(),zod.null()]).optional(),
+  "activitiesOverdue": zod.union([zod.number(),zod.null()]).optional(),
+  "lastSubmissionDate": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "lastCompletedActivity": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "statusDesc": zod.union([zod.string(),zod.null()]).optional(),
+  "learningPlanUrl": zod.union([zod.string(),zod.null()]).optional(),
+  "syncedAt": zod.union([zod.coerce.date(),zod.null()]).optional()
+}).describe('Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.'),zod.null()]).optional().describe('Null when no Bud sync match exists yet -- never breaks the row.')
 }))
 })
 
 
-export const GetOrganisationReportQueryParams = zod.object({
+export const ExportTutorReportParams = zod.object({
+  "tutorId": zod.coerce.number()
+})
+
+export const exportTutorReportQueryPeriodDefault = `current_month`;
+
+export const ExportTutorReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportTutorReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional()
+})
+
+export const ExportTutorReportResponse = zod.unknown()
+
+
+export const getOrganisationReportV2QueryPeriodDefault = `current_month`;
+
+export const GetOrganisationReportV2QueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getOrganisationReportV2QueryPeriodDefault),
   "dateFrom": zod.date().optional(),
   "dateTo": zod.date().optional(),
   "programme": zod.coerce.string().optional()
 })
 
-export const GetOrganisationReportResponse = zod.object({
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+export const GetOrganisationReportV2Response = zod.object({
+  "activeLearners": zod.number(),
+  "activeTutors": zod.number(),
+  "activeCohorts": zod.number(),
+  "sessionsInPeriod": zod.number(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 }),
-  "programmeBreakdown": zod.array(zod.object({
-  "programme": zod.string(),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
+}),
+  "tutorBreakdown": zod.array(zod.object({
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 })
 })),
   "cohortBreakdown": zod.array(zod.object({
-  "cohortId": zod.number(),
-  "cohortName": zod.string(),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
+  "cohort": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+})
+})),
+  "programmeBreakdown": zod.array(zod.object({
+  "programme": zod.string(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+})
+})),
+  "levelBreakdown": zod.array(zod.object({
+  "level": zod.string(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+})
+})),
+  "employerBreakdown": zod.array(zod.object({
+  "employer": zod.string(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 })
 }))
 })
 
 
-export const GetProgrammeReportQueryParams = zod.object({
+export const exportOrganisationReportQueryPeriodDefault = `current_month`;
+export const exportOrganisationReportQueryBreakdownDefault = `tutor`;
+
+export const ExportOrganisationReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportOrganisationReportQueryPeriodDefault),
   "dateFrom": zod.date().optional(),
-  "dateTo": zod.date().optional()
+  "dateTo": zod.date().optional(),
+  "breakdown": zod.enum(['tutor', 'cohort', 'programme', 'level', 'employer']).default(exportOrganisationReportQueryBreakdownDefault)
 })
 
-export const GetProgrammeReportResponseItem = zod.object({
-  "programme": zod.string(),
-  "totals": zod.object({
-  "scheduledHours": zod.number(),
-  "attendedHours": zod.number(),
-  "authorisedAbsenceHours": zod.number(),
-  "unauthorisedAbsenceHours": zod.number(),
-  "lateCount": zod.number(),
-  "sessionCount": zod.number(),
-  "attendancePercentage": zod.number()
-})
-})
-export const GetProgrammeReportResponse = zod.array(GetProgrammeReportResponseItem)
+export const ExportOrganisationReportResponse = zod.unknown()
 
 
-export const ExportReportQueryParams = zod.object({
-  "reportType": zod.enum(['learner', 'cohort', 'tutor', 'organisation', 'programme', 'allocation-history']),
-  "entityId": zod.coerce.number().optional(),
+export const getAbsenceReportQueryPeriodDefault = `current_month`;
+export const getAbsenceReportQueryPageDefault = 1;
+export const getAbsenceReportQueryPageSizeDefault = 25;
+
+export const GetAbsenceReportQueryParams = zod.object({
+  "absenceType": zod.enum(['authorised', 'unauthorised']),
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getAbsenceReportQueryPeriodDefault),
   "dateFrom": zod.date().optional(),
   "dateTo": zod.date().optional(),
   "tutorId": zod.coerce.number().optional(),
   "cohortId": zod.coerce.number().optional(),
   "programme": zod.coerce.string().optional(),
-  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional()
+  "level": zod.coerce.string().optional(),
+  "employer": zod.coerce.string().optional(),
+  "learnerId": zod.coerce.number().optional(),
+  "page": zod.coerce.number().default(getAbsenceReportQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getAbsenceReportQueryPageSizeDefault)
 })
 
-export const ExportReportResponse = zod.object({
-  "csv": zod.string(),
-  "filename": zod.string().optional()
+export const GetAbsenceReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string(),
+  "employer": zod.string().nullable(),
+  "sessionId": zod.number(),
+  "sessionDate": zod.coerce.date(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorName": zod.string(),
+  "status": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn']),
+  "plannedDurationHours": zod.number()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
 })
+})
+
+
+export const exportAbsenceReportQueryPeriodDefault = `current_month`;
+
+export const ExportAbsenceReportQueryParams = zod.object({
+  "absenceType": zod.enum(['authorised', 'unauthorised']),
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportAbsenceReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "programme": zod.coerce.string().optional(),
+  "level": zod.coerce.string().optional(),
+  "employer": zod.coerce.string().optional(),
+  "learnerId": zod.coerce.number().optional()
+})
+
+export const ExportAbsenceReportResponse = zod.unknown()
+
+
+export const getLatenessReportQueryPeriodDefault = `current_month`;
+export const getLatenessReportQueryPageDefault = 1;
+export const getLatenessReportQueryPageSizeDefault = 25;
+
+export const GetLatenessReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getLatenessReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "programme": zod.coerce.string().optional(),
+  "level": zod.coerce.string().optional(),
+  "employer": zod.coerce.string().optional(),
+  "learnerId": zod.coerce.number().optional(),
+  "page": zod.coerce.number().default(getLatenessReportQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getLatenessReportQueryPageSizeDefault)
+})
+
+export const GetLatenessReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string(),
+  "sessionId": zod.number(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string().nullable(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorName": zod.string(),
+  "minutesLate": zod.number(),
+  "hoursAttended": zod.number().nullable()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+})
+})
+
+
+export const exportLatenessReportQueryPeriodDefault = `current_month`;
+
+export const ExportLatenessReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportLatenessReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "programme": zod.coerce.string().optional(),
+  "level": zod.coerce.string().optional(),
+  "employer": zod.coerce.string().optional(),
+  "learnerId": zod.coerce.number().optional()
+})
+
+export const ExportLatenessReportResponse = zod.unknown()
+
+
+export const getAttendanceHoursReportQueryPeriodDefault = `current_month`;
+
+export const GetAttendanceHoursReportQueryParams = zod.object({
+  "groupBy": zod.enum(['learner', 'cohort', 'tutor', 'programme', 'employer', 'week', 'month']).optional(),
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getAttendanceHoursReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional()
+})
+
+export const GetAttendanceHoursReportResponse = zod.object({
+  "groupBy": zod.enum(['learner', 'cohort', 'tutor', 'programme', 'employer', 'week', 'month']),
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "periodStart": zod.coerce.date().nullish(),
+  "periodEnd": zod.coerce.date().nullish(),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+})
+}))
+})
+
+
+export const exportAttendanceHoursReportQueryPeriodDefault = `current_month`;
+
+export const ExportAttendanceHoursReportQueryParams = zod.object({
+  "groupBy": zod.enum(['learner', 'cohort', 'tutor', 'programme', 'employer', 'week', 'month']).optional(),
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportAttendanceHoursReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional()
+})
+
+export const ExportAttendanceHoursReportResponse = zod.unknown()
+
+
+export const getRegisterCompletionReportQueryPeriodDefault = `current_month`;
+export const getRegisterCompletionReportQueryOverdueOnlyDefault = false;
+export const getRegisterCompletionReportQueryPageDefault = 1;
+export const getRegisterCompletionReportQueryPageSizeDefault = 25;
+
+export const GetRegisterCompletionReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getRegisterCompletionReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'locked', 'cancelled']).optional(),
+  "overdueOnly": zod.coerce.boolean().default(getRegisterCompletionReportQueryOverdueOnlyDefault),
+  "page": zod.coerce.number().default(getRegisterCompletionReportQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getRegisterCompletionReportQueryPageSizeDefault)
+})
+
+export const GetRegisterCompletionReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "sessionId": zod.number(),
+  "sessionDate": zod.coerce.date(),
+  "title": zod.string().nullable(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorName": zod.string(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "expectedCount": zod.number(),
+  "recordedCount": zod.number(),
+  "missingRowCount": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedByName": zod.string().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "lockedByName": zod.string().nullable(),
+  "outstandingDays": zod.number().nullable().describe('Days overdue for not_started\/in_progress sessions on or before today; null otherwise.')
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
+})
+})
+
+
+export const exportRegisterCompletionReportQueryPeriodDefault = `current_month`;
+export const exportRegisterCompletionReportQueryOverdueOnlyDefault = false;
+
+export const ExportRegisterCompletionReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportRegisterCompletionReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'locked', 'cancelled']).optional(),
+  "overdueOnly": zod.coerce.boolean().default(exportRegisterCompletionReportQueryOverdueOnlyDefault)
+})
+
+export const ExportRegisterCompletionReportResponse = zod.unknown()
+
+
+export const getAllocationHistoryReportQueryPageDefault = 1;
+export const getAllocationHistoryReportQueryPageSizeDefault = 25;
+
+export const GetAllocationHistoryReportQueryParams = zod.object({
+  "learnerId": zod.coerce.number().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "page": zod.coerce.number().default(getAllocationHistoryReportQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getAllocationHistoryReportQueryPageSizeDefault)
+})
+
+export const GetAllocationHistoryReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "previousTutorId": zod.number().nullable(),
+  "previousTutorName": zod.string().nullable(),
+  "newTutorId": zod.number().nullable(),
+  "newTutorName": zod.string().nullable(),
+  "previousCohortId": zod.number().nullable(),
+  "previousCohortName": zod.string().nullable(),
+  "newCohortId": zod.number().nullable(),
+  "newCohortName": zod.string().nullable(),
+  "effectiveDate": zod.coerce.date(),
+  "effectiveTo": zod.coerce.date().nullable().describe('The next chronological transfer\'s effective date for this learner, or null if this is their current allocation.'),
+  "transferReason": zod.string().nullable(),
+  "changedBy": zod.number(),
+  "changedByName": zod.string(),
+  "changedDate": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "notice": zod.string()
+})
+
+
+export const ExportAllocationHistoryReportQueryParams = zod.object({
+  "learnerId": zod.coerce.number().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional()
+})
+
+export const ExportAllocationHistoryReportResponse = zod.unknown()
 
 
 export const ListUsersQueryParams = zod.object({

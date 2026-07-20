@@ -402,6 +402,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_user_sessions_expire ON user_sessions (expire);
 
+-- Phase 9 reporting: employer-grouped/filtered reports (organisation
+-- breakdown, absence/lateness employer filter) and the allocation-history
+-- report's tutor filter (which also matches previous_tutor_id, but
+-- new_tutor_id is the far more common lookup direction).
+CREATE INDEX IF NOT EXISTS idx_learners_employer ON learners (employer);
+CREATE INDEX IF NOT EXISTS idx_allocation_history_new_tutor ON learner_allocation_history (new_tutor_id);
+
 INSERT INTO app_settings (id, organisation_name, low_attendance_threshold)
 VALUES (1, 'Skills4Group', 85)
 ON CONFLICT (id) DO NOTHING;

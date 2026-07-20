@@ -6,7 +6,4 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetProgrammeReportParams = {
-dateFrom?: Date;
-dateTo?: Date;
-};
+export type EmployerQueryParamParameter = string;

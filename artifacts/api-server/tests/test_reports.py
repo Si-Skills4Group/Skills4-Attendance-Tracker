@@ -1,124 +1,367 @@
-"""Tests for reports.py's cohort/tutor/organisation report endpoints.
-
-These previously had zero test coverage. Written alongside the N+1 fix
-(single fetch + group-in-Python instead of one query per entity in the
-breakdown) to prove the batched rewrite produces exactly the same shape
-and numbers the old per-entity-loop version did.
+"""HTTP-level tests for the Phase 9 reporting endpoints (pyapp/routers/
+reports.py). Replaces the old hours-based test_reports.py entirely: that
+file locked in attendance_calc.py's formula (including an explicitly
+documented "breakdown ignores the top-level filter" quirk) which Phase 9's
+migration onto attendance_metrics.py deliberately removes -- report totals
+must now reconcile with the dashboard engine, not diverge from it.
 """
+from datetime import date
 
-import os
+from fastapi import Request
 
-from pyapp.routers.reports import get_cohort_report, get_organisation_report, get_tutor_report
+from pyapp import auth as auth_module
+from pyapp.attendance_metrics import fetch_attendance_metrics
+from pyapp.session_register_lib import ensure_expected_learners_snapshot
 
 
-def _insert_attendance_record(db, session_id, learner_id, status, hours_attended=6):
+# Captured once at import time, before any test monkeypatches
+# auth_module.require_auth -- this is the exact function object every
+# router's Depends(require_auth) captured at its own route-registration
+# time, so it's the only valid dependency_overrides key. (Reading
+# auth_module.require_auth *after* monkeypatching it would just return the
+# fake, defeating the override.)
+_REAL_REQUIRE_AUTH = auth_module.require_auth
+
+
+def _fake_session_dependency(session, user_id):
+    # request MUST be annotated as Request: when this function is used as a
+    # dependency_overrides target, FastAPI rebuilds a fresh Dependant from
+    # *this* function's own signature (not the original's) to decide what
+    # to inject -- an unannotated `request` param is treated as a required
+    # query field instead of the special Request injection, breaking every
+    # route that depends on it with a spurious "query.request required" 400.
+    def fake_require_auth(request: Request):
+        request.state.session = session
+        request.state.current_user_id = user_id
+        return session
+
+    return fake_require_auth
+
+
+def _as_tutor(client, monkeypatch, tutor_id, user_id=1):
+    """Covers both Depends(require_auth)-wired routes (via
+    dependency_overrides -- FastAPI captured the require_auth callable at
+    route-registration time, so monkeypatching auth_module.require_auth
+    alone has no effect on those) and Depends(require_admin)-wired routes
+    (require_admin calls require_auth as a plain function lookup inside
+    auth.py, so it *does* see the monkeypatch) -- matching the two
+    mechanisms test_attendance_summary_endpoints.py already established."""
+    session = {"userId": user_id, "role": "tutor", "tutorId": tutor_id}
+    fake_require_auth = _fake_session_dependency(session, user_id)
+    monkeypatch.setattr(auth_module, "require_auth", fake_require_auth)
+    client.app.dependency_overrides[_REAL_REQUIRE_AUTH] = fake_require_auth
+    return session
+
+
+def _as_admin(client, monkeypatch, user_id=1):
+    session = {"userId": user_id, "role": "admin", "tutorId": None}
+    fake_require_auth = _fake_session_dependency(session, user_id)
+    monkeypatch.setattr(auth_module, "require_auth", fake_require_auth)
+    client.app.dependency_overrides[_REAL_REQUIRE_AUTH] = fake_require_auth
+    return session
+
+
+def _record(db, session_id, learner_id, status, hours_attended=0, minutes_late=0):
     db.execute(
         """
         INSERT INTO attendance_records (session_id, learner_id, status, hours_attended, minutes_late)
-        VALUES (%s, %s, %s, %s, 0)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (session_id, learner_id) DO UPDATE SET status = EXCLUDED.status,
+            hours_attended = EXCLUDED.hours_attended, minutes_late = EXCLUDED.minutes_late
         """,
-        (session_id, learner_id, status, hours_attended),
+        (session_id, learner_id, status, hours_attended, minutes_late),
     )
 
 
-def test_cohort_report_totals_and_per_learner_breakdown(
-    db, admin_user, cohort_factory, learner_factory, attendance_session_factory
-):
-    cohort = cohort_factory()
-    present_learner = learner_factory(cohort_id=cohort["id"])
-    absent_learner = learner_factory(cohort_id=cohort["id"])
-    untouched_learner = learner_factory(cohort_id=cohort["id"])  # no attendance record at all
-    session_row = attendance_session_factory(
-        cohort_id=cohort["id"], planned_duration_hours=6, created_by=admin_user["userId"]
-    )
-
-    _insert_attendance_record(db, session_row["id"], present_learner["id"], "present", hours_attended=6)
-    _insert_attendance_record(db, session_row["id"], absent_learner["id"], "absent_unauthorised", hours_attended=0)
-
-    result = get_cohort_report(cohort["id"], session=admin_user)
-
-    assert result["totals"]["scheduledHours"] == 12  # 2 learners with actual records x 6 hours
-    assert result["totals"]["attendedHours"] == 6
-
-    breakdown_by_id = {b["learnerId"]: b for b in result["learnerBreakdown"]}
-    assert breakdown_by_id[present_learner["id"]]["totals"]["attendedHours"] == 6
-    assert breakdown_by_id[absent_learner["id"]]["totals"]["unauthorisedAbsenceHours"] == 6
-    # A learner with zero attendance_records rows must get zero totals, not
-    # a KeyError -- proving the grouped-dict .get(id, []) fallback works.
-    assert breakdown_by_id[untouched_learner["id"]]["totals"]["scheduledHours"] == 0
-    assert breakdown_by_id[untouched_learner["id"]]["totals"]["sessionCount"] == 0
-
-    db.execute("DELETE FROM attendance_records WHERE session_id = %s", (session_row["id"],))
+def _snapshot(db, session: dict):
+    ensure_expected_learners_snapshot(db, session["id"], session["cohort_id"], date.fromisoformat(session["session_date"]))
 
 
-def test_tutor_report_totals_and_per_cohort_breakdown(
-    db, admin_user, tutor_factory, cohort_factory, learner_factory, attendance_session_factory
-):
-    tutor = tutor_factory()
-    cohort_a = cohort_factory(tutor_id=tutor["tutorId"])
-    cohort_b = cohort_factory(tutor_id=tutor["tutorId"])
-    learner_a = learner_factory(cohort_id=cohort_a["id"], tutor_id=tutor["tutorId"])
-    learner_b = learner_factory(cohort_id=cohort_b["id"], tutor_id=tutor["tutorId"])
-    session_a = attendance_session_factory(
-        cohort_id=cohort_a["id"], planned_duration_hours=5, created_by=admin_user["userId"]
-    )
-    session_b = attendance_session_factory(
-        cohort_id=cohort_b["id"], planned_duration_hours=5, created_by=admin_user["userId"]
-    )
-
-    _insert_attendance_record(db, session_a["id"], learner_a["id"], "present", hours_attended=5)
-    _insert_attendance_record(db, session_b["id"], learner_b["id"], "late", hours_attended=4)
-
-    result = get_tutor_report(tutor["tutorId"], session=admin_user)
-
-    assert result["totals"]["scheduledHours"] == 10
-    assert result["totals"]["attendedHours"] == 9
-    assert result["totals"]["lateCount"] == 1
-
-    breakdown_by_cohort = {b["cohortId"]: b for b in result["cohortBreakdown"]}
-    assert breakdown_by_cohort[cohort_a["id"]]["totals"]["attendedHours"] == 5
-    assert breakdown_by_cohort[cohort_b["id"]]["totals"]["lateCount"] == 1
-
-    db.execute("DELETE FROM attendance_records WHERE session_id IN (%s, %s)", (session_a["id"], session_b["id"]))
+PERIOD_QS = "period=custom&dateFrom=2026-01-01&dateTo=2026-01-31"
 
 
-def test_organisation_report_with_and_without_programme_filter(
-    db, admin_user, cohort_factory, learner_factory, attendance_session_factory
-):
-    suffix = os.urandom(4).hex()
-    programme_x = f"Programme X {suffix}"
-    programme_y = f"Programme Y {suffix}"
-    cohort_x = cohort_factory(programme=programme_x)
-    cohort_y = cohort_factory(programme=programme_y)
-    learner_x = learner_factory(cohort_id=cohort_x["id"], programme=programme_x)
-    learner_y = learner_factory(cohort_id=cohort_y["id"], programme=programme_y)
-    session_x = attendance_session_factory(
-        cohort_id=cohort_x["id"], planned_duration_hours=6, created_by=admin_user["userId"]
-    )
-    session_y = attendance_session_factory(
-        cohort_id=cohort_y["id"], planned_duration_hours=6, created_by=admin_user["userId"]
-    )
+class TestLearnerReport:
+    def test_reconciles_with_attendance_metrics_engine(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
 
-    _insert_attendance_record(db, session_x["id"], learner_x["id"], "present", hours_attended=6)
-    _insert_attendance_record(db, session_y["id"], learner_y["id"], "present", hours_attended=6)
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/learner/{learner['id']}?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
 
-    # Without a filter: top-level totals cover both programmes' records.
-    unfiltered = get_organisation_report(_session=admin_user)
-    assert unfiltered["totals"]["scheduledHours"] >= 12
-    programme_names = {p["programme"] for p in unfiltered["programmeBreakdown"]}
-    assert {programme_x, programme_y} <= programme_names
-    cohort_ids_in_breakdown = {c["cohortId"] for c in unfiltered["cohortBreakdown"]}
-    assert {cohort_x["id"], cohort_y["id"]} <= cohort_ids_in_breakdown
+        expected = fetch_attendance_metrics(db, scope="learner", scope_id=learner["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31))
+        assert body["metrics"]["expectedMinutes"] == expected.expectedMinutes == 360
+        assert body["metrics"]["attendedMinutes"] == expected.attendedMinutes == 360
+        assert "sessionHistory" in body and body["sessionHistory"]["total"] == 1
+        assert "registerCompletion" in body
 
-    # With a filter: top-level totals only cover the filtered programme...
-    filtered = get_organisation_report(programme=programme_x, _session=admin_user)
-    assert filtered["totals"]["scheduledHours"] == 6
-    # ...but the breakdown still shows every programme/cohort, matching the
-    # pre-existing (if slightly surprising) behaviour this rewrite preserves
-    # rather than changes incidentally.
-    filtered_programme_names = {p["programme"] for p in filtered["programmeBreakdown"]}
-    assert {programme_x, programme_y} <= filtered_programme_names
-    filtered_cohort_ids = {c["cohortId"] for c in filtered["cohortBreakdown"]}
-    assert {cohort_x["id"], cohort_y["id"]} <= filtered_cohort_ids
+    def test_tutor_cannot_access_another_tutors_learner(self, client, monkeypatch, tutor_factory, learner_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        learner = learner_factory(tutor_id=owner["tutorId"])
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(f"/api/reports/learner/{learner['id']}")
+        assert response.status_code == 403
 
-    db.execute("DELETE FROM attendance_records WHERE session_id IN (%s, %s)", (session_x["id"], session_y["id"]))
+    def test_nonexistent_learner_is_404(self, client, monkeypatch):
+        _as_admin(client, monkeypatch)
+        response = client.get("/api/reports/learner/999999999")
+        assert response.status_code == 404
+
+    def test_custom_period_without_dates_is_400(self, client, monkeypatch, learner_factory):
+        learner = learner_factory()
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/learner/{learner['id']}?period=custom")
+        assert response.status_code == 400
+
+
+class TestCohortReport:
+    def test_learner_breakdown_reconciles_with_cohort_total(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner_a = learner_factory(cohort_id=cohort["id"])
+        learner_b = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner_a["id"], "present", hours_attended=6)
+        _record(db, session_row["id"], learner_b["id"], "absent_unauthorised")
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/cohort/{cohort['id']}?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
+
+        items = body["learnerBreakdown"]["items"]
+        summed_attended = sum(i["metrics"]["attendedMinutes"] for i in items)
+        summed_expected = sum(i["metrics"]["expectedMinutes"] for i in items)
+        assert summed_attended == body["metrics"]["attendedMinutes"]
+        assert summed_expected == body["metrics"]["expectedMinutes"]
+
+    def test_breakdown_excludes_a_learner_transferred_out_before_any_session_in_this_cohort(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort_old = cohort_factory()
+        cohort_new = cohort_factory()
+        learner = learner_factory(cohort_id=cohort_new["id"])
+        # A session that only ever happened in the *new* cohort -- the
+        # learner never had a session_expected_learners row for cohort_old.
+        session_row = attendance_session_factory(cohort_id=cohort_new["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/cohort/{cohort_old['id']}?{PERIOD_QS}")
+        assert response.status_code == 200
+        assert response.json()["learnerBreakdown"]["items"] == []
+
+    def test_tutor_cannot_access_another_tutors_cohort(self, client, monkeypatch, tutor_factory, cohort_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(f"/api/reports/cohort/{cohort['id']}")
+        assert response.status_code == 403
+
+
+class TestTutorReport:
+    def test_cohort_breakdown_reconciles_with_tutor_total(
+        self, client, monkeypatch, db, admin_user, tutor_factory, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        tutor = tutor_factory()
+        cohort_a = cohort_factory(tutor_id=tutor["tutorId"])
+        cohort_b = cohort_factory(tutor_id=tutor["tutorId"])
+        learner_a = learner_factory(cohort_id=cohort_a["id"], tutor_id=tutor["tutorId"])
+        learner_b = learner_factory(cohort_id=cohort_b["id"], tutor_id=tutor["tutorId"])
+        session_a = attendance_session_factory(cohort_id=cohort_a["id"], session_date="2026-01-06", planned_duration_hours=5, created_by=admin_user["userId"])
+        session_b = attendance_session_factory(cohort_id=cohort_b["id"], session_date="2026-01-07", planned_duration_hours=5, created_by=admin_user["userId"])
+        _snapshot(db, session_a)
+        _snapshot(db, session_b)
+        _record(db, session_a["id"], learner_a["id"], "present", hours_attended=5)
+        _record(db, session_b["id"], learner_b["id"], "late", hours_attended=4, minutes_late=15)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/tutor/{tutor['tutorId']}?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
+
+        summed = sum(c["metrics"]["attendedMinutes"] for c in body["cohortBreakdown"])
+        assert summed == body["metrics"]["attendedMinutes"] == 5 * 60 + 4 * 60
+
+    def test_tutor_can_access_own_report(self, client, monkeypatch, tutor_factory):
+        tutor = tutor_factory()
+        _as_tutor(client, monkeypatch, tutor["tutorId"])
+        response = client.get(f"/api/reports/tutor/{tutor['tutorId']}")
+        assert response.status_code == 200
+
+    def test_tutor_cannot_access_another_tutors_report_by_changing_the_tutor_id(self, client, monkeypatch, tutor_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(f"/api/reports/tutor/{owner['tutorId']}")
+        assert response.status_code == 403
+
+
+class TestOrganisationReport:
+    def test_admin_only(self, client, monkeypatch, tutor_factory):
+        tutor = tutor_factory()
+        _as_tutor(client, monkeypatch, tutor["tutorId"])
+        response = client.get("/api/reports/organisation")
+        assert response.status_code == 403
+
+    def test_tutor_and_cohort_breakdowns_reconcile_with_organisation_total(
+        self, client, monkeypatch, db, admin_user, tutor_factory, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        tutor_a = tutor_factory()
+        tutor_b = tutor_factory()
+        cohort_a = cohort_factory(tutor_id=tutor_a["tutorId"])
+        cohort_b = cohort_factory(tutor_id=tutor_b["tutorId"])
+        learner_a = learner_factory(cohort_id=cohort_a["id"], tutor_id=tutor_a["tutorId"])
+        learner_b = learner_factory(cohort_id=cohort_b["id"], tutor_id=tutor_b["tutorId"])
+        session_a = attendance_session_factory(cohort_id=cohort_a["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        session_b = attendance_session_factory(cohort_id=cohort_b["id"], session_date="2026-01-07", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_a)
+        _snapshot(db, session_b)
+        _record(db, session_a["id"], learner_a["id"], "present", hours_attended=6)
+        _record(db, session_b["id"], learner_b["id"], "present", hours_attended=6)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/organisation?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
+
+        cohort_ids = {cohort_a["id"], cohort_b["id"]}
+        relevant_cohorts = [c for c in body["cohortBreakdown"] if c["cohort"]["id"] in cohort_ids]
+        assert sum(c["metrics"]["attendedMinutes"] for c in relevant_cohorts) <= body["metrics"]["attendedMinutes"]
+        # Both seeded cohorts must appear in the org-wide breakdown (no
+        # silent per-cohort omission) and both tutors likewise.
+        assert cohort_ids <= {c["cohort"]["id"] for c in body["cohortBreakdown"]}
+        tutor_ids = {tutor_a["tutorId"], tutor_b["tutorId"]}
+        assert tutor_ids <= {t["tutorId"] for t in body["tutorBreakdown"]}
+
+
+class TestAbsenceAndLatenessReports:
+    def test_absence_report_separates_authorised_from_unauthorised(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner_auth = learner_factory(cohort_id=cohort["id"])
+        learner_unauth = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner_auth["id"], "absent_authorised")
+        _record(db, session_row["id"], learner_unauth["id"], "absent_unauthorised")
+
+        _as_admin(client, monkeypatch)
+        auth_resp = client.get(f"/api/reports/absence?absenceType=authorised&{PERIOD_QS}&cohortId={cohort['id']}")
+        assert auth_resp.status_code == 200
+        auth_ids = {r["learnerId"] for r in auth_resp.json()["items"]}
+        assert auth_ids == {learner_auth["id"]}
+
+        unauth_resp = client.get(f"/api/reports/absence?absenceType=unauthorised&{PERIOD_QS}&cohortId={cohort['id']}")
+        unauth_ids = {r["learnerId"] for r in unauth_resp.json()["items"]}
+        assert unauth_ids == {learner_unauth["id"]}
+
+    def test_tutor_scope_cannot_be_widened_via_learner_id_filter(self, client, monkeypatch, tutor_factory, learner_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        learner = learner_factory(tutor_id=owner["tutorId"])
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(f"/api/reports/absence?absenceType=unauthorised&learnerId={learner['id']}")
+        assert response.status_code == 403
+
+    def test_lateness_report_reconciles_metrics_with_engine(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner["id"], "late", hours_attended=5, minutes_late=20)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/lateness?{PERIOD_QS}&cohortId={cohort['id']}")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"][0]["minutesLate"] == 20
+        expected = fetch_attendance_metrics(db, scope="cohort", scope_id=cohort["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31))
+        assert body["metrics"]["lateMinutes"] == expected.lateMinutes == 20
+
+
+class TestRegisterCompletionReport:
+    def test_classifies_not_started_completed_and_locked(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        s_not_started = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        s_completed = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-07", created_by=admin_user["userId"])
+        _snapshot(db, s_not_started)
+        _snapshot(db, s_completed)
+        _record(db, s_completed["id"], learner["id"], "present", hours_attended=6)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/register-completion?{PERIOD_QS}&cohortId={cohort['id']}")
+        assert response.status_code == 200
+        by_id = {r["sessionId"]: r for r in response.json()["items"]}
+        assert by_id[s_not_started["id"]]["registerStatus"] == "not_started"
+        assert by_id[s_not_started["id"]]["missingRowCount"] == 1
+        assert by_id[s_completed["id"]]["registerStatus"] == "completed"
+
+    def test_overdue_only_filter_excludes_future_sessions(
+        self, client, monkeypatch, db, admin_user, cohort_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        future_session = attendance_session_factory(cohort_id=cohort["id"], session_date="2099-01-01", created_by=admin_user["userId"])
+        _snapshot(db, future_session)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/register-completion?period=custom&dateFrom=2099-01-01&dateTo=2099-01-31&cohortId={cohort['id']}&overdueOnly=true")
+        assert response.status_code == 200
+        assert response.json()["items"] == []
+
+
+class TestAllocationHistoryReport:
+    def test_admin_only(self, client, monkeypatch, tutor_factory):
+        tutor = tutor_factory()
+        _as_tutor(client, monkeypatch, tutor["tutorId"])
+        response = client.get("/api/reports/allocation-history")
+        assert response.status_code == 403
+
+    def test_includes_a_notice_that_attendance_never_transfers(self, client, monkeypatch):
+        _as_admin(client, monkeypatch)
+        response = client.get("/api/reports/allocation-history")
+        assert response.status_code == 200
+        assert "do not transfer historical attendance" in response.json()["notice"]
+
+
+class TestAttendanceHoursReport:
+    def test_learner_grouping_requires_a_tutor_or_cohort_filter(self, client, monkeypatch):
+        _as_admin(client, monkeypatch)
+        response = client.get("/api/reports/attendance-hours?groupBy=learner")
+        assert response.status_code == 400
+
+    def test_week_grouping_returns_bucketed_metrics(self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/attendance-hours?groupBy=week&{PERIOD_QS}&cohortId={cohort['id']}")
+        assert response.status_code == 200
+        items = response.json()["items"]
+        assert sum(i["metrics"]["attendedMinutes"] for i in items) == 360
+
+    def test_tutor_grouping_is_admin_only(self, client, monkeypatch, tutor_factory):
+        tutor = tutor_factory()
+        _as_tutor(client, monkeypatch, tutor["tutorId"])
+        response = client.get("/api/reports/attendance-hours?groupBy=tutor")
+        assert response.status_code == 403

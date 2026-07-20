@@ -1707,134 +1707,520 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  # ---------- Reports ----------
-  /reports/learner/{id}:
+  # ---------- Reports (Phase 9) ----------
+  # All calculations here are backed by the same attendance_metrics engine
+  # as /dashboard/* and /attendance-summary/* (Phase 8) -- report and
+  # dashboard totals reconcile under identical filters by construction.
+  /reports/learner/{learnerId}:
     get:
-      operationId: getLearnerReport
+      operationId: getLearnerReportV2
       tags: [reports]
       parameters:
-        - name: id
+        - name: learnerId
           in: path
           required: true
           schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
           description: Learner attendance report
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/LearnerReport"
-  /reports/cohort/{id}:
+              schema: { $ref: "#/components/schemas/LearnerReportResponse" }
+        "400":
+          description: Invalid period/date range
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to access this learner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Learner not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/learner/{learnerId}/export:
     get:
-      operationId: getCohortReport
+      operationId: exportLearnerReport
       tags: [reports]
       parameters:
-        - name: id
+        - name: learnerId
           in: path
           required: true
           schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: CSV export of this learner's session history
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to export this learner's report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/cohort/{cohortId}:
+    get:
+      operationId: getCohortReportV2
+      tags: [reports]
+      parameters:
+        - name: cohortId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
           description: Cohort attendance report
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/CohortReport"
-  /reports/tutor/{id}:
+              schema: { $ref: "#/components/schemas/CohortReportResponse" }
+        "400":
+          description: Invalid period/date range
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to access this cohort
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Cohort not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/cohort/{cohortId}/export:
     get:
-      operationId: getTutorReport
+      operationId: exportCohortReport
       tags: [reports]
       parameters:
-        - name: id
+        - name: cohortId
           in: path
           required: true
           schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: CSV export of this cohort's per-learner breakdown
+          content:
+            text/csv:
+              schema: { type: string }
+        "403":
+          description: Not allowed to export this cohort's report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/tutor/{tutorId}:
+    get:
+      operationId: getTutorReportV2
+      tags: [reports]
+      parameters:
+        - name: tutorId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
       responses:
         "200":
           description: Tutor attendance report
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/TutorReport"
+              schema: { $ref: "#/components/schemas/TutorReportResponse" }
+        "403":
+          description: Not allowed to access this tutor's report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Tutor not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/tutor/{tutorId}/export:
+    get:
+      operationId: exportTutorReport
+      tags: [reports]
+      parameters:
+        - name: tutorId
+          in: path
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: CSV export of this tutor's per-cohort breakdown
+          content:
+            text/csv:
+              schema: { type: string }
+        "403":
+          description: Not allowed to export this tutor's report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /reports/organisation:
     get:
-      operationId: getOrganisationReport
+      operationId: getOrganisationReportV2
       tags: [reports]
       parameters:
-        - name: dateFrom
-          in: query
-          schema: { type: string, format: date }
-        - name: dateTo
-          in: query
-          schema: { type: string, format: date }
-        - name: programme
-          in: query
-          schema: { type: string }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/ProgrammeQueryParam"
       responses:
         "200":
-          description: Organisation-wide attendance report
+          description: Organisation-wide attendance report (admin only)
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/OrganisationReport"
-  /reports/programme:
-    get:
-      operationId: getProgrammeReport
-      tags: [reports]
-      parameters:
-        - name: dateFrom
-          in: query
-          schema: { type: string, format: date }
-        - name: dateTo
-          in: query
-          schema: { type: string, format: date }
-      responses:
-        "200":
-          description: Attendance breakdown by programme
+              schema: { $ref: "#/components/schemas/OrganisationReportResponse" }
+        "403":
+          description: Administrator access required
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/ProgrammeAttendanceRow" }
-  /reports/export:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/organisation/export:
     get:
-      operationId: exportReport
+      operationId: exportOrganisationReport
       tags: [reports]
       parameters:
-        - name: reportType
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - name: breakdown
           in: query
-          required: true
           schema:
             type: string
-            enum: [learner, cohort, tutor, organisation, programme, allocation-history]
-        - name: entityId
-          in: query
-          schema: { type: integer }
-        - name: dateFrom
-          in: query
-          schema: { type: string, format: date }
-        - name: dateTo
-          in: query
-          schema: { type: string, format: date }
-        - name: tutorId
-          in: query
-          schema: { type: integer }
-        - name: cohortId
-          in: query
-          schema: { type: integer }
-        - name: programme
-          in: query
-          schema: { type: string }
-        - name: status
-          in: query
-          schema: { $ref: "#/components/schemas/LearnerStatus" }
+            enum: [tutor, cohort, programme, level, employer]
+            default: tutor
       responses:
         "200":
-          description: CSV export content
+          description: CSV export of one organisation-report breakdown dimension
+          content:
+            text/csv:
+              schema: { type: string }
+        "403":
+          description: Administrator access required
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/CsvContent"
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/absence:
+    get:
+      operationId: getAbsenceReport
+      tags: [reports]
+      parameters:
+        - name: absenceType
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AbsenceType" }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/ProgrammeQueryParam"
+        - $ref: "#/components/parameters/LevelQueryParam"
+        - $ref: "#/components/parameters/EmployerQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Authorised/unauthorised absence listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbsenceReportResponse" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/absence/export:
+    get:
+      operationId: exportAbsenceReport
+      tags: [reports]
+      parameters:
+        - name: absenceType
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AbsenceType" }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/ProgrammeQueryParam"
+        - $ref: "#/components/parameters/LevelQueryParam"
+        - $ref: "#/components/parameters/EmployerQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+      responses:
+        "200":
+          description: CSV export of the absence listing (streamed)
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to export this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/lateness:
+    get:
+      operationId: getLatenessReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/ProgrammeQueryParam"
+        - $ref: "#/components/parameters/LevelQueryParam"
+        - $ref: "#/components/parameters/EmployerQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Late-attendance listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LatenessReportResponse" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/lateness/export:
+    get:
+      operationId: exportLatenessReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/ProgrammeQueryParam"
+        - $ref: "#/components/parameters/LevelQueryParam"
+        - $ref: "#/components/parameters/EmployerQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+      responses:
+        "200":
+          description: CSV export of the lateness listing (streamed)
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to export this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/attendance-hours:
+    get:
+      operationId: getAttendanceHoursReport
+      tags: [reports]
+      parameters:
+        - name: groupBy
+          in: query
+          schema: { $ref: "#/components/schemas/AttendanceHoursGroupBy" }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+      responses:
+        "200":
+          description: Attendance-hours breakdown grouped as requested
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttendanceHoursReportResponse" }
+        "400":
+          description: groupBy=learner requires a tutorId or cohortId filter
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to access this scope/grouping
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/attendance-hours/export:
+    get:
+      operationId: exportAttendanceHoursReport
+      tags: [reports]
+      parameters:
+        - name: groupBy
+          in: query
+          schema: { $ref: "#/components/schemas/AttendanceHoursGroupBy" }
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+      responses:
+        "200":
+          description: CSV export of the attendance-hours breakdown
+          content:
+            text/csv:
+              schema: { type: string }
+        "403":
+          description: Not allowed to export this scope/grouping
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/register-completion:
+    get:
+      operationId: getRegisterCompletionReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - name: registerStatus
+          in: query
+          schema: { $ref: "#/components/schemas/RegisterStatusFilter" }
+        - name: overdueOnly
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Register-completion listing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterCompletionReportResponse" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/register-completion/export:
+    get:
+      operationId: exportRegisterCompletionReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - name: registerStatus
+          in: query
+          schema: { $ref: "#/components/schemas/RegisterStatusFilter" }
+        - name: overdueOnly
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: CSV export of the register-completion listing (streamed)
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to export this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /reports/allocation-history:
+    get:
+      operationId: getAllocationHistoryReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Learner allocation/transfer history (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AllocationHistoryReportResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/allocation-history/export:
+    get:
+      operationId: exportAllocationHistoryReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+      responses:
+        "200":
+          description: CSV export of the allocation-history listing (streamed)
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   # ---------- Users ----------
   /users:
@@ -2110,6 +2496,30 @@ components:
       name: pageSize
       in: query
       schema: { type: integer, default: 25 }
+    TutorIdQueryParam:
+      name: tutorId
+      in: query
+      schema: { type: integer }
+    CohortIdQueryParam:
+      name: cohortId
+      in: query
+      schema: { type: integer }
+    LearnerIdQueryParam:
+      name: learnerId
+      in: query
+      schema: { type: integer }
+    ProgrammeQueryParam:
+      name: programme
+      in: query
+      schema: { type: string }
+    LevelQueryParam:
+      name: level
+      in: query
+      schema: { type: string }
+    EmployerQueryParam:
+      name: employer
+      in: query
+      schema: { type: string }
   schemas:
     HealthStatus:
       type: object
@@ -3100,89 +3510,424 @@ components:
           type: array
           items: { $ref: "#/components/schemas/RegisterEntry" }
 
-    AttendanceTotals:
+    # ---------- Phase 9: reporting, filtering and secure CSV export ----------
+
+    AbsenceType:
+      type: string
+      enum: [authorised, unauthorised]
+
+    RegisterStatusFilter:
+      type: string
+      enum: [not_started, in_progress, completed, locked, cancelled]
+
+    AttendanceHoursGroupBy:
+      type: string
+      enum: [learner, cohort, tutor, programme, employer, week, month]
+
+    LearnerSessionHistoryRow:
       type: object
       required:
         [
-          scheduledHours,
-          attendedHours,
-          authorisedAbsenceHours,
-          unauthorisedAbsenceHours,
-          lateCount,
-          sessionCount,
-          attendancePercentage,
+          sessionId,
+          sessionDate,
+          title,
+          plannedDurationHours,
+          cohortId,
+          cohortName,
+          tutorName,
+          status,
+          hoursAttended,
+          minutesLate,
+          registerLockedAt,
+          registerStatus,
         ]
       properties:
-        scheduledHours: { type: number }
-        attendedHours: { type: number }
-        authorisedAbsenceHours: { type: number }
-        unauthorisedAbsenceHours: { type: number }
-        lateCount: { type: integer }
-        sessionCount: { type: integer }
-        attendancePercentage: { type: number }
+        sessionId: { type: integer }
+        sessionDate: { type: string, format: date }
+        title: { type: ["string", "null"] }
+        plannedDurationHours: { type: number }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        tutorName: { type: string }
+        status:
+          description: Null when no register row was ever recorded for this session -- missing data, never treated as absence.
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceStatus"
+            - type: "null"
+        hoursAttended: { type: ["number", "null"] }
+        minutesLate: { type: ["integer", "null"] }
+        registerLockedAt: { type: ["string", "null"], format: date-time }
+        registerStatus: { $ref: "#/components/schemas/RegisterStatus" }
 
-    LearnerAttendanceRow:
+    LearnerSessionHistoryListResponse:
       type: object
-      required: [learnerId, learnerName, learnerRef, totals]
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerSessionHistoryRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    LearnerReportResponse:
+      type: object
+      required: [learner, metrics, registerCompletion, bud, sessionHistory]
+      properties:
+        learner: { $ref: "#/components/schemas/Learner" }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        bud:
+          oneOf:
+            - $ref: "#/components/schemas/BudProgress"
+            - type: "null"
+        sessionHistory: { $ref: "#/components/schemas/LearnerSessionHistoryListResponse" }
+
+    CohortLearnerBreakdownRow:
+      type: object
+      required: [learnerId, learnerName, learnerRef, metrics]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: ["string", "null"] }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    CohortLearnerBreakdownListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CohortLearnerBreakdownRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    CohortReportResponse:
+      type: object
+      required:
+        [cohort, activeLearnerCount, metrics, registerCompletion, learnerBreakdown]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        activeLearnerCount: { type: integer }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        learnerBreakdown: { $ref: "#/components/schemas/CohortLearnerBreakdownListResponse" }
+
+    TutorCohortBreakdownRow:
+      type: object
+      required: [cohort, metrics]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    TutorReportResponse:
+      type: object
+      required:
+        [
+          tutor,
+          activeCohorts,
+          activeLearners,
+          metrics,
+          registerCompletion,
+          cohortBreakdown,
+          lowAttendanceLearners,
+        ]
+      properties:
+        tutor: { $ref: "#/components/schemas/Tutor" }
+        activeCohorts: { type: integer }
+        activeLearners: { type: integer }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        cohortBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/TutorCohortBreakdownRow" }
+        lowAttendanceLearners:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerAttendanceSummaryRow" }
+
+    OrganisationTutorBreakdownRow:
+      type: object
+      required: [tutorId, tutorName, metrics]
+      properties:
+        tutorId: { type: integer }
+        tutorName: { type: string }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    OrganisationCohortBreakdownRow:
+      type: object
+      required: [cohort, metrics]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    ProgrammeBreakdownRow:
+      type: object
+      required: [programme, metrics]
+      properties:
+        programme: { type: string }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    LevelBreakdownRow:
+      type: object
+      required: [level, metrics]
+      properties:
+        level: { type: string }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    EmployerBreakdownRow:
+      type: object
+      required: [employer, metrics]
+      properties:
+        employer: { type: string }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    OrganisationReportResponse:
+      type: object
+      required:
+        [
+          activeLearners,
+          activeTutors,
+          activeCohorts,
+          sessionsInPeriod,
+          metrics,
+          registerCompletion,
+          tutorBreakdown,
+          cohortBreakdown,
+          programmeBreakdown,
+          levelBreakdown,
+          employerBreakdown,
+        ]
+      properties:
+        activeLearners: { type: integer }
+        activeTutors: { type: integer }
+        activeCohorts: { type: integer }
+        sessionsInPeriod: { type: integer }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        tutorBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/OrganisationTutorBreakdownRow" }
+        cohortBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/OrganisationCohortBreakdownRow" }
+        programmeBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/ProgrammeBreakdownRow" }
+        levelBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/LevelBreakdownRow" }
+        employerBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/EmployerBreakdownRow" }
+
+    AbsenceRow:
+      type: object
+      required:
+        [
+          learnerId,
+          learnerName,
+          learnerRef,
+          employer,
+          sessionId,
+          sessionDate,
+          cohortId,
+          cohortName,
+          tutorName,
+          status,
+          plannedDurationHours,
+        ]
       properties:
         learnerId: { type: integer }
         learnerName: { type: string }
         learnerRef: { type: string }
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
-
-    CohortAttendanceRow:
-      type: object
-      required: [cohortId, cohortName, totals]
-      properties:
+        employer: { type: ["string", "null"] }
+        sessionId: { type: integer }
+        sessionDate: { type: string, format: date }
         cohortId: { type: integer }
         cohortName: { type: string }
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
+        tutorName: { type: string }
+        status: { $ref: "#/components/schemas/AttendanceStatus" }
+        plannedDurationHours: { type: number }
 
-    ProgrammeAttendanceRow:
+    AbsenceReportResponse:
       type: object
-      required: [programme, totals]
+      required: [items, total, page, pageSize, metrics]
       properties:
-        programme: { type: string }
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
-
-    LearnerReport:
-      type: object
-      required: [learner, totals]
-      properties:
-        learner: { $ref: "#/components/schemas/Learner" }
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
-
-    CohortReport:
-      type: object
-      required: [cohort, totals, learnerBreakdown]
-      properties:
-        cohort: { $ref: "#/components/schemas/Cohort" }
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
-        learnerBreakdown:
+        items:
           type: array
-          items: { $ref: "#/components/schemas/LearnerAttendanceRow" }
+          items: { $ref: "#/components/schemas/AbsenceRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
 
-    TutorReport:
+    LatenessRow:
       type: object
-      required: [tutor, totals, cohortBreakdown]
+      required:
+        [
+          learnerId,
+          learnerName,
+          learnerRef,
+          sessionId,
+          sessionDate,
+          plannedStartTime,
+          cohortId,
+          cohortName,
+          tutorName,
+          minutesLate,
+          hoursAttended,
+        ]
       properties:
-        tutor: { $ref: "#/components/schemas/Tutor" }
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
-        cohortBreakdown:
-          type: array
-          items: { $ref: "#/components/schemas/CohortAttendanceRow" }
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+        sessionId: { type: integer }
+        sessionDate: { type: string, format: date }
+        plannedStartTime: { type: ["string", "null"] }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        tutorName: { type: string }
+        minutesLate: { type: integer }
+        hoursAttended: { type: ["number", "null"] }
 
-    OrganisationReport:
+    LatenessReportResponse:
       type: object
-      required: [totals, programmeBreakdown, cohortBreakdown]
+      required: [items, total, page, pageSize, metrics]
       properties:
-        totals: { $ref: "#/components/schemas/AttendanceTotals" }
-        programmeBreakdown:
+        items:
           type: array
-          items: { $ref: "#/components/schemas/ProgrammeAttendanceRow" }
-        cohortBreakdown:
+          items: { $ref: "#/components/schemas/LatenessRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    AttendanceHoursItem:
+      type: object
+      required: [key, label, metrics]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        periodStart: { type: ["string", "null"], format: date }
+        periodEnd: { type: ["string", "null"], format: date }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    AttendanceHoursReportResponse:
+      type: object
+      required: [groupBy, items]
+      properties:
+        groupBy: { $ref: "#/components/schemas/AttendanceHoursGroupBy" }
+        items:
           type: array
-          items: { $ref: "#/components/schemas/CohortAttendanceRow" }
+          items: { $ref: "#/components/schemas/AttendanceHoursItem" }
+
+    RegisterCompletionRow:
+      type: object
+      required:
+        [
+          sessionId,
+          sessionDate,
+          title,
+          cohortId,
+          cohortName,
+          tutorName,
+          registerStatus,
+          expectedCount,
+          recordedCount,
+          missingRowCount,
+          completedAt,
+          completedByName,
+          registerLockedAt,
+          lockedByName,
+          outstandingDays,
+        ]
+      properties:
+        sessionId: { type: integer }
+        sessionDate: { type: string, format: date }
+        title: { type: ["string", "null"] }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        tutorName: { type: string }
+        registerStatus: { $ref: "#/components/schemas/RegisterStatus" }
+        expectedCount: { type: integer }
+        recordedCount: { type: integer }
+        missingRowCount: { type: integer }
+        completedAt: { type: ["string", "null"], format: date-time }
+        completedByName: { type: ["string", "null"] }
+        registerLockedAt: { type: ["string", "null"], format: date-time }
+        lockedByName: { type: ["string", "null"] }
+        outstandingDays:
+          description: Days overdue for not_started/in_progress sessions on or before today; null otherwise.
+          type: ["integer", "null"]
+
+    RegisterCompletionReportResponse:
+      type: object
+      required: [items, total, page, pageSize, registerCompletion]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RegisterCompletionRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+
+    AllocationHistoryRow:
+      type: object
+      required:
+        [
+          id,
+          learnerId,
+          learnerName,
+          previousTutorId,
+          previousTutorName,
+          newTutorId,
+          newTutorName,
+          previousCohortId,
+          previousCohortName,
+          newCohortId,
+          newCohortName,
+          effectiveDate,
+          effectiveTo,
+          transferReason,
+          changedBy,
+          changedByName,
+          changedDate,
+        ]
+      properties:
+        id: { type: integer }
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        previousTutorId: { type: ["integer", "null"] }
+        previousTutorName: { type: ["string", "null"] }
+        newTutorId: { type: ["integer", "null"] }
+        newTutorName: { type: ["string", "null"] }
+        previousCohortId: { type: ["integer", "null"] }
+        previousCohortName: { type: ["string", "null"] }
+        newCohortId: { type: ["integer", "null"] }
+        newCohortName: { type: ["string", "null"] }
+        effectiveDate: { type: string, format: date }
+        effectiveTo:
+          description: The next chronological transfer's effective date for this learner, or null if this is their current allocation.
+          type: ["string", "null"]
+          format: date
+        transferReason: { type: ["string", "null"] }
+        changedBy: { type: integer }
+        changedByName: { type: string }
+        changedDate: { type: string, format: date-time }
+
+    AllocationHistoryReportResponse:
+      type: object
+      required: [items, total, page, pageSize, notice]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AllocationHistoryRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        notice: { type: string }
 
     SessionSummary:
       type: object
