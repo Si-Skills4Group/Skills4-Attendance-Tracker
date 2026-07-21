@@ -217,20 +217,47 @@ def cancel_session(cur, session_row: dict, reason: str, confirm_with_attendance:
     )
 
 
-def bump_register_version(cur, session_id: int) -> int:
+def bump_register_version(cur, session_id: int, expected_version: int | None = None) -> int:
     """Increments the register's optimistic-concurrency version. Callers
     must run this inside the same transaction as whatever data change it's
     protecting, so a save/complete/lock/unlock either fully lands together
     with the version bump, or neither does -- a failed save must never bump
-    the version without also writing the rows it claims to have saved."""
+    the version without also writing the rows it claims to have saved.
+
+    When expected_version is given, the UPDATE itself is guarded by
+    `AND register_version = %s`, closing the race the callers' earlier
+    read-then-compare check can't: two concurrent requests that both read
+    the same version and both pass that early check can otherwise both
+    reach here and both commit, second write silently winning. Guarding
+    the actual write makes exactly one of them succeed; the other gets a
+    real 409 instead of a lost update. Raises the same
+    stale_register_version HTTPException the callers already raise from
+    their own early check, so a race that slips past that check still
+    surfaces identically to the client."""
+    params: tuple = (session_id,)
+    extra_clause = ""
+    if expected_version is not None:
+        extra_clause = " AND register_version = %s"
+        params = (session_id, expected_version)
     cur.execute(
-        """
+        f"""
         UPDATE attendance_sessions SET register_version = register_version + 1
-        WHERE id = %s RETURNING register_version
+        WHERE id = %s{extra_clause} RETURNING register_version
         """,
-        (session_id,),
+        params,
     )
-    return cur.fetchone()["register_version"]
+    row = cur.fetchone()
+    if row is None:
+        cur.execute('SELECT register_version AS "registerVersion" FROM attendance_sessions WHERE id = %s', (session_id,))
+        current = cur.fetchone()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason": "stale_register_version",
+                "currentVersion": current["registerVersion"] if current else None,
+            },
+        )
+    return row["register_version"]
 
 
 def lock_register(cur, session_row: dict, reason: str, user_id: int | None) -> None:

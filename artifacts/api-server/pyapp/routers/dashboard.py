@@ -1,6 +1,7 @@
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..allocation_lib import expected_learners_count_sql
 from ..bud_progress import get_bud_progress_by_uln
@@ -319,7 +320,7 @@ def get_tutor_dashboard_cohorts(
 
 
 @router.get("/dashboard/tutor/outstanding-registers")
-def get_tutor_outstanding_registers(page: int = 1, pageSize: int = 25, session: dict = Depends(require_auth)):
+def get_tutor_outstanding_registers(page: int = 1, pageSize: Annotated[int, Query(ge=1, le=200)] = 25, session: dict = Depends(require_auth)):
     tutor_id = session.get("tutorId")
     if not tutor_id:
         raise HTTPException(status_code=403, detail="No tutor profile linked to this account")
@@ -336,7 +337,7 @@ def get_tutor_low_attendance_learners(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
 ):
     tutor_id = session.get("tutorId")
@@ -363,7 +364,7 @@ def get_admin_dashboard_tutors(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     _session: dict = Depends(require_admin),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -420,7 +421,7 @@ def get_admin_dashboard_cohorts(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     _session: dict = Depends(require_admin),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -456,7 +457,7 @@ def get_admin_dashboard_cohorts(
 
 
 @router.get("/dashboard/admin/outstanding-registers")
-def get_admin_outstanding_registers(page: int = 1, pageSize: int = 25, _session: dict = Depends(require_admin)):
+def get_admin_outstanding_registers(page: int = 1, pageSize: Annotated[int, Query(ge=1, le=200)] = 25, _session: dict = Depends(require_admin)):
     with get_cursor() as cur:
         rows = _sessions_awaiting_completion(cur, None)
     return _paginate(rows, page, pageSize)
@@ -468,7 +469,7 @@ def get_admin_low_attendance_learners(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     _session: dict = Depends(require_admin),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)

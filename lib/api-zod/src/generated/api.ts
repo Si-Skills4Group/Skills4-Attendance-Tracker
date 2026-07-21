@@ -3512,7 +3512,8 @@ export const GetUserAuditResponseItem = zod.object({
   "previousValue": zod.string().nullable(),
   "newValue": zod.string().nullable(),
   "timestamp": zod.coerce.date(),
-  "ipAddress": zod.string().nullable()
+  "ipAddress": zod.string().nullable(),
+  "correlationId": zod.string().nullable()
 })
 export const GetUserAuditResponse = zod.array(GetUserAuditResponseItem)
 
@@ -3542,7 +3543,8 @@ export const ListAuditLogResponse = zod.object({
   "previousValue": zod.string().nullable(),
   "newValue": zod.string().nullable(),
   "timestamp": zod.coerce.date(),
-  "ipAddress": zod.string().nullable()
+  "ipAddress": zod.string().nullable(),
+  "correlationId": zod.string().nullable()
 })),
   "total": zod.number(),
   "page": zod.number(),

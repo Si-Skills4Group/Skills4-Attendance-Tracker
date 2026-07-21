@@ -16,12 +16,24 @@ dependency-injected fake sessions).
 """
 
 import os
+import sys
 import types
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql://s4admin:x4thOI6LuzNQRzSwQxSYK.3v@s4-attendance-pg-gzn5bh.postgres.database.azure.com:5432/attendance_test?sslmode=require",
-)
+# No hardcoded credential here -- a real Azure Postgres admin password used to
+# live in this file as a fallback default and ended up committed to git
+# history. TEST_DATABASE_URL must point at the dedicated attendance_test
+# database and is read from the developer's own environment/.env; it is
+# never the same variable as DATABASE_URL, so an unset one can't silently
+# fall through to pyapp.main's later load_dotenv() and point tests at the
+# real production `attendance` database instead.
+_test_database_url = os.environ.get("TEST_DATABASE_URL")
+if not _test_database_url:
+    sys.exit(
+        "TEST_DATABASE_URL is not set. Point it at the attendance_test database "
+        "(e.g. in artifacts/api-server/.env) before running the test suite -- "
+        "see README.md for local setup."
+    )
+os.environ["DATABASE_URL"] = _test_database_url
 os.environ.setdefault("AUTH_MODE", "entra")
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("ENTRA_TENANT_ID", "test-tenant-id")
@@ -59,6 +71,20 @@ def _clear_dependency_overrides_after_test():
     forgot its own try/finally cleanup."""
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_rate_limit_attempts_after_test():
+    """Many tests across many files reuse the same fixed fake session
+    (e.g. {"userId": 1, "role": "admin"} via monkeypatched require_auth)
+    against a real, shared Postgres database -- without this, pyapp.
+    rate_limit's per-(action, user) budget accumulates real rows across
+    the whole test run and starts returning 429s to unrelated tests that
+    happen to share that fake user id, well before any single test comes
+    close to its own budget."""
+    yield
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM rate_limit_attempts")
 
 
 class FakeRequest:

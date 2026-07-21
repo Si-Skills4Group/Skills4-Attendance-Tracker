@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..auth import USER_SELECT, _user_public, require_admin
 from ..audit import write_audit_log
 from ..db import get_cursor
+from ..rate_limit import check_and_record_rate_limit
 
 router = APIRouter(tags=["users"])
 
@@ -66,6 +68,23 @@ def _ensure_tutor_not_linked_elsewhere(cur, tutor_id: int | None, exclude_user_i
         raise HTTPException(status_code=400, detail="This tutor record is already linked to another active user")
 
 
+def _execute_or_raise_tutor_conflict(cur, sql: str, params) -> None:
+    """A partial unique index (idx_users_active_tutor_id, bootstrap.py)
+    enforces at the database level that at most one active user is linked
+    to a given tutor -- belt-and-suspenders alongside
+    _ensure_tutor_not_linked_elsewhere's own check-then-act query, which by
+    itself has a TOCTOU race window between two concurrent requests. This
+    converts the rare race (the check passed for both, only one INSERT/
+    UPDATE can actually land) into the same 400 the check-then-act query
+    already gives the common case, rather than a raw 500."""
+    try:
+        cur.execute(sql, params)
+    except psycopg.errors.UniqueViolation as exc:
+        if "idx_users_active_tutor_id" not in str(exc):
+            raise
+        raise HTTPException(status_code=400, detail="This tutor record is already linked to another active user") from None
+
+
 def _active_admin_count(cur) -> int:
     cur.execute("SELECT count(*)::int AS count FROM users WHERE role = 'admin' AND active = true")
     return cur.fetchone()["count"]
@@ -120,7 +139,8 @@ def provision_user(payload: UserProvisionInput, request: Request, _session: dict
         )
 
         if existing_by_email:
-            cur.execute(
+            _execute_or_raise_tutor_conflict(
+                cur,
                 """
                 UPDATE users
                 SET first_name = %s, last_name = %s, display_name = %s, role = %s, active = %s,
@@ -141,7 +161,8 @@ def provision_user(payload: UserProvisionInput, request: Request, _session: dict
             )
             user_id = existing_by_email["id"]
         else:
-            cur.execute(
+            _execute_or_raise_tutor_conflict(
+                cur,
                 """
                 INSERT INTO users
                   (first_name, last_name, display_name, email, role, active, tutor_id, entra_object_id, entra_tenant_id)
@@ -212,7 +233,8 @@ def _apply_user_updates(cur, session: dict, user_id: int, updates: dict) -> tupl
     set_clauses = [f"{column_map[key]} = %s" for key in updates]
     params = [value.lower() if key == "email" and isinstance(value, str) else value for key, value in updates.items()]
     if set_clauses:
-        cur.execute(
+        _execute_or_raise_tutor_conflict(
+            cur,
             f"UPDATE users SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s",
             [*params, user_id],
         )
@@ -273,6 +295,10 @@ def deactivate_user(user_id: int, request: Request, session: dict = Depends(requ
 @router.post("/users/{user_id}/role")
 def change_user_role(user_id: int, payload: UserRoleInput, request: Request, session: dict = Depends(require_admin)):
     with get_cursor() as cur:
+        with cur.connection.transaction():
+            check_and_record_rate_limit(
+                cur, action="user_role_change", rate_key=f"user:{session['userId']}", max_attempts=20, window_minutes=60,
+            )
         existing, updated = _apply_user_updates(cur, session, user_id, {"role": payload.role})
 
     write_audit_log(

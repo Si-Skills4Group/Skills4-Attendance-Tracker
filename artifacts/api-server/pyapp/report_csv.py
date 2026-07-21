@@ -16,14 +16,14 @@ Two shapes are supported:
 
 Both paths always sanitise every cell via csv_utils.sanitize_csv_cell (CSV/
 Excel formula-injection protection) and write exactly one audit_logs row per
-export call (never the CSV content itself), tagged with a fresh per-export
-correlation ID also returned as the X-Correlation-Id response header.
+export call (never the CSV content itself), tagged with the request's
+correlation ID (see pyapp/correlation.py) -- the same one already returned
+on every response via X-Correlation-Id, so no separate export-only ID.
 """
 from __future__ import annotations
 
 import csv
 import io
-import uuid
 from datetime import date
 from typing import Callable
 
@@ -31,11 +31,33 @@ from fastapi import HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from .audit import write_audit_log
+from .correlation import get_correlation_id
 from .csv_utils import sanitize_csv_cell, stringify_rows_to_csv
 from .db import get_cursor
+from .rate_limit import check_and_record_rate_limit
 
 MAX_EXPORT_ROWS = 20_000
 EXPORT_BATCH_SIZE = 1_000
+
+# Shared budget across every export shape (bounded and streamed alike) --
+# an admin/tutor legitimately exporting several different reports in a
+# session should never notice this; it's aimed at scripted/bulk scraping.
+EXPORT_RATE_LIMIT_MAX_ATTEMPTS = 30
+EXPORT_RATE_LIMIT_WINDOW_MINUTES = 60
+
+
+def _export_rate_limit_key(request: Request) -> str:
+    user_id = getattr(request.state, "current_user_id", None) or (getattr(request.state, "session", {}) or {}).get("userId")
+    return f"user:{user_id}"
+
+
+def _check_export_rate_limit(request: Request) -> None:
+    with get_cursor() as cur:
+        with cur.connection.transaction():
+            check_and_record_rate_limit(
+                cur, action="report_export", rate_key=_export_rate_limit_key(request),
+                max_attempts=EXPORT_RATE_LIMIT_MAX_ATTEMPTS, window_minutes=EXPORT_RATE_LIMIT_WINDOW_MINUTES,
+            )
 
 # Bud fields are always exported under an explicit bud_ prefix, in a fixed
 # order, kept separate from attendance columns -- never merged into a
@@ -97,15 +119,15 @@ def export_csv_response(
     date_to: date | None,
     filters: dict,
 ) -> Response:
+    _check_export_rate_limit(request)
     csv_text = stringify_rows_to_csv(rows, columns, sanitize=True)
-    correlation_id = str(uuid.uuid4())
+    correlation_id = get_correlation_id()
     _audit_export(
         request, report_type=report_type, date_from=date_from, date_to=date_to,
         filters=filters, row_count=len(rows), correlation_id=correlation_id, outcome="completed",
     )
     response = Response(content=csv_text, media_type="text/csv; charset=utf-8")
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response.headers["X-Correlation-Id"] = correlation_id
     return response
 
 
@@ -131,9 +153,10 @@ def stream_report_csv(
     can monkeypatch those constants and have it actually take effect --
     a parameter default is bound once at function-definition time and
     would never see a later monkeypatch."""
+    _check_export_rate_limit(request)
     max_rows = MAX_EXPORT_ROWS if max_rows is None else max_rows
     batch_size = EXPORT_BATCH_SIZE if batch_size is None else batch_size
-    correlation_id = str(uuid.uuid4())
+    correlation_id = get_correlation_id()
 
     with get_cursor() as cur:
         _, total = fetch_page(cur, 1, 1)
@@ -148,7 +171,6 @@ def stream_report_csv(
                 f"This export would contain {total} rows, exceeding the maximum of {max_rows}. "
                 "Please narrow your filters (e.g. a shorter date range, or a single cohort/tutor) and try again."
             ),
-            headers={"X-Correlation-Id": correlation_id},
         )
 
     def generate():
@@ -188,5 +210,4 @@ def stream_report_csv(
 
     response = StreamingResponse(generate(), media_type="text/csv; charset=utf-8")
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response.headers["X-Correlation-Id"] = correlation_id
     return response

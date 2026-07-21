@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // App Components
 import { Shell } from "@/components/shell";
 import { PageLoadingSpinner } from "@/components/page-loading-spinner";
+import { RequireAdmin } from "@/components/require-admin";
 
 // Pages
 import LoginPage from "@/pages/login";
@@ -54,15 +55,15 @@ function ProtectedRouter() {
         <Switch>
           <Route path="/dashboard" component={DashboardPage} />
           <Route path="/tutors" component={TutorsPage} />
-          <Route path="/tutors/import" component={TutorImportPage} />
+          <Route path="/tutors/import">{() => <RequireAdmin><TutorImportPage /></RequireAdmin>}</Route>
           <Route path="/tutors/:id" component={TutorDetailPage} />
-          <Route path="/users" component={UsersPage} />
+          <Route path="/users">{() => <RequireAdmin><UsersPage /></RequireAdmin>}</Route>
           <Route path="/learners" component={LearnersPage} />
           <Route path="/learners/import" component={LearnerImportPage} />
           <Route path="/learners/:id" component={LearnerDetailPage} />
           <Route path="/cohorts" component={CohortsPage} />
           <Route path="/cohorts/:id" component={CohortDetailPage} />
-          <Route path="/allocation" component={AllocationPage} />
+          <Route path="/allocation">{() => <RequireAdmin><AllocationPage /></RequireAdmin>}</Route>
           <Route path="/attendance" component={AttendancePage} />
           <Route path="/attendance/cohorts/:id" component={CohortSessionsPage} />
           <Route path="/attendance/:id" component={RegisterPage} />
@@ -76,8 +77,8 @@ function ProtectedRouter() {
           <Route path="/reports/attendance-hours" component={AttendanceHoursReportPage} />
           <Route path="/reports/register-completion" component={RegisterCompletionReportPage} />
           <Route path="/reports/allocation-history" component={AllocationHistoryReportPage} />
-          <Route path="/audit-log" component={AuditLogPage} />
-          <Route path="/settings" component={SettingsPage} />
+          <Route path="/audit-log">{() => <RequireAdmin><AuditLogPage /></RequireAdmin>}</Route>
+          <Route path="/settings">{() => <RequireAdmin><SettingsPage /></RequireAdmin>}</Route>
           <Route path="/" component={() => {
             window.location.href = "/dashboard";
             return null;

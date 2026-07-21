@@ -28,7 +28,7 @@ Requires Node.js 24, pnpm, Python 3.11+, and a reachable Postgres database.
 
 **Environment**: create `.env` files (gitignored) at:
 - `artifacts/skills4attendance/.env` — `PORT`, `BASE_PATH`, and `VITE_ENTRA_*`/`VITE_API_*` vars (see docs/entra-phase2.md)
-- `artifacts/api-server/.env` — `AUTH_MODE`, `ENTRA_*`, `DATABASE_URL`, `ALLOWED_ORIGINS` (loaded automatically via `python-dotenv`; see docs/entra-phase2.md)
+- `artifacts/api-server/.env` — `AUTH_MODE`, `ENTRA_*`, `DATABASE_URL`, `ALLOWED_ORIGINS` (loaded automatically via `python-dotenv`; see docs/entra-phase2.md). Also set `TEST_DATABASE_URL` here, pointed at a dedicated `attendance_test` database — `pytest` (via `tests/conftest.py`) refuses to run without it, and deliberately never falls back to `DATABASE_URL`, so a missing test database can't silently run tests against production.
 
 **Run the backend**:
 ```

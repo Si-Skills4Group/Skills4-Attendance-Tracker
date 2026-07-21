@@ -11,9 +11,9 @@ attendance_calc.py/attendance_data.py (the old hours-based formula) are no
 longer used by any endpoint in this file as of Phase 9.
 """
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..attendance_metrics import (
     AttendanceMetrics,
@@ -141,7 +141,7 @@ def get_learner_report(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -250,7 +250,7 @@ def get_cohort_report(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -517,7 +517,7 @@ def get_absence_report(
     employer: str | None = None,
     learnerId: int | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -585,7 +585,7 @@ def get_lateness_report(
     employer: str | None = None,
     learnerId: int | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -746,7 +746,7 @@ def get_register_completion_report(
     registerStatus: RegisterStatusFilter | None = None,
     overdueOnly: bool = False,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -803,7 +803,7 @@ def get_allocation_history_report(
     dateFrom: date | None = None,
     dateTo: date | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     _session: dict = Depends(require_admin),
 ):
     with get_cursor() as cur:

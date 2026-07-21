@@ -23,4 +23,6 @@ export interface AuditLogEntry {
   timestamp: Date;
   /** @nullable */
   ipAddress: string | null;
+  /** @nullable */
+  correlationId: string | null;
 }

@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
-from ..auth import require_admin, require_auth, require_cohort_access
+from ..auth import deny_object_access, require_admin, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
 from ..session_register_lib import ensure_expected_learners_snapshots_bulk
@@ -269,7 +269,7 @@ def get_cohort(cohort_id: int, session: dict = Depends(require_auth)):
         if not cohort:
             raise HTTPException(status_code=404, detail="Cohort not found")
         if session.get("role") == "tutor" and cohort["tutorId"] != session.get("tutorId"):
-            raise HTTPException(status_code=403, detail="Not allowed to view this cohort")
+            deny_object_access("cohort", cohort_id, "Not allowed to view this cohort")
 
         cur.execute(
             "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND deleted_at IS NULL", (cohort_id,)
@@ -400,19 +400,20 @@ def delete_cohort(cohort_id: int, payload: CohortDeleteInput, request: Request, 
                 },
             )
 
-        cur.execute(
-            "UPDATE cohorts SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, updated_at = now() WHERE id = %s",
-            (session["userId"], payload.reason, cohort_id),
-        )
-
-    write_audit_log(
-        request,
-        action="delete_cohort",
-        entity_type="cohort",
-        entity_id=cohort_id,
-        previous_value=existing,
-        new_value={"deletedAt": "now", "reason": payload.reason},
-    )
+        with cur.connection.transaction():
+            cur.execute(
+                "UPDATE cohorts SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, updated_at = now() WHERE id = %s",
+                (session["userId"], payload.reason, cohort_id),
+            )
+            write_audit_log(
+                request,
+                action="delete_cohort",
+                entity_type="cohort",
+                entity_id=cohort_id,
+                previous_value=existing,
+                new_value={"deletedAt": "now", "reason": payload.reason},
+                cur=cur,
+            )
     return None
 
 

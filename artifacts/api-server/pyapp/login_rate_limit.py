@@ -16,6 +16,9 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
+from .audit import write_audit_log
+from .correlation import get_current_request
+
 WINDOW_SECONDS = 15 * 60
 MAX_ATTEMPTS = 10
 
@@ -41,6 +44,17 @@ def check_and_record_login_attempt(cur, ip_key: str, now: datetime | None = None
     )
     cur.execute("SELECT count(*)::int AS count FROM login_attempts WHERE ip_key = %s", (ip_key,))
     if cur.fetchone()["count"] >= MAX_ATTEMPTS:
+        request = get_current_request()
+        if request is not None:
+            # Deliberately NOT passed cur=cur -- this call sits inside the
+            # caller's `with cur.connection.transaction():` block, which
+            # rolls back once the HTTPException below propagates. Writing
+            # the audit row on its own connection means it survives that
+            # rollback instead of vanishing along with it.
+            write_audit_log(
+                request, action="rate_limited", entity_type="security",
+                new_value={"ipKey": ip_key, "maxAttempts": MAX_ATTEMPTS, "windowSeconds": WINDOW_SECONDS},
+            )
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
 
     cur.execute("INSERT INTO login_attempts (ip_key, attempted_at) VALUES (%s, %s)", (ip_key, now))

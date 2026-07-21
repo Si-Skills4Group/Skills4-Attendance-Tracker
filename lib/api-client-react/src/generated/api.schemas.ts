@@ -1318,6 +1318,8 @@ export interface AuditLogEntry {
   timestamp: string;
   /** @nullable */
   ipAddress: string | null;
+  /** @nullable */
+  correlationId: string | null;
 }
 
 export interface AuditLogListResponse {

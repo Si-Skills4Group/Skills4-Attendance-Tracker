@@ -337,6 +337,45 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_key_time ON login_attempts (ip_key, attempted_at);
 
+-- Phase 10: DB-level defense-in-depth for status columns that were
+-- previously Python-validated only. Value sets taken from the exact
+-- literals each status is ever set to in learner_import_lib.py/
+-- tutor_import_lib.py/scheduled_allocations_lib.py/allocation_routes.py --
+-- "classifying" is a genuine, documented-but-currently-unobserved status
+-- (see create_import_job's docstring), included for forward-compatibility.
+ALTER TABLE learner_import_jobs DROP CONSTRAINT IF EXISTS learner_import_jobs_status_check;
+ALTER TABLE learner_import_jobs ADD CONSTRAINT learner_import_jobs_status_check
+  CHECK (status IN ('uploaded', 'classifying', 'ready', 'importing', 'completed', 'cancelled'));
+
+ALTER TABLE tutor_import_jobs DROP CONSTRAINT IF EXISTS tutor_import_jobs_status_check;
+ALTER TABLE tutor_import_jobs ADD CONSTRAINT tutor_import_jobs_status_check
+  CHECK (status IN ('uploaded', 'classifying', 'ready', 'importing', 'completed', 'cancelled'));
+
+ALTER TABLE scheduled_allocations DROP CONSTRAINT IF EXISTS scheduled_allocations_status_check;
+ALTER TABLE scheduled_allocations ADD CONSTRAINT scheduled_allocations_status_check
+  CHECK (status IN ('pending', 'applying', 'applied', 'cancelled'));
+
+-- Closes a TOCTOU race in routers/users.py's tutor-linking check (a
+-- check-then-act query, not itself atomic): at most one ACTIVE user may be
+-- linked to a given tutor. Partial (WHERE active) and nullable-tutor-safe
+-- so inactive users and unlinked (tutor_id IS NULL) users are unrestricted.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_active_tutor_id
+  ON users (tutor_id) WHERE active = true AND tutor_id IS NOT NULL;
+
+-- Phase 10: generic rate limiting for sensitive authenticated actions
+-- (CSV upload, import confirmation, report export, historical attendance
+-- edits, role changes) -- deliberately separate from login_attempts above,
+-- which stays IP-keyed and untouched; this is keyed by "action:userId"
+-- since these are all authenticated endpoints, not anonymous login POSTs.
+CREATE TABLE IF NOT EXISTS rate_limit_attempts (
+  id serial PRIMARY KEY,
+  action text NOT NULL,
+  rate_key text NOT NULL,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_attempts_action_key_time ON rate_limit_attempts (action, rate_key, attempted_at);
+
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_cohort_date ON attendance_sessions (cohort_id, session_date);
 CREATE INDEX IF NOT EXISTS idx_learners_cohort_id ON learners (cohort_id);
 CREATE INDEX IF NOT EXISTS idx_learners_tutor_id ON learners (tutor_id);
@@ -428,6 +467,12 @@ ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS deleted_by integer;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS deletion_reason text;
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_deleted_at ON attendance_sessions (deleted_at);
+
+-- Phase 10: every request gets a correlation ID (pyapp/correlation.py);
+-- audit rows carry it so a support engineer can go from a logged error
+-- straight to the audit trail for that same request.
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS correlation_id text;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_correlation_id ON audit_logs (correlation_id);
 
 INSERT INTO app_settings (id, organisation_name, low_attendance_threshold)
 VALUES (1, 'Skills4Group', 85)

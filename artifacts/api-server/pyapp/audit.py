@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import Request
 
+from .correlation import get_correlation_id
 from .db import get_cursor
 
 
@@ -29,8 +30,8 @@ def write_audit_log(
     session = getattr(request.state, "session", {}) or {}
     current_user_id = getattr(request.state, "current_user_id", None)
     sql = """
-        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, previous_value, new_value, ip_address)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, previous_value, new_value, ip_address, correlation_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         current_user_id or session.get("userId"),
@@ -40,6 +41,7 @@ def write_audit_log(
         json.dumps(previous_value, default=str) if previous_value is not None else None,
         json.dumps(new_value, default=str) if new_value is not None else None,
         _client_ip(request),
+        get_correlation_id() or None,
     )
     if cur is not None:
         cur.execute(sql, params)

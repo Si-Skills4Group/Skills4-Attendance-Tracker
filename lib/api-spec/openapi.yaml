@@ -4387,6 +4387,7 @@ components:
           newValue,
           timestamp,
           ipAddress,
+          correlationId,
         ]
       properties:
         id: { type: integer }
@@ -4399,6 +4400,7 @@ components:
         newValue: { type: ["string", "null"] }
         timestamp: { type: string, format: date-time }
         ipAddress: { type: ["string", "null"] }
+        correlationId: { type: ["string", "null"] }
 
     AuditLogListResponse:
       type: object

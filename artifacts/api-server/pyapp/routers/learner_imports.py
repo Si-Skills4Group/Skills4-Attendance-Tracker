@@ -7,9 +7,9 @@ learner_import_lib.py, matching this codebase's convention of keeping
 business logic in a lib module and routes as get_cursor() + one lib call.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from ..audit import write_audit_log
@@ -25,6 +25,7 @@ from ..learner_import_lib import (
     list_import_job_rows,
     resolve_import_row,
 )
+from ..rate_limit import check_and_record_rate_limit
 
 router = APIRouter(tags=["learners"])
 
@@ -52,6 +53,10 @@ async def upload_learner_import(
         raise HTTPException(status_code=400, detail=exc.message) from None
 
     with get_cursor() as cur:
+        with cur.connection.transaction():
+            check_and_record_rate_limit(
+                cur, action="csv_upload", rate_key=f"user:{session['userId']}", max_attempts=20, window_minutes=60,
+            )
         expire_due_learner_import_jobs(cur)
         job = create_import_job(cur, file.filename or "upload.csv", session["userId"], parsed_rows)
 
@@ -76,7 +81,7 @@ def get_learner_import_job(job_id: int, _session: dict = Depends(require_admin))
 def list_learner_import_job_rows(
     job_id: int,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     classification: str | None = None,
     _session: dict = Depends(require_admin),
 ):
@@ -109,6 +114,10 @@ def resolve_learner_import_job_row(
 @router.post("/learners/import-jobs/{job_id}/confirm")
 def confirm_learner_import_job(job_id: int, request: Request, session: dict = Depends(require_admin)):
     with get_cursor() as cur:
+        with cur.connection.transaction():
+            check_and_record_rate_limit(
+                cur, action="import_confirm", rate_key=f"user:{session['userId']}", max_attempts=10, window_minutes=60,
+            )
         summary = confirm_import_job(cur, job_id, request, session)
 
     write_audit_log(

@@ -13,6 +13,7 @@ from ..attendance_row_rules import (
 from ..auth import require_admin, require_attendance_access, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
+from ..rate_limit import check_and_record_rate_limit
 from ..session_register_lib import (
     apply_register_refresh,
     bump_register_version,
@@ -260,6 +261,13 @@ def create_attendance_session(payload: AttendanceSessionInput, request: Request,
             if not payload.force:
                 raise HTTPException(status_code=409, detail={"reasons": conflict_reasons})
             if session.get("role") != "admin":
+                write_audit_log(
+                    request,
+                    action="authorization_denied",
+                    entity_type="cohort",
+                    entity_id=payload.cohortId,
+                    new_value={"reason": "non_admin_duplicate_session_override_attempt", "conflictReasons": conflict_reasons},
+                )
                 raise HTTPException(
                     status_code=403, detail="Only an Administrator can override a duplicate or out-of-range session"
                 )
@@ -371,7 +379,7 @@ def get_session_expected_learners(session_id: int, session: dict = Depends(requi
 
 
 @router.post("/attendance/sessions/{session_id}/generate-register")
-def generate_session_register(session_id: int, session: dict = Depends(require_auth)):
+def generate_session_register(session_id: int, request: Request, session: dict = Depends(require_auth)):
     """Idempotent -- safe to call even though session creation and every
     register read already ensure the snapshot exists. Useful as an explicit
     "make sure this register is ready" action (e.g. support/debugging)."""
@@ -383,7 +391,10 @@ def generate_session_register(session_id: int, session: dict = Depends(require_a
         ensure_expected_learners_snapshot(
             cur, session_row["id"], session_row["cohortId"], session_row["sessionDate"], session.get("userId")
         )
-        return _with_counts(cur, session_row)
+        full = _with_counts(cur, session_row)
+
+    write_audit_log(request, action="generate_register", entity_type="attendance_session", entity_id=session_id)
+    return full
 
 
 @router.patch("/attendance/sessions/{session_id}")
@@ -461,19 +472,21 @@ def cancel_attendance_session(
         if existing["status"] == "cancelled":
             raise HTTPException(status_code=400, detail="Session is already cancelled")
 
-        cancel_session(cur, existing, payload.reason, payload.confirmWithAttendance, session["userId"])
+        with cur.connection.transaction():
+            cancel_session(cur, existing, payload.reason, payload.confirmWithAttendance, session["userId"])
+            write_audit_log(
+                request,
+                action="cancel",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                previous_value={"status": existing["status"]},
+                new_value={"status": "cancelled", "reason": payload.reason},
+                cur=cur,
+            )
 
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         full = _with_counts(cur, cur.fetchone())
 
-    write_audit_log(
-        request,
-        action="cancel",
-        entity_type="attendance_session",
-        entity_id=session_id,
-        previous_value={"status": existing["status"]},
-        new_value={"status": "cancelled", "reason": payload.reason},
-    )
     return full
 
 
@@ -508,20 +521,21 @@ def delete_attendance_session(
                 },
             )
 
-        cur.execute(
-            "UPDATE attendance_sessions SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, "
-            "updated_at = now() WHERE id = %s",
-            (session["userId"], payload.reason, session_id),
-        )
-
-    write_audit_log(
-        request,
-        action="delete_session",
-        entity_type="attendance_session",
-        entity_id=session_id,
-        previous_value=existing,
-        new_value={"deletedAt": "now", "reason": payload.reason},
-    )
+        with cur.connection.transaction():
+            cur.execute(
+                "UPDATE attendance_sessions SET deleted_at = now(), deleted_by = %s, deletion_reason = %s, "
+                "updated_at = now() WHERE id = %s",
+                (session["userId"], payload.reason, session_id),
+            )
+            write_audit_log(
+                request,
+                action="delete_session",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                previous_value=existing,
+                new_value={"deletedAt": "now", "reason": payload.reason},
+                cur=cur,
+            )
     return None
 
 
@@ -612,7 +626,7 @@ def save_attendance_register(
         cur.execute(
             """
             SELECT learner_id AS "learnerId", status, hours_attended AS "hoursAttended",
-                   minutes_late AS "minutesLate", notes
+                   minutes_late AS "minutesLate", notes, override_reason AS "overrideReason"
             FROM attendance_records WHERE session_id = %s
             """,
             (session_id,),
@@ -647,6 +661,7 @@ def save_attendance_register(
                     "hoursAttended": entry.hoursAttended,
                     "minutesLate": entry.minutesLate,
                     "notes": entry.notes,
+                    "overrideReason": entry.overrideReason,
                 },
             )
             if diff:
@@ -666,6 +681,13 @@ def save_attendance_register(
             raise HTTPException(status_code=422, detail={"errors": errors})
 
         is_first_save = before["recordedCount"] == 0
+
+        if historical and material_changes:
+            with cur.connection.transaction():
+                check_and_record_rate_limit(
+                    cur, action="historical_attendance_edit", rate_key=f"user:{session['userId']}",
+                    max_attempts=30, window_minutes=60,
+                )
 
         with cur.connection.transaction():
             for entry in payload.entries:
@@ -697,21 +719,21 @@ def save_attendance_register(
                         session["userId"],
                     ),
                 )
-            bump_register_version(cur, session_id)
-
-    write_audit_log(
-        request,
-        action="save_register",
-        entity_type="attendance_session",
-        entity_id=session_id,
-        new_value={
-            "isFirstSave": is_first_save,
-            "changeReason": payload.changeReason if material_changes else None,
-            "created": created_learner_ids,
-            "changes": [{"learnerId": learner_id, "fields": diff} for learner_id, diff in diffs.items()],
-            "totalEntries": len(payload.entries),
-        },
-    )
+            bump_register_version(cur, session_id, expected_version=payload.registerVersion)
+            write_audit_log(
+                request,
+                action="save_register",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                new_value={
+                    "isFirstSave": is_first_save,
+                    "changeReason": payload.changeReason if material_changes else None,
+                    "created": created_learner_ids,
+                    "changes": [{"learnerId": learner_id, "fields": diff} for learner_id, diff in diffs.items()],
+                    "totalEntries": len(payload.entries),
+                },
+                cur=cur,
+            )
 
     return get_attendance_session(session_id, session)
 
@@ -783,15 +805,15 @@ def complete_register(
                 "UPDATE attendance_sessions SET completed_at = now(), completed_by = %s WHERE id = %s",
                 (session["userId"], session_id),
             )
-            bump_register_version(cur, session_id)
-
-    write_audit_log(
-        request,
-        action="complete_register",
-        entity_type="attendance_session",
-        entity_id=session_id,
-        new_value={"completedBy": session["userId"]},
-    )
+            bump_register_version(cur, session_id, expected_version=payload.registerVersion)
+            write_audit_log(
+                request,
+                action="complete_register",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                new_value={"completedBy": session["userId"]},
+                cur=cur,
+            )
     return get_attendance_session(session_id, session)
 
 
@@ -821,18 +843,19 @@ def lock_attendance_register(
 
         with cur.connection.transaction():
             lock_register(cur, existing, payload.reason, session["userId"])
-            bump_register_version(cur, session_id)
+            bump_register_version(cur, session_id, expected_version=payload.registerVersion)
+            write_audit_log(
+                request,
+                action="lock_register",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                new_value={"reason": payload.reason},
+                cur=cur,
+            )
 
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         full = _with_counts(cur, cur.fetchone())
 
-    write_audit_log(
-        request,
-        action="lock_register",
-        entity_type="attendance_session",
-        entity_id=session_id,
-        new_value={"reason": payload.reason},
-    )
     return full
 
 
@@ -855,19 +878,19 @@ def unlock_attendance_register(
 
         with cur.connection.transaction():
             unlock_register(cur, existing)
-            bump_register_version(cur, session_id)
+            bump_register_version(cur, session_id, expected_version=payload.registerVersion)
+            write_audit_log(
+                request,
+                action="unlock_register",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                previous_value={"lockReason": existing["lockReason"]},
+                new_value={"reason": payload.reason},
+                cur=cur,
+            )
 
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         full = _with_counts(cur, cur.fetchone())
-
-    write_audit_log(
-        request,
-        action="unlock_register",
-        entity_type="attendance_session",
-        entity_id=session_id,
-        previous_value={"lockReason": existing["lockReason"]},
-        new_value={"reason": payload.reason},
-    )
     return full
 
 

@@ -17,7 +17,7 @@ AttendanceStatus = Literal[
 # minutes-late must be exactly zero, never left to a stray nonzero value.
 ZERO_HOURS_STATUSES = {"absent_authorised", "absent_unauthorised", "not_expected", "withdrawn"}
 
-_TRACKED_FIELDS = ("status", "hoursAttended", "minutesLate", "notes")
+_TRACKED_FIELDS = ("status", "hoursAttended", "minutesLate", "notes", "overrideReason")
 _MATERIAL_FIELDS = {"status", "hoursAttended"}
 
 

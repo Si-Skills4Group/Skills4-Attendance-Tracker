@@ -6,15 +6,16 @@ rationale. Every route is thin -- all classification/persistence/import
 logic lives in tutor_import_lib.py.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from ..audit import write_audit_log
 from ..auth import require_admin
 from ..csv_utils import TUTOR_IMPORT_COLUMNS, CsvParseError, parse_tutor_import_csv, stringify_rows_to_csv
 from ..db import get_cursor
+from ..rate_limit import check_and_record_rate_limit
 from ..tutor_import_lib import (
     cancel_import_job,
     confirm_import_job,
@@ -51,6 +52,10 @@ async def upload_tutor_import(
         raise HTTPException(status_code=400, detail=exc.message) from None
 
     with get_cursor() as cur:
+        with cur.connection.transaction():
+            check_and_record_rate_limit(
+                cur, action="csv_upload", rate_key=f"user:{session['userId']}", max_attempts=20, window_minutes=60,
+            )
         expire_due_tutor_import_jobs(cur)
         job = create_import_job(cur, file.filename or "upload.csv", session["userId"], parsed_rows)
 
@@ -75,7 +80,7 @@ def get_tutor_import_job(job_id: int, _session: dict = Depends(require_admin)):
 def list_tutor_import_job_rows(
     job_id: int,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     classification: str | None = None,
     _session: dict = Depends(require_admin),
 ):
@@ -108,6 +113,10 @@ def resolve_tutor_import_job_row(
 @router.post("/tutors/import-jobs/{job_id}/confirm")
 def confirm_tutor_import_job(job_id: int, request: Request, session: dict = Depends(require_admin)):
     with get_cursor() as cur:
+        with cur.connection.transaction():
+            check_and_record_rate_limit(
+                cur, action="import_confirm", rate_key=f"user:{session['userId']}", max_attempts=10, window_minutes=60,
+            )
         summary = confirm_import_job(cur, job_id, request, session)
 
     write_audit_log(

@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_admin
 from ..db import get_cursor
@@ -17,7 +18,7 @@ def list_audit_log(
     dateFrom: str | None = None,
     dateTo: str | None = None,
     page: int = 1,
-    pageSize: int = 25,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     _session: dict = Depends(require_admin),
 ):
     clauses = []
@@ -50,7 +51,7 @@ def list_audit_log(
                    CASE WHEN u.id IS NULL THEN NULL ELSE concat(u.first_name, ' ', u.last_name) END AS "userName",
                    a.action, a.entity_type AS "entityType", a.entity_id AS "entityId",
                    a.previous_value AS "previousValue", a.new_value AS "newValue",
-                   a.timestamp, a.ip_address AS "ipAddress"
+                   a.timestamp, a.ip_address AS "ipAddress", a.correlation_id AS "correlationId"
             FROM audit_logs a
             LEFT JOIN users u ON a.user_id = u.id
             {where}

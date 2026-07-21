@@ -8,6 +8,7 @@ from fastapi import HTTPException, Request
 
 from .audit import write_audit_log
 from .config import get_auth_settings
+from .correlation import get_current_request
 from .db import get_cursor
 from .entra import EntraIdentity, TokenValidationError, validate_entra_access_token
 
@@ -263,13 +264,34 @@ def require_tutor(request: Request) -> dict[str, Any]:
     return require_role("tutor")(request)
 
 
+def deny_object_access(entity_type: str, entity_id: int, message: str) -> None:
+    """Object-level 403 (a tutor probing another tutor's cohort/learner/
+    tutor/session by ID) -- audited the same way a role-level 403 is via
+    require_role, just keyed by the specific object rather than the
+    endpoint's required role. Reads the in-flight Request from context
+    (see pyapp/correlation.py) rather than taking one as a parameter, so
+    none of this module's ~25 call sites across the routers -- or the
+    direct unit tests exercising this access logic in isolation -- need to
+    change just to make this auditable."""
+    request = get_current_request()
+    if request is not None:
+        write_audit_log(
+            request,
+            action="authorization_denied",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            new_value={"reason": "not_owner"},
+        )
+    raise HTTPException(status_code=403, detail=message)
+
+
 def require_cohort_access(cur, cohort_id: int, session: dict[str, Any]) -> dict[str, Any]:
     cur.execute('SELECT id, tutor_id AS "tutorId" FROM cohorts WHERE id = %s AND deleted_at IS NULL', (cohort_id,))
     cohort = cur.fetchone()
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
     if session.get("role") == "tutor" and cohort["tutorId"] != session.get("tutorId"):
-        raise HTTPException(status_code=403, detail="Not allowed to access this cohort")
+        deny_object_access("cohort", cohort_id, "Not allowed to access this cohort")
     return cohort
 
 
@@ -282,7 +304,7 @@ def require_learner_access(cur, learner_id: int, session: dict[str, Any]) -> dic
     if not learner:
         raise HTTPException(status_code=404, detail="Learner not found")
     if session.get("role") == "tutor" and learner["tutorId"] != session.get("tutorId"):
-        raise HTTPException(status_code=403, detail="Not allowed to access this learner")
+        deny_object_access("learner", learner_id, "Not allowed to access this learner")
     return learner
 
 
@@ -292,7 +314,7 @@ def require_tutor_access(cur, tutor_id: int, session: dict[str, Any]) -> dict[st
     if not tutor:
         raise HTTPException(status_code=404, detail="Tutor not found")
     if session.get("role") == "tutor" and tutor_id != session.get("tutorId"):
-        raise HTTPException(status_code=403, detail="Not allowed to access this tutor's data")
+        deny_object_access("tutor", tutor_id, "Not allowed to access this tutor's data")
     return tutor
 
 
@@ -310,5 +332,5 @@ def require_attendance_access(cur, session_id: int, session: dict[str, Any]) -> 
     if not attendance_session:
         raise HTTPException(status_code=404, detail="Attendance session not found")
     if session.get("role") == "tutor" and attendance_session["tutorId"] != session.get("tutorId"):
-        raise HTTPException(status_code=403, detail="Not allowed to access this session")
+        deny_object_access("attendance_session", session_id, "Not allowed to access this session")
     return attendance_session

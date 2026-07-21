@@ -34,6 +34,7 @@ def login(payload: LoginInput, request: Request):
             check_and_record_login_attempt(cur, key)
 
     if not payload.email or not payload.password:
+        write_audit_log(request, action="login_failed", entity_type="security", new_value={"reason": "missing_credentials"})
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     with get_cursor() as cur:
@@ -41,6 +42,11 @@ def login(payload: LoginInput, request: Request):
         user = cur.fetchone()
 
     if not user or not user["active"] or not verify_password(payload.password, user["passwordHash"]):
+        write_audit_log(
+            request, action="login_failed", entity_type="security",
+            entity_id=user["id"] if user else None,
+            new_value={"reason": "invalid_credentials", "email": payload.email.lower()},
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     request.state.session["userId"] = user["id"]

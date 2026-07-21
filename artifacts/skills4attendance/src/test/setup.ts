@@ -13,3 +13,12 @@ class ResizeObserverStub {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom doesn't implement the Pointer Capture API; Radix's Select calls
+// hasPointerCapture/releasePointerCapture on pointerdown/pointerup.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {};
+}
