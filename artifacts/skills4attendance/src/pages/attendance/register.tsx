@@ -713,7 +713,7 @@ export default function RegisterPage() {
                 <Unlock className="w-4 h-4 mr-2" /> Unlock Register
               </Button>
             )}
-            {isAdmin && !isCancelled && !isLocked && (
+            {!isCancelled && !isLocked && (
               <Button variant="outline" onClick={() => setCancelOpen(true)} className="shadow-sm text-destructive hover:text-destructive">
                 <Ban className="w-4 h-4 mr-2" /> Cancel Session
               </Button>

@@ -33,6 +33,7 @@ const cohort = {
 let mockCurrentUser: { data: any };
 let mockCohort: { data: any; isLoading: boolean };
 const mockDeleteMutate = vi.fn();
+const mockUpdateMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetCurrentUser: () => mockCurrentUser,
@@ -40,7 +41,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useGetCohortLearners: () => ({ data: [] }),
   useListTutors: () => ({ data: tutors }),
   useCreateCohort: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateCohort: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateCohort: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useActivateCohort: () => ({ mutate: vi.fn() }),
   useDeactivateCohort: () => ({ mutate: vi.fn() }),
   useDeleteCohort: () => ({ mutate: mockDeleteMutate, isPending: false }),
@@ -141,5 +142,49 @@ describe('CohortDetailPage delete action', () => {
 
     await waitFor(() => expect(screen.getByText(/3 active learner/i)).toBeInTheDocument());
     expect(screen.getByText(/2 session/i)).toBeInTheDocument();
+  });
+});
+
+describe('CohortDetailPage rename action for tutors', () => {
+  beforeEach(() => {
+    mockParams = { id: '5' };
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
+    mockCohort = { data: cohort, isLoading: false };
+    mockUpdateMutate.mockReset();
+    mockSetLocation.mockReset();
+  });
+
+  it('lets a tutor edit the cohort name field', () => {
+    renderWithQueryClient(<CohortDetailPage />);
+    expect(screen.getByLabelText('Cohort Name')).toBeEnabled();
+  });
+
+  it('keeps every other field read-only for a tutor', () => {
+    renderWithQueryClient(<CohortDetailPage />);
+    expect(screen.getByLabelText('Programme')).toBeDisabled();
+    expect(screen.getByLabelText('Level')).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: /primary tutor/i })).toBeDisabled();
+  });
+
+  it('offers a Save Changes button, but not Delete Cohort, for a tutor', () => {
+    renderWithQueryClient(<CohortDetailPage />);
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /delete cohort/i })).not.toBeInTheDocument();
+  });
+
+  it('submits only the name field when a tutor saves changes', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.clear(screen.getByLabelText('Cohort Name'));
+    await user.type(screen.getByLabelText('Cohort Name'), 'Cohort A (renamed)');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledWith(
+        { id: 5, data: { name: 'Cohort A (renamed)' } },
+        expect.anything(),
+      );
+    });
   });
 });

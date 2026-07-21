@@ -280,14 +280,27 @@ def get_cohort(cohort_id: int, session: dict = Depends(require_auth)):
 
 
 @router.patch("/cohorts/{cohort_id}")
-def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, _session: dict = Depends(require_admin)):
+def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
+        require_cohort_access(cur, cohort_id, session)
         cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Cohort not found")
 
         updates = payload.model_dump(exclude_unset=True)
+
+        # A Tutor may rename their own cohort -- every other field (schedule,
+        # tutor assignment, active flag, etc.) remains Administrator-only,
+        # enforced here rather than trusting the frontend to only ever send
+        # the name field.
+        if session.get("role") != "admin":
+            disallowed = sorted(set(updates) - {"name"})
+            if disallowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Only an Administrator can change: {', '.join(disallowed)}",
+                )
 
         _validate_cohort_schedule(
             updates.get("sessionStartTime", existing["session_start_time"]),

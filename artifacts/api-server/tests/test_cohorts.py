@@ -97,6 +97,62 @@ def test_inactive_tutor_cannot_be_assigned_on_update(db, request_factory, admin_
     assert exc.value.status_code == 400
 
 
+class TestTutorCanRenameOwnCohort:
+    def test_tutor_can_rename_their_own_cohort(self, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+
+        result = update_cohort(cohort["id"], CohortUpdate(name="Renamed Cohort"), request_factory(), tutor["session"])
+        assert result["name"] == "Renamed Cohort"
+
+    def test_tutor_cannot_change_any_other_field(self, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(cohort["id"], CohortUpdate(programme="New Programme"), request_factory(), tutor["session"])
+        assert exc.value.status_code == 403
+
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(cohort["id"], CohortUpdate(active=False), request_factory(), tutor["session"])
+        assert exc.value.status_code == 403
+
+    def test_tutor_cannot_smuggle_another_field_in_alongside_a_real_rename(
+        self, db, request_factory, tutor_factory, cohort_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(
+                cohort["id"], CohortUpdate(name="Renamed Cohort", level="5"), request_factory(), tutor["session"],
+            )
+        assert exc.value.status_code == 403
+
+        db.execute("SELECT name, level FROM cohorts WHERE id = %s", (cohort["id"],))
+        row = db.fetchone()
+        assert row["name"] != "Renamed Cohort"
+        assert row["level"] != "5"
+
+    def test_tutor_cannot_rename_another_tutors_cohort(self, request_factory, tutor_factory, cohort_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(cohort["id"], CohortUpdate(name="Hijacked"), request_factory(), other["session"])
+        assert exc.value.status_code == 403
+
+    def test_admin_can_still_change_every_field(self, request_factory, admin_user, cohort_factory):
+        cohort = cohort_factory()
+
+        result = update_cohort(
+            cohort["id"], CohortUpdate(name="Admin Renamed", programme="New Programme"), request_factory(), admin_user,
+        )
+        assert result["name"] == "Admin Renamed"
+        assert result["programme"] == "New Programme"
+
+
 def test_cohort_changes_are_audited(db, request_factory, admin_user, cohort_factory):
     cohort = cohort_factory(name="Before Rename")
     update_cohort(cohort["id"], CohortUpdate(name="After Rename"), request_factory(), admin_user)

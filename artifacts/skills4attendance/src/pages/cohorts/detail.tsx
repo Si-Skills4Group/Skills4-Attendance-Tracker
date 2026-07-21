@@ -127,21 +127,19 @@ export default function CohortDetailPage() {
   }, [cohort, cohortId, form]);
 
   const onSubmit = (values: z.infer<typeof cohortSchema>) => {
-    if (!isAdmin) return; // Prevent submission if not admin, though UI should hide save button
-    
-    // Convert 09:00 to 09:00:00 for API if needed, standard input time might do HH:mm
-    const formatTime = (t: string) => t.length === 5 ? `${t}:00` : t;
-
-    const payload = {
-      ...values,
-      sessionStartTime: formatTime(values.sessionStartTime),
-      sessionEndTime: formatTime(values.sessionEndTime),
-      tutorId: values.tutorId ? Number(values.tutorId) : undefined,
-      endDate: values.endDate || undefined,
-      externalSystemId: values.externalSystemId || undefined
-    };
-
     if (isNew) {
+      if (!isAdmin) return; // Creating a cohort remains Administrator-only.
+
+      // Convert 09:00 to 09:00:00 for API if needed, standard input time might do HH:mm
+      const formatTime = (t: string) => t.length === 5 ? `${t}:00` : t;
+      const payload = {
+        ...values,
+        sessionStartTime: formatTime(values.sessionStartTime),
+        sessionEndTime: formatTime(values.sessionEndTime),
+        tutorId: values.tutorId ? Number(values.tutorId) : undefined,
+        endDate: values.endDate || undefined,
+        externalSystemId: values.externalSystemId || undefined
+      };
       createMutation.mutate({ data: payload as any }, {
         onSuccess: () => {
           toast({ title: "Cohort created" });
@@ -149,11 +147,33 @@ export default function CohortDetailPage() {
         },
         onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
       });
-    } else {
-      const { active: _active, ...rest } = payload;
+      return;
+    }
+
+    if (isAdmin) {
+      const formatTime = (t: string) => t.length === 5 ? `${t}:00` : t;
+      const { active: _active, ...rest } = {
+        ...values,
+        sessionStartTime: formatTime(values.sessionStartTime),
+        sessionEndTime: formatTime(values.sessionEndTime),
+        tutorId: values.tutorId ? Number(values.tutorId) : undefined,
+        endDate: values.endDate || undefined,
+        externalSystemId: values.externalSystemId || undefined
+      };
       updateMutation.mutate({ id: cohortId, data: rest }, {
         onSuccess: () => {
           toast({ title: "Cohort updated" });
+          setLocation("/cohorts");
+        },
+        onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
+      });
+    } else {
+      // A Tutor may only rename their own cohort -- send name alone, both
+      // so the UI can't accidentally resubmit an admin-only field and
+      // because the backend independently rejects anything else from a Tutor.
+      updateMutation.mutate({ id: cohortId, data: { name: values.name } }, {
+        onSuccess: () => {
+          toast({ title: "Cohort renamed" });
           setLocation("/cohorts");
         },
         onError: (err) => toast({ title: "Error", description: getErrorMessage(err), variant: "destructive" })
@@ -188,8 +208,10 @@ export default function CohortDetailPage() {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  // Tutors cannot edit cohorts
+  // Tutors may rename their own existing cohort; every other field (and
+  // creating a new cohort at all) remains Administrator-only.
   const readOnly = !isAdmin;
+  const nameFieldDisabled = isNew && !isAdmin;
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto w-full">
@@ -219,11 +241,13 @@ export default function CohortDetailPage() {
             </p>
           </div>
         </div>
-        {!isNew && isAdmin && (
+        {!isNew && (
           <div className="flex gap-2">
-            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteDialogOpen(true)}>
-              <Trash2 className="w-4 h-4 mr-2" /> Delete Cohort
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteDialogOpen(true)}>
+                <Trash2 className="w-4 h-4 mr-2" /> Delete Cohort
+              </Button>
+            )}
             <Button onClick={() => form.handleSubmit(onSubmit)()} disabled={isSaving} className="hover-elevate shadow-sm">
               {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               Save Changes
@@ -251,7 +275,7 @@ export default function CohortDetailPage() {
                     </CardHeader>
                     <CardContent className="pt-6 space-y-4">
                       <FormField control={form.control} name="name" render={({ field }) => (
-                        <FormItem><FormLabel>Cohort Name</FormLabel><FormControl><Input {...field} disabled={readOnly} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Cohort Name</FormLabel><FormControl><Input {...field} disabled={nameFieldDisabled} /></FormControl><FormMessage /></FormItem>
                       )} />
                       <div className="grid grid-cols-2 gap-4">
                         <FormField control={form.control} name="programme" render={({ field }) => (

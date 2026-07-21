@@ -460,9 +460,10 @@ def update_attendance_session(
 
 @router.post("/attendance/sessions/{session_id}/cancel")
 def cancel_attendance_session(
-    session_id: int, payload: SessionCancelInput, request: Request, session: dict = Depends(require_admin)
+    session_id: int, payload: SessionCancelInput, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
+        require_attendance_access(cur, session_id, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
         if not existing:

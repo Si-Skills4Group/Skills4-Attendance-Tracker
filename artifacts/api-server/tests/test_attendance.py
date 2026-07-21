@@ -373,6 +373,25 @@ def _as_admin(monkeypatch, user_id=999999):
     monkeypatch.setattr(auth_module, "require_auth", fake_require_auth)
 
 
+def _as_tutor_via_dependency_override(client, tutor_id, user_id):
+    """require_auth is wired directly as Depends(require_auth) on some
+    routes (e.g. cancel_attendance_session) rather than via require_admin
+    (which calls require_auth as a plain internal function call, so
+    monkeypatching auth_module.require_auth is enough there) -- FastAPI
+    captures the dependency callable at route-registration time, so
+    monkeypatching the attribute afterwards has no effect on routes wired
+    this way. app.dependency_overrides is the correct override mechanism
+    for a dependency referenced directly like this -- see test_permissions.py
+    for the same pattern."""
+    fake_session = {"userId": user_id, "role": "tutor", "tutorId": tutor_id}
+    client.app.dependency_overrides[auth_module.require_auth] = lambda: fake_session
+
+
+def _as_admin_via_dependency_override(client, user_id=999999):
+    fake_session = {"userId": user_id, "role": "admin", "tutorId": None}
+    client.app.dependency_overrides[auth_module.require_auth] = lambda: fake_session
+
+
 class TestSessionCreationConflicts:
     def test_duplicate_same_cohort_date_and_start_time_is_rejected(
         self, request_factory, admin_user, cohort_factory, attendance_session_factory,
@@ -576,6 +595,30 @@ class TestSessionCancellation:
         with pytest.raises(HTTPException) as exc:
             cancel_attendance_session(session["id"], SessionCancelInput(reason="Second"), request_factory(), admin_user)
         assert exc.value.status_code == 400
+
+    def test_tutor_can_cancel_a_session_in_their_own_cohort(
+        self, request_factory, tutor_factory, cohort_factory, attendance_session_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=tutor["userId"])
+
+        result = cancel_attendance_session(
+            session["id"], SessionCancelInput(reason="Tutor unavailable"), request_factory(), tutor["session"],
+        )
+        assert result["status"] == "cancelled"
+
+    def test_tutor_cannot_cancel_another_tutors_session(
+        self, request_factory, tutor_factory, cohort_factory, attendance_session_factory,
+    ):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=owner["userId"])
+
+        with pytest.raises(HTTPException) as exc:
+            cancel_attendance_session(session["id"], SessionCancelInput(reason="Weather"), request_factory(), other["session"])
+        assert exc.value.status_code == 403
 
 
 class TestSessionDeletion:
@@ -825,16 +868,35 @@ class TestRegisterRefreshEndpoint:
 
 
 class TestNewEndpointPermissions:
-    def test_tutor_cannot_cancel_a_session_over_http(
-        self, client, monkeypatch, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
+    def test_tutor_cannot_cancel_another_tutors_session_over_http(
+        self, client, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
+    ):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        _as_tutor_via_dependency_override(client, other["tutorId"], other["userId"])
+        try:
+            response = client.post(f"/api/attendance/sessions/{session['id']}/cancel", json={"reason": "Test"})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 403
+
+    def test_tutor_can_cancel_their_own_session_over_http(
+        self, client, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
     ):
         tutor = tutor_factory()
         cohort = cohort_factory(tutor_id=tutor["tutorId"])
         session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
 
-        _as_tutor(monkeypatch, tutor["tutorId"], tutor["userId"])
-        response = client.post(f"/api/attendance/sessions/{session['id']}/cancel", json={"reason": "Test"})
-        assert response.status_code == 403
+        _as_tutor_via_dependency_override(client, tutor["tutorId"], tutor["userId"])
+        try:
+            response = client.post(f"/api/attendance/sessions/{session['id']}/cancel", json={"reason": "Test"})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 200
+        assert response.json()["status"] == "cancelled"
 
     def test_tutor_cannot_refresh_a_register_over_http(
         self, client, monkeypatch, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
@@ -849,13 +911,16 @@ class TestNewEndpointPermissions:
         assert response.status_code == 403
 
     def test_admin_can_cancel_a_session_over_http(
-        self, client, monkeypatch, admin_user, cohort_factory, attendance_session_factory,
+        self, client, admin_user, cohort_factory, attendance_session_factory,
     ):
         cohort = cohort_factory()
         session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
 
-        _as_admin(monkeypatch)
-        response = client.post(f"/api/attendance/sessions/{session['id']}/cancel", json={"reason": "Test"})
+        _as_admin_via_dependency_override(client)
+        try:
+            response = client.post(f"/api/attendance/sessions/{session['id']}/cancel", json={"reason": "Test"})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
         assert response.status_code == 200
         assert response.json()["status"] == "cancelled"
 
@@ -871,9 +936,12 @@ class TestNewEndpointPermissions:
             get_session_expected_learners(session["id"], other["session"])
         assert exc.value.status_code == 403
 
-    def test_nonexistent_session_id_is_404_for_cancel(self, client, monkeypatch):
-        _as_admin(monkeypatch)
-        response = client.post("/api/attendance/sessions/999999999/cancel", json={"reason": "Test"})
+    def test_nonexistent_session_id_is_404_for_cancel(self, client):
+        _as_admin_via_dependency_override(client)
+        try:
+            response = client.post("/api/attendance/sessions/999999999/cancel", json={"reason": "Test"})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
         assert response.status_code == 404
 
     def test_nonexistent_session_id_is_404_for_refresh(self, client, monkeypatch):

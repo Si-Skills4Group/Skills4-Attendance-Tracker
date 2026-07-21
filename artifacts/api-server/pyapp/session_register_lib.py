@@ -190,8 +190,8 @@ def apply_register_refresh(cur, session_row: dict, diff: dict, user_id: int | No
 def cancel_session(cur, session_row: dict, reason: str, confirm_with_attendance: bool, user_id: int | None) -> None:
     """Marks a session cancelled. Never deletes the session or any
     attendance_records rows -- if attendance already exists, the caller
-    must pass confirm_with_attendance=True (an explicit admin decision, not
-    a silent default) or this raises 409."""
+    must pass confirm_with_attendance=True (an explicit decision, not a
+    silent default) or this raises 409."""
     cur.execute(
         "SELECT count(*)::int AS count FROM attendance_records WHERE session_id = %s", (session_row["id"],)
     )

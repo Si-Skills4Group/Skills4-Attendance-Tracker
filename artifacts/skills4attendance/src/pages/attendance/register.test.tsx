@@ -122,18 +122,35 @@ describe('RegisterPage', () => {
     expect(screen.getByRole('button', { name: /confirm change/i })).toBeInTheDocument();
   });
 
-  it('offers a Cancel Session action for admins but not tutors', () => {
+  it('offers a Cancel Session action for admins', () => {
     mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
     mockCurrentUser = { data: { role: 'admin' } };
     renderAtLocation();
     expect(screen.getByRole('button', { name: /cancel session/i })).toBeInTheDocument();
   });
 
-  it('hides the Cancel Session action for tutors', () => {
+  it('also offers a Cancel Session action for tutors', () => {
     mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
     mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
     renderAtLocation();
-    expect(screen.queryByRole('button', { name: /cancel session/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel session/i })).toBeInTheDocument();
+  });
+
+  it('lets a tutor actually submit a session cancellation', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    mockCancelMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess());
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /cancel session/i }));
+    await user.type(screen.getByLabelText('Reason'), 'Tutor unavailable');
+    await user.click(screen.getByRole('button', { name: /^cancel session$/i }));
+
+    expect(mockCancelMutate).toHaveBeenCalledWith(
+      { id: 200, data: { reason: 'Tutor unavailable', confirmWithAttendance: false } },
+      expect.anything(),
+    );
   });
 
   it('requires a reason to cancel and shows a confirmation step when attendance already exists', async () => {
