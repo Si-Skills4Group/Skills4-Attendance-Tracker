@@ -46,7 +46,7 @@ import { getGetAttendanceSessionQueryKey } from "@workspace/api-client-react";
 
 type DraftEntry = {
   learnerId: number;
-  status: AttendanceStatus;
+  status: AttendanceStatus | null;
   hoursAttended: number;
   minutesLate: number;
   notes: string;
@@ -67,7 +67,7 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
 };
 
 function buildDraft(entry: {
-  learnerId: number; status: AttendanceStatus; hoursAttended: number; minutesLate: number;
+  learnerId: number; status: AttendanceStatus | null; hoursAttended: number; minutesLate: number;
   notes: string | null; overrideReason: string | null;
 }, originalHours: number): DraftEntry {
   return {
@@ -267,19 +267,44 @@ export default function RegisterPage() {
   const [reasonInput, setReasonInput] = React.useState("");
   const [conflictVersion, setConflictVersion] = React.useState<number | null>(null);
 
-  const buildEntries = (): RegisterEntryInput[] =>
-    Object.values(drafts).map(({ _originalHours, _requireOverrideReason, notes, overrideReason, ...rest }) => ({
-      ...rest,
-      notes: notes.trim() ? notes.trim() : undefined,
-      overrideReason: overrideReason.trim() ? overrideReason.trim() : undefined,
-    }));
+  // Only rows the Tutor actually touched are ever submitted -- an untouched
+  // row stays at its unrecorded (null) status and must never be resent as a
+  // deliberate attendance decision. A row with a still-null status is by
+  // definition never "dirty" (its baseline is also null), so filtering to
+  // dirty rows already excludes every unrecorded row; the explicit
+  // status !== null check is a second, independent guard against ever
+  // submitting a null status (e.g. a note typed before a status is chosen).
+  const buildEntries = (): RegisterEntryInput[] => {
+    const result: RegisterEntryInput[] = [];
+    for (const d of Object.values(drafts)) {
+      if (d.status === null || !isRowDirty(d.learnerId)) continue;
+      result.push({
+        learnerId: d.learnerId,
+        status: d.status,
+        hoursAttended: d.hoursAttended,
+        minutesLate: d.minutesLate,
+        notes: d.notes.trim() ? d.notes.trim() : undefined,
+        overrideReason: d.overrideReason.trim() ? d.overrideReason.trim() : undefined,
+      });
+    }
+    return result;
+  };
 
   const performSave = (reason: string | undefined, then?: (result: AttendanceRegister) => void) => {
     if (!register) return;
+    const entriesToSave = buildEntries();
+    if (entriesToSave.length === 0) {
+      // Nothing changed -- skip the round trip rather than bumping the
+      // register version and writing a no-op audit entry. Complete Register
+      // still proceeds using the current (unbumped) version, so an
+      // incomplete register is correctly rejected by the backend.
+      then?.(register);
+      return;
+    }
     setSaveState("saving");
     saveMutation.mutate({
       id: sessionId,
-      data: { registerVersion: register.session.registerVersion, entries: buildEntries(), changeReason: reason },
+      data: { registerVersion: register.session.registerVersion, entries: entriesToSave, changeReason: reason },
     }, {
       onSuccess: (result) => {
         setSaveState("saved");
@@ -773,12 +798,15 @@ export default function RegisterPage() {
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={draft.status}
+                        value={draft.status ?? ""}
                         onValueChange={(v) => updateDraft(entry.learnerId, "status", v as AttendanceStatus)}
                         disabled={isReadOnly}
                       >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
+                        <SelectTrigger
+                          className={`h-9 ${draft.status === null ? "text-muted-foreground" : ""}`}
+                          aria-label={`Attendance status for ${entry.learnerName}`}
+                        >
+                          <SelectValue placeholder="Not recorded" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="present">Present</SelectItem>
@@ -798,7 +826,7 @@ export default function RegisterPage() {
                         className={`h-9 w-20 ${draft._requireOverrideReason ? 'border-amber-400' : ''}`}
                         value={draft.hoursAttended}
                         onChange={(e) => updateDraft(entry.learnerId, "hoursAttended", parseFloat(e.target.value) || 0)}
-                        disabled={isReadOnly || !["present", "late"].includes(draft.status)}
+                        disabled={isReadOnly || draft.status !== "present" && draft.status !== "late"}
                       />
                     </TableCell>
                     <TableCell>

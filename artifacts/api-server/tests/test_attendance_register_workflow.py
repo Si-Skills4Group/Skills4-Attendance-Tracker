@@ -10,6 +10,7 @@ from fastapi import HTTPException
 import pydantic
 
 from pyapp import auth as auth_module
+from pyapp.attendance_metrics import fetch_attendance_metrics
 from pyapp.routers.allocation_routes import AllocationInput, allocate_learners
 from pyapp.routers.attendance import (
     AttendanceRegisterInput,
@@ -879,3 +880,198 @@ class TestNewEndpointDirectObjectReferenceProtections:
         assert response.status_code == 401
         response = client.put("/api/attendance/sessions/1/register", json={"registerVersion": 1, "entries": []})
         assert response.status_code == 401
+
+
+class TestUnrecordedAttendanceDefault:
+    """Regression coverage for the register default-status defect: a
+    freshly generated register must never default an unrecorded learner to
+    Absent (Unauthorised), and Save Draft must never resubmit an untouched
+    learner's fabricated default as though it were a real decision."""
+
+    def test_freshly_generated_register_has_null_status_for_every_learner(
+        self, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"])
+        learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        view = get_attendance_session(session["id"], admin_user)
+        assert len(view["entries"]) == 2
+        for entry in view["entries"]:
+            assert entry["status"] is None
+            assert entry["recordId"] is None
+
+    def test_freshly_generated_register_status_is_not_started(
+        self, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        view = get_attendance_session(session["id"], admin_user)
+        assert view["session"]["registerStatus"] == "not_started"
+        assert view["session"]["recordedCount"] == 0
+
+    def test_saving_one_authorised_absence_does_not_create_records_for_other_learners(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        changed = learner_factory(cohort_id=cohort["id"])
+        untouched_a = learner_factory(cohort_id=cohort["id"])
+        untouched_b = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(
+                registerVersion=1,
+                entries=[RegisterEntryInput(learnerId=changed["id"], status="absent_authorised", hoursAttended=0, minutesLate=0)],
+            ),
+            request_factory(), admin_user,
+        )
+
+        db.execute("SELECT count(*)::int AS c FROM attendance_records WHERE session_id = %s", (session["id"],))
+        assert db.fetchone()["c"] == 1, "only the one changed learner should have a real attendance_records row"
+
+        view = get_attendance_session(session["id"], admin_user)
+        by_id = {e["learnerId"]: e for e in view["entries"]}
+        assert by_id[changed["id"]]["status"] == "absent_authorised"
+        assert by_id[untouched_a["id"]]["status"] is None
+        assert by_id[untouched_b["id"]]["status"] is None
+        assert view["session"]["recordedCount"] == 1
+        assert view["session"]["expectedCount"] == 3
+        assert view["session"]["registerStatus"] == "in_progress"
+
+    def test_untouched_learners_are_not_counted_as_unauthorised_absence(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        changed = learner_factory(cohort_id=cohort["id"])
+        learner_factory(cohort_id=cohort["id"])  # never touched
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(
+                registerVersion=1,
+                entries=[RegisterEntryInput(learnerId=changed["id"], status="absent_authorised", hoursAttended=0, minutesLate=0)],
+            ),
+            request_factory(), admin_user,
+        )
+
+        metrics = fetch_attendance_metrics(
+            db, scope="cohort", scope_id=cohort["id"],
+            period_start=datetime.date(2026, 1, 1), period_end=datetime.date(2026, 1, 31),
+        )
+        assert metrics.authorisedAbsenceMinutes == 420  # the one genuine, deliberately-recorded absence
+        assert metrics.unauthorisedAbsenceMinutes == 0
+        assert metrics.missingRecordCount == 1, "the untouched learner must be tracked as missing, not as any kind of absence"
+
+    def test_omitting_an_already_recorded_learner_from_a_later_save_leaves_it_unchanged(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        first = learner_factory(cohort_id=cohort["id"])
+        second = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(
+                registerVersion=1,
+                entries=[RegisterEntryInput(learnerId=first["id"], status="present", hoursAttended=7, minutesLate=0)],
+            ),
+            request_factory(), admin_user,
+        )
+        db.execute(
+            "SELECT status, hours_attended AS h, updated_at FROM attendance_records WHERE session_id = %s AND learner_id = %s",
+            (session["id"], first["id"]),
+        )
+        before = db.fetchone()
+
+        save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(
+                registerVersion=saved["session"]["registerVersion"],
+                entries=[RegisterEntryInput(learnerId=second["id"], status="absent_authorised", hoursAttended=0, minutesLate=0)],
+            ),
+            request_factory(), admin_user,
+        )
+
+        db.execute(
+            "SELECT status, hours_attended AS h, updated_at FROM attendance_records WHERE session_id = %s AND learner_id = %s",
+            (session["id"], first["id"]),
+        )
+        after = db.fetchone()
+        assert after == before, "a learner omitted from a later save must be left completely untouched"
+
+    def test_save_register_audit_log_only_reflects_the_touched_learner(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        changed = learner_factory(cohort_id=cohort["id"])
+        untouched = learner_factory(cohort_id=cohort["id"])  # must not appear in the audit diff
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(
+                registerVersion=1,
+                entries=[RegisterEntryInput(learnerId=changed["id"], status="present", hoursAttended=7, minutesLate=0)],
+            ),
+            request_factory(), admin_user,
+        )
+
+        db.execute(
+            "SELECT new_value FROM audit_logs WHERE action = 'save_register' AND entity_type = 'attendance_session' "
+            "AND entity_id = %s ORDER BY id DESC LIMIT 1",
+            (session["id"],),
+        )
+        new_value = db.fetchone()["new_value"]
+        assert f'"created": [{changed["id"]}]' in new_value, "only the touched learner should be recorded as created"
+        assert str(untouched["id"]) not in new_value
+        assert '"totalEntries": 1' in new_value
+
+    def test_omitted_status_field_is_rejected_by_pydantic_not_defaulted(self):
+        with pytest.raises(pydantic.ValidationError):
+            RegisterEntryInput(learnerId=1, hoursAttended=0, minutesLate=0)
+
+    def test_24_learner_register_one_authorised_absence_leaves_23_unrecorded(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        """The exact integration scenario from the defect report: a 24-learner
+        register, one learner marked Absent (Authorised) with a reason, Save
+        Draft clicked -- the other 23 must remain unrecorded, not silently
+        become Absent (Unauthorised)."""
+        cohort = cohort_factory()
+        learners = [learner_factory(cohort_id=cohort["id"]) for _ in range(24)]
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        changed = learners[0]
+
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(
+                registerVersion=1,
+                entries=[RegisterEntryInput(learnerId=changed["id"], status="absent_authorised", hoursAttended=0, minutesLate=0)],
+                changeReason="Confirmed authorised absence -- medical appointment",
+            ),
+            request_factory(), admin_user,
+        )
+
+        assert saved["session"]["recordedCount"] == 1
+        assert saved["session"]["expectedCount"] == 24
+        assert saved["session"]["registerStatus"] == "in_progress"
+
+        by_id = {e["learnerId"]: e for e in saved["entries"]}
+        assert by_id[changed["id"]]["status"] == "absent_authorised"
+        unrecorded = [l for l in learners[1:] if by_id[l["id"]]["status"] is None]
+        assert len(unrecorded) == 23, "the other 23 learners must remain unrecorded, not defaulted to any status"
+
+        with pytest.raises(HTTPException) as exc:
+            complete_register(
+                session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+                request_factory(), admin_user,
+            )
+        assert exc.value.status_code == 422
+        assert len(exc.value.detail["errors"]) == 23, "Complete Register must reject all 23 still-unrecorded learners"

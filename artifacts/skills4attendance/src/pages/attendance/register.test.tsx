@@ -23,7 +23,9 @@ function makeSession(overrides: Record<string, any> = {}) {
 function makeEntries(overrides: Record<number, any> = {}) {
   const base = [
     { learnerId: 1, learnerName: 'Ada Lovelace', learnerRef: 'L-001', recordId: 10, status: 'present', hoursAttended: 7, minutesLate: 0, notes: null, overrideReason: null, lastEditedBy: null, lastEditedByName: null },
-    { learnerId: 2, learnerName: 'Bob Smith', learnerRef: 'L-002', recordId: null, status: 'absent_unauthorised', hoursAttended: 0, minutesLate: 0, notes: null, overrideReason: null, lastEditedBy: null, lastEditedByName: null },
+    // Bob has no attendance_records row yet (recordId: null) -- genuinely
+    // unrecorded, not a deliberate "Absent (Unauthorised)" decision.
+    { learnerId: 2, learnerName: 'Bob Smith', learnerRef: 'L-002', recordId: null, status: null, hoursAttended: 0, minutesLate: 0, notes: null, overrideReason: null, lastEditedBy: null, lastEditedByName: null },
   ];
   return base.map(e => ({ ...e, ...(overrides[e.learnerId] || {}) }));
 }
@@ -290,10 +292,33 @@ describe('RegisterPage', () => {
   // Explicit Save Draft / Complete Register (Phase 7)
   // -----------------------------------------------------------------------
 
-  it('Save Draft submits the current register version and full entries payload', async () => {
+  it('does not mark any row dirty or call the save mutation when nothing has changed', async () => {
     mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
     const user = userEvent.setup();
     renderAtLocation();
+
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    expect(mockSaveMutate).not.toHaveBeenCalled();
+  });
+
+  it('shows a neutral "Not recorded" placeholder for an unrecorded learner, never a preselected status', () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    renderAtLocation();
+
+    expect(screen.getByText('Not recorded')).toBeInTheDocument();
+  });
+
+  it('changing one learner to Absent (Authorised) sends only that row, leaving the other learner unrecorded', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('combobox', { name: /attendance status for bob smith/i }));
+    await user.click(await screen.findByText('Absent (Auth)'));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /save draft/i }));
 
@@ -303,10 +328,9 @@ describe('RegisterPage', () => {
         data: expect.objectContaining({
           registerVersion: 1,
           changeReason: undefined,
-          entries: expect.arrayContaining([
-            expect.objectContaining({ learnerId: 1, status: 'present', hoursAttended: 7 }),
-            expect.objectContaining({ learnerId: 2, status: 'absent_unauthorised', hoursAttended: 0 }),
-          ]),
+          entries: [
+            expect.objectContaining({ learnerId: 2, status: 'absent_authorised', hoursAttended: 0, minutesLate: 0 }),
+          ],
         }),
       },
       expect.anything(),
@@ -322,11 +346,30 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderAtLocation();
 
+    await user.click(screen.getByRole('combobox', { name: /attendance status for bob smith/i }));
+    await user.click(await screen.findByText('Absent (Auth)'));
+
     await user.click(screen.getByRole('button', { name: /complete register/i }));
 
     await waitFor(() => {
       expect(mockCompleteMutate).toHaveBeenCalledWith(
         { id: 200, data: { registerVersion: 2 } },
+        expect.anything(),
+      );
+    });
+  });
+
+  it('Complete Register with no local changes skips the save round trip and completes using the current version', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /complete register/i }));
+
+    expect(mockSaveMutate).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockCompleteMutate).toHaveBeenCalledWith(
+        { id: 200, data: { registerVersion: 1 } },
         expect.anything(),
       );
     });
@@ -391,6 +434,8 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderAtLocation();
 
+    await user.click(screen.getByRole('combobox', { name: /attendance status for bob smith/i }));
+    await user.click(await screen.findByText('Absent (Auth)'));
     await user.click(screen.getByRole('button', { name: /save draft/i }));
 
     expect(await screen.findByText(/reason for historical change/i)).toBeInTheDocument();
@@ -410,6 +455,8 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderAtLocation();
 
+    await user.click(screen.getByRole('combobox', { name: /attendance status for bob smith/i }));
+    await user.click(await screen.findByText('Late'));
     await user.click(screen.getByRole('button', { name: /save draft/i }));
 
     expect(await screen.findByText(/minutes late greater than zero/i)).toBeInTheDocument();
@@ -423,6 +470,8 @@ describe('RegisterPage', () => {
     const user = userEvent.setup();
     renderAtLocation();
 
+    await user.click(screen.getByRole('combobox', { name: /attendance status for bob smith/i }));
+    await user.click(await screen.findByText('Absent (Auth)'));
     await user.click(screen.getByRole('button', { name: /save draft/i }));
 
     expect(await screen.findByText(/this register has changed/i)).toBeInTheDocument();

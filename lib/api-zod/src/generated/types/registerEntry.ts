@@ -13,7 +13,7 @@ export interface RegisterEntry {
   learnerId: number;
   learnerName: string;
   learnerRef: string;
-  status: AttendanceStatus;
+  status: AttendanceStatus | null;
   hoursAttended: number;
   minutesLate: number;
   /** @nullable */

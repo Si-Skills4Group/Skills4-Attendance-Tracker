@@ -344,8 +344,6 @@ def get_attendance_session(session_id: int, session: dict = Depends(require_auth
         entries = cur.fetchall()
 
     for e in entries:
-        if e["status"] is None:
-            e["status"] = "absent_unauthorised"
         if e["hoursAttended"] is None:
             e["hoursAttended"] = 0
         if e["minutesLate"] is None:
