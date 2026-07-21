@@ -3,7 +3,9 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Router, Route } from 'wouter';
 import { memoryLocation } from 'wouter/memory-location';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithQueryClient } from '@/test/test-utils';
+import { render } from '@testing-library/react';
 import CohortSessionsPage from './cohort-sessions';
 
 const cohort = {
@@ -44,6 +46,22 @@ function renderAtLocation(searchPath = '') {
     </Router>,
   );
   return location;
+}
+
+function renderWithSpiedQueryClient(searchPath = '') {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+  const location = memoryLocation({ path: '/attendance/cohorts/5', searchPath, record: true });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <Router hook={location.hook} searchHook={location.searchHook}>
+        <Route path="/attendance/cohorts/:id" component={CohortSessionsPage} />
+      </Router>
+    </QueryClientProvider>,
+  );
+  return { invalidateSpy };
 }
 
 describe('CohortSessionsPage', () => {
@@ -183,6 +201,25 @@ describe('CohortSessionsPage', () => {
     expect(await screen.findByText('Session Conflict Detected')).toBeInTheDocument();
     expect(screen.getByText(/only an administrator can confirm/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /create anyway/i })).not.toBeInTheDocument();
+  });
+
+  it('refreshes the session list after creating a session, without needing a manual reload', async () => {
+    // Regression test: creating a session used to only close the dialog --
+    // the new session wouldn't appear until the user manually refreshed the
+    // page, since nothing told the sessions-list query it was stale.
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    mockCreateMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess());
+    const user = userEvent.setup();
+    const { invalidateSpy } = renderWithSpiedQueryClient();
+
+    await user.click(screen.getByRole('button', { name: /new session/i }));
+    await user.type(screen.getByLabelText('Title / Topic'), 'Module 1');
+    await user.click(screen.getByRole('button', { name: /create register/i }));
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith(
+      { queryKey: ['listAttendanceSessions', undefined] },
+    ));
   });
 
   it('offers session-status and register-status filters', () => {

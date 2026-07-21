@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetCohort,
   useListAttendanceSessions,
@@ -31,6 +32,7 @@ export default function CohortSessionsPage() {
   const params = useParams();
   const cohortId = Number(params.id);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: currentUser } = useGetCurrentUser();
 
   // Preserve the attendance cohort-list's filters across this round trip --
@@ -107,6 +109,7 @@ export default function CohortSessionsPage() {
         setCreateModalOpen(false);
         setConflictReasons(null);
         setOverrideReason("");
+        queryClient.invalidateQueries({ queryKey: getListAttendanceSessionsQueryKey() });
       },
       onError: (err) => {
         const status = (err as { status?: number } | undefined)?.status;
