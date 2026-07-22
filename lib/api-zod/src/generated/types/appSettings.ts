@@ -9,4 +9,8 @@
 export interface AppSettings {
   organisationName: string;
   lowAttendanceThreshold: number;
+  budSyncMaxLearnerCreations: number;
+  budSyncMaxLearnerUpdates: number;
+  budSyncMaxCohortCreations: number;
+  budSyncMaxTutorTransfers: number;
 }

@@ -229,35 +229,44 @@ def list_cohort_summary(
     ]
 
 
-@router.post("/cohorts", status_code=201)
-def create_cohort(payload: CohortInput, request: Request, _session: dict = Depends(require_admin)):
-    with get_cursor() as cur:
-        _ensure_tutor_active(cur, payload.tutorId)
-        cur.execute(
-            """
-            INSERT INTO cohorts (name, programme, level, tutor_id, delivery_day, session_start_time,
-                                  session_end_time, start_date, end_date, active, external_system_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
-            """,
-            (
-                payload.name,
-                payload.programme,
-                payload.level,
-                payload.tutorId,
-                payload.deliveryDay,
-                payload.sessionStartTime,
-                payload.sessionEndTime,
-                payload.startDate,
-                payload.endDate,
-                payload.active,
-                payload.externalSystemId,
-            ),
-        )
-        created = cur.fetchone()
-        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (created["id"],))
-        full = cur.fetchone()
+def _create_cohort(cur, payload: CohortInput, request: Request, session: dict) -> dict:
+    """Cursor-accepting internal, callable from within another caller's own
+    transaction (e.g. the Bud sync trial's commit step) as well as from the
+    plain admin route below -- mirrors the _create_learner/_create_tutor
+    pattern already used for CSV import."""
+    _ensure_tutor_active(cur, payload.tutorId)
+    cur.execute(
+        """
+        INSERT INTO cohorts (name, programme, level, tutor_id, delivery_day, session_start_time,
+                              session_end_time, start_date, end_date, active, external_system_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
+        """,
+        (
+            payload.name,
+            payload.programme,
+            payload.level,
+            payload.tutorId,
+            payload.deliveryDay,
+            payload.sessionStartTime,
+            payload.sessionEndTime,
+            payload.startDate,
+            payload.endDate,
+            payload.active,
+            payload.externalSystemId,
+        ),
+    )
+    created = cur.fetchone()
+    cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (created["id"],))
+    full = cur.fetchone()
 
-    write_audit_log(request, action="create", entity_type="cohort", entity_id=created["id"], new_value=created)
+    write_audit_log(request, action="create", entity_type="cohort", entity_id=created["id"], new_value=created, cur=cur)
+    return full
+
+
+@router.post("/cohorts", status_code=201)
+def create_cohort(payload: CohortInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        full = _create_cohort(cur, payload, request, session)
     return full
 
 

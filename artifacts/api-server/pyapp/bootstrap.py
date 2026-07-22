@@ -477,6 +477,137 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_correlation_id ON audit_logs (correlat
 INSERT INTO app_settings (id, organisation_name, low_attendance_threshold)
 VALUES (1, 'Skills4Group', 85)
 ON CONFLICT (id) DO NOTHING;
+
+-- Phase 11: controlled Bud delta-synchronisation trial. public.learner_progress
+-- itself is owned by a separate, already-deployed sync service and is never
+-- created/altered here -- these tables are purely this app's own trial
+-- bookkeeping (baseline/job/item tracking, accepted-source snapshots, and a
+-- deterministic Bud-cohort key mapping), never a copy of the source view.
+
+ALTER TABLE learners ADD COLUMN IF NOT EXISTS mobile text;
+
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS bud_sync_max_learner_creations integer NOT NULL DEFAULT 10;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS bud_sync_max_learner_updates integer NOT NULL DEFAULT 25;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS bud_sync_max_cohort_creations integer NOT NULL DEFAULT 5;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS bud_sync_max_tutor_transfers integer NOT NULL DEFAULT 5;
+
+CREATE TABLE IF NOT EXISTS bud_sync_baseline (
+  id serial PRIMARY KEY,
+  established_at timestamptz NOT NULL DEFAULT now(),
+  established_by integer NOT NULL,
+  source_max_synced_at timestamptz,
+  source_row_count integer NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  notes text,
+  correlation_id text,
+  superseded_at timestamptz,
+  superseded_by integer,
+  reset_reason text
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_sync_baseline_one_active
+  ON bud_sync_baseline ((1)) WHERE status = 'active';
+
+ALTER TABLE bud_sync_baseline DROP CONSTRAINT IF EXISTS bud_sync_baseline_status_check;
+ALTER TABLE bud_sync_baseline ADD CONSTRAINT bud_sync_baseline_status_check
+  CHECK (status IN ('active', 'superseded'));
+
+CREATE TABLE IF NOT EXISTS bud_sync_job (
+  id serial PRIMARY KEY,
+  baseline_id integer NOT NULL,
+  status text NOT NULL DEFAULT 'ready',
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  started_by integer NOT NULL,
+  source_max_synced_at timestamptz,
+  total_source_rows_examined integer NOT NULL DEFAULT 0,
+  new_learners_detected integer NOT NULL DEFAULT 0,
+  learner_updates_detected integer NOT NULL DEFAULT 0,
+  cohorts_proposed integer NOT NULL DEFAULT 0,
+  allocations_proposed integer NOT NULL DEFAULT 0,
+  transfers_proposed integer NOT NULL DEFAULT 0,
+  approved_count integer NOT NULL DEFAULT 0,
+  applied_count integer NOT NULL DEFAULT 0,
+  skipped_count integer NOT NULL DEFAULT 0,
+  conflict_count integer NOT NULL DEFAULT 0,
+  error_count integer NOT NULL DEFAULT 0,
+  approval_reason text,
+  correlation_id text,
+  error_summary text
+);
+
+CREATE INDEX IF NOT EXISTS idx_bud_sync_job_status ON bud_sync_job (status);
+CREATE INDEX IF NOT EXISTS idx_bud_sync_job_baseline_id ON bud_sync_job (baseline_id);
+
+ALTER TABLE bud_sync_job DROP CONSTRAINT IF EXISTS bud_sync_job_status_check;
+ALTER TABLE bud_sync_job ADD CONSTRAINT bud_sync_job_status_check
+  CHECK (status IN ('ready', 'committing', 'completed', 'failed'));
+
+CREATE TABLE IF NOT EXISTS bud_sync_item (
+  id serial PRIMARY KEY,
+  sync_job_id integer NOT NULL,
+  source_identifier text NOT NULL,
+  match_status text NOT NULL,
+  action_type text NOT NULL DEFAULT 'none',
+  internal_learner_id integer,
+  proposed_values jsonb NOT NULL DEFAULT '{}'::jsonb,
+  previous_values jsonb NOT NULL DEFAULT '{}'::jsonb,
+  warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
+  reason text,
+  approved boolean NOT NULL DEFAULT false,
+  applied boolean NOT NULL DEFAULT false,
+  outcome text,
+  error_code text,
+  processed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_bud_sync_item_job_id ON bud_sync_item (sync_job_id);
+CREATE INDEX IF NOT EXISTS idx_bud_sync_item_match_status ON bud_sync_item (sync_job_id, match_status);
+
+ALTER TABLE bud_sync_item DROP CONSTRAINT IF EXISTS bud_sync_item_match_status_check;
+ALTER TABLE bud_sync_item ADD CONSTRAINT bud_sync_item_match_status_check
+  CHECK (match_status IN ('new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped'));
+
+ALTER TABLE bud_sync_item DROP CONSTRAINT IF EXISTS bud_sync_item_action_type_check;
+ALTER TABLE bud_sync_item ADD CONSTRAINT bud_sync_item_action_type_check
+  CHECK (action_type IN ('create_learner', 'update_learner', 'create_cohort', 'create_allocation',
+                          'transfer_tutor', 'change_start_date', 'change_status', 'none'));
+
+CREATE TABLE IF NOT EXISTS bud_learner_link (
+  id serial PRIMARY KEY,
+  internal_learner_id integer NOT NULL,
+  bud_learning_plan_id text NOT NULL,
+  bud_apprentice_id text,
+  bud_uln text,
+  accepted_synced_at timestamptz,
+  accepted_values jsonb NOT NULL DEFAULT '{}'::jsonb,
+  last_sync_job_id integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_learner_link_learner_id ON bud_learner_link (internal_learner_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_learner_link_learning_plan_id ON bud_learner_link (bud_learning_plan_id);
+
+CREATE TABLE IF NOT EXISTS bud_cohort_mapping (
+  id serial PRIMARY KEY,
+  cohort_id integer NOT NULL,
+  bud_sync_key text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by integer
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_cohort_mapping_cohort_id ON bud_cohort_mapping (cohort_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_cohort_mapping_sync_key ON bud_cohort_mapping (bud_sync_key);
+
+-- Display-only Bud identity fields for the trial's item table -- shown to
+-- the Administrator instead of the internal source_identifier
+-- (learning_plan_id), which stays the actual join key but is not something
+-- a person can recognise a learner by.
+ALTER TABLE bud_sync_item ADD COLUMN IF NOT EXISTS source_learner_reference text;
+ALTER TABLE bud_sync_item ADD COLUMN IF NOT EXISTS source_first_name text;
+ALTER TABLE bud_sync_item ADD COLUMN IF NOT EXISTS source_last_name text;
 """
 
 

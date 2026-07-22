@@ -14,4 +14,24 @@ export interface SettingsUpdate {
      * @maximum 100
      */
   lowAttendanceThreshold?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxLearnerCreations?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxLearnerUpdates?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxCohortCreations?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxTutorTransfers?: number;
 }

@@ -13,11 +13,12 @@ import {
   UserPlus, 
   CalendarDays, 
   FileBarChart, 
-  History, 
+  History,
   Settings,
   LogOut,
   Menu,
-  X
+  X,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSpinner } from "@/components/page-loading-spinner";
@@ -115,6 +116,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { name: "Attendance", href: "/attendance", icon: CalendarDays, roles: ['admin', 'tutor'] },
     { name: "Reports", href: "/reports", icon: FileBarChart, roles: ['admin', 'tutor'] },
     { name: "Audit Log", href: "/audit-log", icon: History, roles: ['admin'] },
+    { name: "Bud Sync Trial", href: "/bud-sync-trial", icon: RefreshCw, roles: ['admin'] },
     { name: "Settings", href: "/settings", icon: Settings, roles: ['admin'] },
   ];
 

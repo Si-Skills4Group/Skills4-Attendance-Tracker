@@ -39,6 +39,7 @@ from .routers import (
     reports,
     audit_routes,
     settings,
+    bud_sync,
 )
 
 configure_logging()
@@ -159,6 +160,7 @@ for router in (
     reports.router,
     audit_routes.router,
     settings.router,
+    bud_sync.router,
 ):
     app.include_router(router, prefix="/api")
 

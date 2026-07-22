@@ -234,6 +234,7 @@ def cohort_factory(db):
     yield make
 
     for cohort_id in created_ids:
+        db.execute("DELETE FROM bud_cohort_mapping WHERE cohort_id = %s", (cohort_id,))
         db.execute("DELETE FROM cohorts WHERE id = %s", (cohort_id,))
 
 
@@ -281,7 +282,93 @@ def learner_factory(db):
         db.execute("DELETE FROM attendance_records WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM scheduled_allocations WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learner_allocation_history WHERE learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learners WHERE id = %s", (learner_id,))
+
+
+@pytest.fixture
+def bud_row_factory(db):
+    """Seeds a row into the throwaway public.learner_progress table (see
+    _learner_progress_table_for_tests) shaped like a real Bud sync row.
+    Returns the row re-read in the same camelCase shape classify_row/
+    run_preview actually consume (mirroring _fetch_bud_rows's own SELECT,
+    but deliberately NOT calling that function directly and NOT filtering
+    by status_desc) so tests can pass the return value straight into
+    classify_row without a separate re-fetch step, and so seeding a
+    non-'In Progress' row for status-eligibility tests still returns a
+    usable row even though _fetch_bud_rows itself would exclude it."""
+    created_plan_ids = []
+
+    def make(**overrides) -> dict:
+        suffix = os.urandom(4).hex()
+        defaults = dict(
+            learning_plan_id=f"TEST-PLAN-{suffix}",
+            apprentice_id=f"TEST-APP-{suffix}",
+            learner_forename="Bud",
+            learner_surname="Learner",
+            learner_email=f"bud-learner-{suffix}@example.com",
+            learner_mobile=None,
+            learner_reference=None,
+            unique_learner_number=f"ULN{suffix}",
+            start_date="2026-02-01",
+            tutor_name="Bud Tutor",
+            tutor_id=None,
+            programme_name="Test Programme",
+            status_desc="In Progress",
+            learning_plan_url=None,
+            synced_at="2026-02-01T10:00:00Z",
+        )
+        defaults.update(overrides)
+        columns = ", ".join(defaults.keys())
+        placeholders = ", ".join(f"%({k})s" for k in defaults)
+        db.execute(f"INSERT INTO public.learner_progress ({columns}) VALUES ({placeholders})", defaults)
+        created_plan_ids.append(defaults["learning_plan_id"])
+        db.execute(
+            """
+            SELECT learning_plan_id AS "learningPlanId", apprentice_id AS "apprenticeId",
+                   learner_forename AS "learnerForename", learner_surname AS "learnerSurname",
+                   learner_email AS "learnerEmail", learner_mobile AS "learnerMobile",
+                   learner_reference AS "learnerReference", unique_learner_number AS "uln",
+                   start_date AS "startDate", tutor_name AS "tutorName", tutor_id AS "budTutorId",
+                   programme_name AS "programmeName", status_desc AS "statusDesc",
+                   learning_plan_url AS "learningPlanUrl", synced_at AS "syncedAt"
+            FROM public.learner_progress WHERE learning_plan_id = %s
+            """,
+            (defaults["learning_plan_id"],),
+        )
+        return db.fetchone()
+
+    yield make
+
+    for plan_id in created_plan_ids:
+        db.execute("DELETE FROM public.learner_progress WHERE learning_plan_id = %s", (plan_id,))
+
+
+@pytest.fixture
+def baseline_factory(db, admin_user):
+    """Establishes a Bud sync trial baseline directly via bud_sync_lib
+    (bypassing the HTTP layer, matching the rest of this file's factory
+    style). Baselines are a global singleton (at most one active row) --
+    this wipes any leftover baseline state first so tests never fail due to
+    a previous run's crash-before-teardown, then cleans up after itself."""
+    from pyapp.bud_sync_lib import establish_baseline
+
+    db.execute("DELETE FROM bud_sync_item")
+    db.execute("DELETE FROM bud_sync_job")
+    db.execute("DELETE FROM bud_sync_baseline")
+    created_ids = []
+
+    def make(notes: str | None = None) -> dict:
+        request = FakeRequest(admin_user)
+        baseline = establish_baseline(db, request, admin_user, notes=notes)
+        created_ids.append(baseline["id"])
+        return baseline
+
+    yield make
+
+    db.execute("DELETE FROM bud_sync_item")
+    db.execute("DELETE FROM bud_sync_job")
+    db.execute("DELETE FROM bud_sync_baseline")
 
 
 @pytest.fixture

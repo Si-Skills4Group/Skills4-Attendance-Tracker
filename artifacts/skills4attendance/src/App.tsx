@@ -36,6 +36,7 @@ const AttendanceHoursReportPage = React.lazy(() => import("@/pages/reports/atten
 const RegisterCompletionReportPage = React.lazy(() => import("@/pages/reports/register-completion"));
 const AllocationHistoryReportPage = React.lazy(() => import("@/pages/reports/allocation-history"));
 const AuditLogPage = React.lazy(() => import("@/pages/audit-log"));
+const BudSyncTrialPage = React.lazy(() => import("@/pages/bud-sync-trial"));
 const SettingsPage = React.lazy(() => import("@/pages/settings"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
 
@@ -78,6 +79,7 @@ function ProtectedRouter() {
           <Route path="/reports/register-completion" component={RegisterCompletionReportPage} />
           <Route path="/reports/allocation-history" component={AllocationHistoryReportPage} />
           <Route path="/audit-log">{() => <RequireAdmin><AuditLogPage /></RequireAdmin>}</Route>
+          <Route path="/bud-sync-trial">{() => <RequireAdmin><BudSyncTrialPage /></RequireAdmin>}</Route>
           <Route path="/settings">{() => <RequireAdmin><SettingsPage /></RequireAdmin>}</Route>
           <Route path="/" component={() => {
             window.location.href = "/dashboard";

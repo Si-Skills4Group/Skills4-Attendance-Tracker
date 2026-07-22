@@ -10,11 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, Building2 } from "lucide-react";
+import { Loader2, Save, Building2, RefreshCw } from "lucide-react";
 
 const settingsSchema = z.object({
   organisationName: z.string().min(1, "Organisation name is required"),
-  lowAttendanceThreshold: z.coerce.number().min(0).max(100, "Threshold must be between 0 and 100")
+  lowAttendanceThreshold: z.coerce.number().min(0).max(100, "Threshold must be between 0 and 100"),
+  budSyncMaxLearnerCreations: z.coerce.number().min(0).max(1000),
+  budSyncMaxLearnerUpdates: z.coerce.number().min(0).max(1000),
+  budSyncMaxCohortCreations: z.coerce.number().min(0).max(1000),
+  budSyncMaxTutorTransfers: z.coerce.number().min(0).max(1000),
 });
 
 export default function SettingsPage() {
@@ -26,7 +30,11 @@ export default function SettingsPage() {
     resolver: zodResolver(settingsSchema),
     defaultValues: {
       organisationName: "",
-      lowAttendanceThreshold: 80
+      lowAttendanceThreshold: 80,
+      budSyncMaxLearnerCreations: 10,
+      budSyncMaxLearnerUpdates: 25,
+      budSyncMaxCohortCreations: 5,
+      budSyncMaxTutorTransfers: 5,
     }
   });
 
@@ -36,7 +44,11 @@ export default function SettingsPage() {
       initializedRef.current = true;
       form.reset({
         organisationName: settings.organisationName,
-        lowAttendanceThreshold: settings.lowAttendanceThreshold
+        lowAttendanceThreshold: settings.lowAttendanceThreshold,
+        budSyncMaxLearnerCreations: settings.budSyncMaxLearnerCreations,
+        budSyncMaxLearnerUpdates: settings.budSyncMaxLearnerUpdates,
+        budSyncMaxCohortCreations: settings.budSyncMaxCohortCreations,
+        budSyncMaxTutorTransfers: settings.budSyncMaxTutorTransfers,
       });
     }
   }, [settings, form]);
@@ -96,6 +108,45 @@ export default function SettingsPage() {
                     <FormDescription>
                       Learners falling below this percentage will be flagged on dashboards.
                     </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="border-b bg-muted/10 pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-primary" /> Bud Sync Trial Limits
+                </CardTitle>
+                <CardDescription>Conservative caps on how much a single approved commit can apply.</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6 grid grid-cols-2 gap-6">
+                <FormField control={form.control} name="budSyncMaxLearnerCreations" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max learner creations</FormLabel>
+                    <FormControl><Input type="number" {...field} className="font-mono" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="budSyncMaxLearnerUpdates" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max learner updates</FormLabel>
+                    <FormControl><Input type="number" {...field} className="font-mono" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="budSyncMaxCohortCreations" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max cohort creations</FormLabel>
+                    <FormControl><Input type="number" {...field} className="font-mono" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="budSyncMaxTutorTransfers" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max tutor transfers</FormLabel>
+                    <FormControl><Input type="number" {...field} className="font-mono" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

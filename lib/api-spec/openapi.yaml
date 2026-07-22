@@ -2573,6 +2573,260 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppSettings"
 
+  /bud-sync/status:
+    get:
+      operationId: getBudSyncStatus
+      tags: [bud-sync]
+      responses:
+        "200":
+          description: Current Bud source status and the active trial baseline, if any
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncStatus"
+  /bud-sync/baseline:
+    post:
+      operationId: establishBudSyncBaseline
+      tags: [bud-sync]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudSyncBaselineInput"
+      responses:
+        "201":
+          description: Trial baseline established -- no learners, cohorts, or allocations are created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncBaseline"
+        "409":
+          description: A trial baseline is already active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/baseline/reset:
+    post:
+      operationId: resetBudSyncBaseline
+      tags: [bud-sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudSyncBaselineResetInput"
+      responses:
+        "201":
+          description: Previous baseline superseded (never deleted) and a new one established
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncBaseline"
+        "409":
+          description: No active baseline to reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/baseline/history:
+    get:
+      operationId: getBudSyncBaselineHistory
+      tags: [bud-sync]
+      responses:
+        "200":
+          description: Every baseline ever established, newest first -- superseded baselines are kept, never deleted
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/BudSyncBaseline" }
+  /bud-sync/preview:
+    post:
+      operationId: createBudSyncPreview
+      tags: [bud-sync]
+      responses:
+        "201":
+          description: >-
+            Read-only classification of every Bud source row against the active
+            baseline -- writes only trial bookkeeping (the job and its items),
+            never a learner, cohort, or allocation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJob"
+        "409":
+          description: No active trial baseline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/jobs:
+    get:
+      operationId: listBudSyncJobs
+      tags: [bud-sync]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated sync job history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJobListResponse"
+  /bud-sync/jobs/{jobId}:
+    get:
+      operationId: getBudSyncJob
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Sync job status and summary counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/jobs/{jobId}/items:
+    get:
+      operationId: listBudSyncJobItems
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: matchStatus
+          in: query
+          schema: { $ref: "#/components/schemas/BudSyncMatchStatus" }
+        - name: actionType
+          in: query
+          schema: { $ref: "#/components/schemas/BudSyncActionType" }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated proposed items for this sync job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncItemListResponse"
+  /bud-sync/jobs/{jobId}/items/{itemId}:
+    patch:
+      operationId: updateBudSyncJobItem
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudSyncItemUpdateInput"
+      responses:
+        "200":
+          description: Item updated (Administrator-supplied field, and/or approval toggled)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncItem"
+        "400":
+          description: Conflicted item cannot be approved, or required fields are still missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/jobs/{jobId}/commit:
+    post:
+      operationId: commitBudSyncJob
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudSyncCommitInput"
+      responses:
+        "200":
+          description: >-
+            Approved items applied transactionally (or, if already completed,
+            the same stored result -- committing is idempotent). Stale
+            items (source or internal data changed since preview) are
+            excluded rather than applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJob"
+        "400":
+          description: Conflicted or incomplete items were selected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Job not ready to commit, baseline changed since preview, or a trial limit was exceeded without an override reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/unmatched-pre-baseline:
+    get:
+      operationId: listBudSyncUnmatchedPreBaseline
+      tags: [bud-sync]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: >-
+            Read-only awareness list of Bud rows present at-or-before the
+            active baseline -- excluded from the trial by design, never
+            processed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncUnmatchedPreBaselineResponse"
+
 components:
   parameters:
     PeriodParam:
@@ -4418,13 +4672,266 @@ components:
 
     AppSettings:
       type: object
-      required: [organisationName, lowAttendanceThreshold]
+      required:
+        [
+          organisationName,
+          lowAttendanceThreshold,
+          budSyncMaxLearnerCreations,
+          budSyncMaxLearnerUpdates,
+          budSyncMaxCohortCreations,
+          budSyncMaxTutorTransfers,
+        ]
       properties:
         organisationName: { type: string }
         lowAttendanceThreshold: { type: number }
+        budSyncMaxLearnerCreations: { type: integer }
+        budSyncMaxLearnerUpdates: { type: integer }
+        budSyncMaxCohortCreations: { type: integer }
+        budSyncMaxTutorTransfers: { type: integer }
 
     SettingsUpdate:
       type: object
       properties:
         organisationName: { type: string, minLength: 1 }
         lowAttendanceThreshold: { type: number, minimum: 0, maximum: 100 }
+        budSyncMaxLearnerCreations: { type: integer, minimum: 0, maximum: 1000 }
+        budSyncMaxLearnerUpdates: { type: integer, minimum: 0, maximum: 1000 }
+        budSyncMaxCohortCreations: { type: integer, minimum: 0, maximum: 1000 }
+        budSyncMaxTutorTransfers: { type: integer, minimum: 0, maximum: 1000 }
+
+    BudSyncBaselineStatus:
+      type: string
+      enum: [active, superseded]
+
+    BudSyncJobStatus:
+      type: string
+      enum: [ready, committing, completed, failed]
+
+    BudSyncMatchStatus:
+      type: string
+      enum: [new, existing_update, unchanged, conflict, existing_before_trial, skipped]
+
+    BudSyncActionType:
+      type: string
+      enum:
+        [
+          create_learner,
+          update_learner,
+          create_cohort,
+          create_allocation,
+          transfer_tutor,
+          change_start_date,
+          change_status,
+          none,
+        ]
+
+    BudSyncBaseline:
+      type: object
+      required:
+        [
+          id,
+          establishedAt,
+          establishedBy,
+          sourceMaxSyncedAt,
+          sourceRowCount,
+          status,
+          notes,
+          correlationId,
+        ]
+      properties:
+        id: { type: integer }
+        establishedAt: { type: string, format: date-time }
+        establishedBy: { type: integer }
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        sourceRowCount: { type: integer }
+        status: { $ref: "#/components/schemas/BudSyncBaselineStatus" }
+        notes: { type: ["string", "null"] }
+        correlationId: { type: ["string", "null"] }
+        supersededAt: { type: ["string", "null"], format: date-time }
+        supersededBy: { type: ["integer", "null"] }
+        resetReason: { type: ["string", "null"] }
+
+    BudSyncBaselineInput:
+      type: object
+      properties:
+        notes: { type: ["string", "null"] }
+
+    BudSyncBaselineResetInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
+    BudSyncStatus:
+      type: object
+      required: [sourceMaxSyncedAt, sourceRowCount, matchedLearnerCount, unmatchedLearnerCount, activeBaseline]
+      properties:
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        sourceRowCount: { type: integer }
+        matchedLearnerCount: { type: integer }
+        unmatchedLearnerCount: { type: integer }
+        activeBaseline:
+          oneOf:
+            - $ref: "#/components/schemas/BudSyncBaseline"
+            - type: "null"
+
+    BudSyncJob:
+      type: object
+      required:
+        [
+          id,
+          baselineId,
+          status,
+          startedAt,
+          completedAt,
+          startedBy,
+          sourceMaxSyncedAt,
+          totalSourceRowsExamined,
+          newLearnersDetected,
+          learnerUpdatesDetected,
+          cohortsProposed,
+          allocationsProposed,
+          transfersProposed,
+          approvedCount,
+          appliedCount,
+          skippedCount,
+          conflictCount,
+          errorCount,
+          approvalReason,
+          correlationId,
+          errorSummary,
+        ]
+      properties:
+        id: { type: integer }
+        baselineId: { type: integer }
+        status: { $ref: "#/components/schemas/BudSyncJobStatus" }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        startedBy: { type: integer }
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        totalSourceRowsExamined: { type: integer }
+        newLearnersDetected: { type: integer }
+        learnerUpdatesDetected: { type: integer }
+        cohortsProposed: { type: integer }
+        allocationsProposed: { type: integer }
+        transfersProposed: { type: integer }
+        approvedCount: { type: integer }
+        appliedCount: { type: integer }
+        skippedCount: { type: integer }
+        conflictCount: { type: integer }
+        errorCount: { type: integer }
+        approvalReason: { type: ["string", "null"] }
+        correlationId: { type: ["string", "null"] }
+        errorSummary: { type: ["string", "null"] }
+
+    BudSyncJobListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BudSyncJob" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    BudSyncItem:
+      type: object
+      required:
+        [
+          id,
+          syncJobId,
+          sourceIdentifier,
+          matchStatus,
+          actionType,
+          internalLearnerId,
+          proposedValues,
+          previousValues,
+          warnings,
+          reason,
+          approved,
+          applied,
+          outcome,
+          errorCode,
+          processedAt,
+          sourceLearnerReference,
+          sourceFirstName,
+          sourceLastName,
+        ]
+      properties:
+        id: { type: integer }
+        syncJobId: { type: integer }
+        sourceIdentifier: { type: string }
+        matchStatus: { $ref: "#/components/schemas/BudSyncMatchStatus" }
+        actionType: { $ref: "#/components/schemas/BudSyncActionType" }
+        internalLearnerId: { type: ["integer", "null"] }
+        proposedValues:
+          type: object
+          additionalProperties: true
+        previousValues:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items: { type: string }
+        reason: { type: ["string", "null"] }
+        approved: { type: boolean }
+        applied: { type: boolean }
+        outcome: { type: ["string", "null"] }
+        errorCode: { type: ["string", "null"] }
+        processedAt: { type: ["string", "null"], format: date-time }
+        sourceLearnerReference: { type: ["string", "null"] }
+        sourceFirstName: { type: ["string", "null"] }
+        sourceLastName: { type: ["string", "null"] }
+
+    BudSyncItemListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BudSyncItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    BudSyncItemUpdateInput:
+      type: object
+      properties:
+        fieldUpdates:
+          type: ["object", "null"]
+          additionalProperties: { type: string }
+        approved: { type: ["boolean", "null"] }
+
+    BudSyncCommitInput:
+      type: object
+      required: [itemIds, approvalReason]
+      properties:
+        itemIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+        approvalReason: { type: string, minLength: 1 }
+        limitOverrideReason: { type: ["string", "null"] }
+
+    BudSyncUnmatchedPreBaselineItem:
+      type: object
+      required: [sourceIdentifier, internalLearnerId, reason, sourceLearnerReference, sourceFirstName, sourceLastName]
+      properties:
+        sourceIdentifier: { type: string }
+        internalLearnerId: { type: ["integer", "null"] }
+        reason: { type: ["string", "null"] }
+        sourceLearnerReference: { type: ["string", "null"] }
+        sourceFirstName: { type: ["string", "null"] }
+        sourceLastName: { type: ["string", "null"] }
+
+    BudSyncUnmatchedPreBaselineResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BudSyncUnmatchedPreBaselineItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }

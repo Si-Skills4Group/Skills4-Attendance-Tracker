@@ -5,7 +5,7 @@ LEARNERS_WITH_NAMES_SELECT = """
     SELECT
         l.id, l.learner_ref AS "learnerRef", l.uln,
         l.first_name AS "firstName", l.last_name AS "lastName",
-        l.email, l.employer, l.programme, l.level,
+        l.email, l.mobile, l.employer, l.programme, l.level,
         l.start_date AS "startDate", l.planned_end_date AS "plannedEndDate",
         l.actual_end_date AS "actualEndDate", l.withdrawal_date AS "withdrawalDate",
         l.status, l.tutor_id AS "tutorId", l.cohort_id AS "cohortId",

@@ -39,6 +39,17 @@ import type {
   AuditLogEntry,
   AuditLogListResponse,
   AuthUser,
+  BudSyncBaseline,
+  BudSyncBaselineInput,
+  BudSyncBaselineResetInput,
+  BudSyncCommitInput,
+  BudSyncItem,
+  BudSyncItemListResponse,
+  BudSyncItemUpdateInput,
+  BudSyncJob,
+  BudSyncJobListResponse,
+  BudSyncStatus,
+  BudSyncUnmatchedPreBaselineResponse,
   CancelScheduledAllocationResult,
   Cohort,
   CohortCardSummary,
@@ -98,6 +109,9 @@ import type {
   ListAllocationHistoryParams,
   ListAttendanceSessionsParams,
   ListAuditLogParams,
+  ListBudSyncJobItemsParams,
+  ListBudSyncJobsParams,
+  ListBudSyncUnmatchedPreBaselineParams,
   ListCohortSummaryParams,
   ListCohortsParams,
   ListLearnerImportJobRowsParams,
@@ -7667,4 +7681,785 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
     }
+
+export const getGetBudSyncStatusUrl = () => {
+
+
+
+
+  return `/api/bud-sync/status`
+}
+
+export const getBudSyncStatus = async ( options?: RequestInit): Promise<BudSyncStatus> => {
+
+  return customFetch<BudSyncStatus>(getGetBudSyncStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBudSyncStatusQueryKey = () => {
+    return [
+    `/api/bud-sync/status`
+    ] as const;
+    }
+
+
+export const getGetBudSyncStatusQueryOptions = <TData = Awaited<ReturnType<typeof getBudSyncStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudSyncStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBudSyncStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBudSyncStatus>>> = ({ signal }) => getBudSyncStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBudSyncStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBudSyncStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getBudSyncStatus>>>
+export type GetBudSyncStatusQueryError = ErrorType<unknown>
+
+
+
+export function useGetBudSyncStatus<TData = Awaited<ReturnType<typeof getBudSyncStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudSyncStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBudSyncStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getEstablishBudSyncBaselineUrl = () => {
+
+
+
+
+  return `/api/bud-sync/baseline`
+}
+
+export const establishBudSyncBaseline = async (budSyncBaselineInput?: BudSyncBaselineInput, options?: RequestInit): Promise<BudSyncBaseline> => {
+
+  return customFetch<BudSyncBaseline>(getEstablishBudSyncBaselineUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(budSyncBaselineInput)
+  }
+);}
+
+
+
+
+
+export const getEstablishBudSyncBaselineMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof establishBudSyncBaseline>>, TError,{data?: BodyType<BudSyncBaselineInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof establishBudSyncBaseline>>, TError,{data?: BodyType<BudSyncBaselineInput>}, TContext> => {
+
+const mutationKey = ['establishBudSyncBaseline'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof establishBudSyncBaseline>>, {data?: BodyType<BudSyncBaselineInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  establishBudSyncBaseline(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EstablishBudSyncBaselineMutationResult = NonNullable<Awaited<ReturnType<typeof establishBudSyncBaseline>>>
+    export type EstablishBudSyncBaselineMutationBody = BodyType<BudSyncBaselineInput> | undefined
+    export type EstablishBudSyncBaselineMutationError = ErrorType<ErrorResponse>
+
+    export const useEstablishBudSyncBaseline = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof establishBudSyncBaseline>>, TError,{data?: BodyType<BudSyncBaselineInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof establishBudSyncBaseline>>,
+        TError,
+        {data?: BodyType<BudSyncBaselineInput>},
+        TContext
+      > => {
+      return useMutation(getEstablishBudSyncBaselineMutationOptions(options));
+    }
+
+export const getResetBudSyncBaselineUrl = () => {
+
+
+
+
+  return `/api/bud-sync/baseline/reset`
+}
+
+export const resetBudSyncBaseline = async (budSyncBaselineResetInput: BudSyncBaselineResetInput, options?: RequestInit): Promise<BudSyncBaseline> => {
+
+  return customFetch<BudSyncBaseline>(getResetBudSyncBaselineUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(budSyncBaselineResetInput)
+  }
+);}
+
+
+
+
+
+export const getResetBudSyncBaselineMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetBudSyncBaseline>>, TError,{data: BodyType<BudSyncBaselineResetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetBudSyncBaseline>>, TError,{data: BodyType<BudSyncBaselineResetInput>}, TContext> => {
+
+const mutationKey = ['resetBudSyncBaseline'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetBudSyncBaseline>>, {data: BodyType<BudSyncBaselineResetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetBudSyncBaseline(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetBudSyncBaselineMutationResult = NonNullable<Awaited<ReturnType<typeof resetBudSyncBaseline>>>
+    export type ResetBudSyncBaselineMutationBody = BodyType<BudSyncBaselineResetInput>
+    export type ResetBudSyncBaselineMutationError = ErrorType<ErrorResponse>
+
+    export const useResetBudSyncBaseline = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetBudSyncBaseline>>, TError,{data: BodyType<BudSyncBaselineResetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetBudSyncBaseline>>,
+        TError,
+        {data: BodyType<BudSyncBaselineResetInput>},
+        TContext
+      > => {
+      return useMutation(getResetBudSyncBaselineMutationOptions(options));
+    }
+
+export const getGetBudSyncBaselineHistoryUrl = () => {
+
+
+
+
+  return `/api/bud-sync/baseline/history`
+}
+
+export const getBudSyncBaselineHistory = async ( options?: RequestInit): Promise<BudSyncBaseline[]> => {
+
+  return customFetch<BudSyncBaseline[]>(getGetBudSyncBaselineHistoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBudSyncBaselineHistoryQueryKey = () => {
+    return [
+    `/api/bud-sync/baseline/history`
+    ] as const;
+    }
+
+
+export const getGetBudSyncBaselineHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getBudSyncBaselineHistory>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudSyncBaselineHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBudSyncBaselineHistoryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBudSyncBaselineHistory>>> = ({ signal }) => getBudSyncBaselineHistory({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBudSyncBaselineHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBudSyncBaselineHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getBudSyncBaselineHistory>>>
+export type GetBudSyncBaselineHistoryQueryError = ErrorType<unknown>
+
+
+
+export function useGetBudSyncBaselineHistory<TData = Awaited<ReturnType<typeof getBudSyncBaselineHistory>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudSyncBaselineHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBudSyncBaselineHistoryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateBudSyncPreviewUrl = () => {
+
+
+
+
+  return `/api/bud-sync/preview`
+}
+
+export const createBudSyncPreview = async ( options?: RequestInit): Promise<BudSyncJob> => {
+
+  return customFetch<BudSyncJob>(getCreateBudSyncPreviewUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreateBudSyncPreviewMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBudSyncPreview>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBudSyncPreview>>, TError,void, TContext> => {
+
+const mutationKey = ['createBudSyncPreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBudSyncPreview>>, void> = () => {
+
+
+          return  createBudSyncPreview(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBudSyncPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof createBudSyncPreview>>>
+
+    export type CreateBudSyncPreviewMutationError = ErrorType<ErrorResponse>
+
+    export const useCreateBudSyncPreview = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBudSyncPreview>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBudSyncPreview>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getCreateBudSyncPreviewMutationOptions(options));
+    }
+
+export const getListBudSyncJobsUrl = (params?: ListBudSyncJobsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bud-sync/jobs?${stringifiedParams}` : `/api/bud-sync/jobs`
+}
+
+export const listBudSyncJobs = async (params?: ListBudSyncJobsParams, options?: RequestInit): Promise<BudSyncJobListResponse> => {
+
+  return customFetch<BudSyncJobListResponse>(getListBudSyncJobsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBudSyncJobsQueryKey = (params?: ListBudSyncJobsParams,) => {
+    return [
+    `/api/bud-sync/jobs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBudSyncJobsQueryOptions = <TData = Awaited<ReturnType<typeof listBudSyncJobs>>, TError = ErrorType<unknown>>(params?: ListBudSyncJobsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBudSyncJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBudSyncJobsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBudSyncJobs>>> = ({ signal }) => listBudSyncJobs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBudSyncJobs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBudSyncJobsQueryResult = NonNullable<Awaited<ReturnType<typeof listBudSyncJobs>>>
+export type ListBudSyncJobsQueryError = ErrorType<unknown>
+
+
+
+export function useListBudSyncJobs<TData = Awaited<ReturnType<typeof listBudSyncJobs>>, TError = ErrorType<unknown>>(
+ params?: ListBudSyncJobsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBudSyncJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBudSyncJobsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBudSyncJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/bud-sync/jobs/${jobId}`
+}
+
+export const getBudSyncJob = async (jobId: number, options?: RequestInit): Promise<BudSyncJob> => {
+
+  return customFetch<BudSyncJob>(getGetBudSyncJobUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBudSyncJobQueryKey = (jobId: number,) => {
+    return [
+    `/api/bud-sync/jobs/${jobId}`
+    ] as const;
+    }
+
+
+export const getGetBudSyncJobQueryOptions = <TData = Awaited<ReturnType<typeof getBudSyncJob>>, TError = ErrorType<ErrorResponse>>(jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudSyncJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBudSyncJobQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBudSyncJob>>> = ({ signal }) => getBudSyncJob(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBudSyncJob>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBudSyncJobQueryResult = NonNullable<Awaited<ReturnType<typeof getBudSyncJob>>>
+export type GetBudSyncJobQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetBudSyncJob<TData = Awaited<ReturnType<typeof getBudSyncJob>>, TError = ErrorType<ErrorResponse>>(
+ jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudSyncJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBudSyncJobQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListBudSyncJobItemsUrl = (jobId: number,
+    params?: ListBudSyncJobItemsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bud-sync/jobs/${jobId}/items?${stringifiedParams}` : `/api/bud-sync/jobs/${jobId}/items`
+}
+
+export const listBudSyncJobItems = async (jobId: number,
+    params?: ListBudSyncJobItemsParams, options?: RequestInit): Promise<BudSyncItemListResponse> => {
+
+  return customFetch<BudSyncItemListResponse>(getListBudSyncJobItemsUrl(jobId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBudSyncJobItemsQueryKey = (jobId: number,
+    params?: ListBudSyncJobItemsParams,) => {
+    return [
+    `/api/bud-sync/jobs/${jobId}/items`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBudSyncJobItemsQueryOptions = <TData = Awaited<ReturnType<typeof listBudSyncJobItems>>, TError = ErrorType<unknown>>(jobId: number,
+    params?: ListBudSyncJobItemsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBudSyncJobItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBudSyncJobItemsQueryKey(jobId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBudSyncJobItems>>> = ({ signal }) => listBudSyncJobItems(jobId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBudSyncJobItems>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBudSyncJobItemsQueryResult = NonNullable<Awaited<ReturnType<typeof listBudSyncJobItems>>>
+export type ListBudSyncJobItemsQueryError = ErrorType<unknown>
+
+
+
+export function useListBudSyncJobItems<TData = Awaited<ReturnType<typeof listBudSyncJobItems>>, TError = ErrorType<unknown>>(
+ jobId: number,
+    params?: ListBudSyncJobItemsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBudSyncJobItems>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBudSyncJobItemsQueryOptions(jobId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateBudSyncJobItemUrl = (jobId: number,
+    itemId: number,) => {
+
+
+
+
+  return `/api/bud-sync/jobs/${jobId}/items/${itemId}`
+}
+
+export const updateBudSyncJobItem = async (jobId: number,
+    itemId: number,
+    budSyncItemUpdateInput: BudSyncItemUpdateInput, options?: RequestInit): Promise<BudSyncItem> => {
+
+  return customFetch<BudSyncItem>(getUpdateBudSyncJobItemUrl(jobId,itemId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(budSyncItemUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateBudSyncJobItemMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBudSyncJobItem>>, TError,{jobId: number;itemId: number;data: BodyType<BudSyncItemUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateBudSyncJobItem>>, TError,{jobId: number;itemId: number;data: BodyType<BudSyncItemUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateBudSyncJobItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBudSyncJobItem>>, {jobId: number;itemId: number;data: BodyType<BudSyncItemUpdateInput>}> = (props) => {
+          const {jobId,itemId,data} = props ?? {};
+
+          return  updateBudSyncJobItem(jobId,itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateBudSyncJobItemMutationResult = NonNullable<Awaited<ReturnType<typeof updateBudSyncJobItem>>>
+    export type UpdateBudSyncJobItemMutationBody = BodyType<BudSyncItemUpdateInput>
+    export type UpdateBudSyncJobItemMutationError = ErrorType<ErrorResponse>
+
+    export const useUpdateBudSyncJobItem = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBudSyncJobItem>>, TError,{jobId: number;itemId: number;data: BodyType<BudSyncItemUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateBudSyncJobItem>>,
+        TError,
+        {jobId: number;itemId: number;data: BodyType<BudSyncItemUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateBudSyncJobItemMutationOptions(options));
+    }
+
+export const getCommitBudSyncJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/bud-sync/jobs/${jobId}/commit`
+}
+
+export const commitBudSyncJob = async (jobId: number,
+    budSyncCommitInput: BudSyncCommitInput, options?: RequestInit): Promise<BudSyncJob> => {
+
+  return customFetch<BudSyncJob>(getCommitBudSyncJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(budSyncCommitInput)
+  }
+);}
+
+
+
+
+
+export const getCommitBudSyncJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitBudSyncJob>>, TError,{jobId: number;data: BodyType<BudSyncCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof commitBudSyncJob>>, TError,{jobId: number;data: BodyType<BudSyncCommitInput>}, TContext> => {
+
+const mutationKey = ['commitBudSyncJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof commitBudSyncJob>>, {jobId: number;data: BodyType<BudSyncCommitInput>}> = (props) => {
+          const {jobId,data} = props ?? {};
+
+          return  commitBudSyncJob(jobId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CommitBudSyncJobMutationResult = NonNullable<Awaited<ReturnType<typeof commitBudSyncJob>>>
+    export type CommitBudSyncJobMutationBody = BodyType<BudSyncCommitInput>
+    export type CommitBudSyncJobMutationError = ErrorType<ErrorResponse>
+
+    export const useCommitBudSyncJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitBudSyncJob>>, TError,{jobId: number;data: BodyType<BudSyncCommitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof commitBudSyncJob>>,
+        TError,
+        {jobId: number;data: BodyType<BudSyncCommitInput>},
+        TContext
+      > => {
+      return useMutation(getCommitBudSyncJobMutationOptions(options));
+    }
+
+export const getListBudSyncUnmatchedPreBaselineUrl = (params?: ListBudSyncUnmatchedPreBaselineParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bud-sync/unmatched-pre-baseline?${stringifiedParams}` : `/api/bud-sync/unmatched-pre-baseline`
+}
+
+export const listBudSyncUnmatchedPreBaseline = async (params?: ListBudSyncUnmatchedPreBaselineParams, options?: RequestInit): Promise<BudSyncUnmatchedPreBaselineResponse> => {
+
+  return customFetch<BudSyncUnmatchedPreBaselineResponse>(getListBudSyncUnmatchedPreBaselineUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBudSyncUnmatchedPreBaselineQueryKey = (params?: ListBudSyncUnmatchedPreBaselineParams,) => {
+    return [
+    `/api/bud-sync/unmatched-pre-baseline`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBudSyncUnmatchedPreBaselineQueryOptions = <TData = Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>, TError = ErrorType<unknown>>(params?: ListBudSyncUnmatchedPreBaselineParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBudSyncUnmatchedPreBaselineQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>> = ({ signal }) => listBudSyncUnmatchedPreBaseline(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBudSyncUnmatchedPreBaselineQueryResult = NonNullable<Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>>
+export type ListBudSyncUnmatchedPreBaselineQueryError = ErrorType<unknown>
+
+
+
+export function useListBudSyncUnmatchedPreBaseline<TData = Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>, TError = ErrorType<unknown>>(
+ params?: ListBudSyncUnmatchedPreBaselineParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBudSyncUnmatchedPreBaseline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBudSyncUnmatchedPreBaselineQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

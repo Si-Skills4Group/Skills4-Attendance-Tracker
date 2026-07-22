@@ -35,6 +35,7 @@ class LearnerInput(BaseModel):
     firstName: str = Field(min_length=1)
     lastName: str = Field(min_length=1)
     email: str | None = None
+    mobile: str | None = None
     employer: str | None = None
     programme: str = Field(min_length=1)
     level: str = Field(min_length=1)
@@ -59,6 +60,7 @@ class LearnerUpdate(BaseModel):
     firstName: str | None = Field(default=None, min_length=1)
     lastName: str | None = Field(default=None, min_length=1)
     email: str | None = None
+    mobile: str | None = None
     employer: str | None = None
     programme: str | None = Field(default=None, min_length=1)
     level: str | None = Field(default=None, min_length=1)
@@ -154,10 +156,10 @@ def _create_learner(cur, payload: LearnerInput, request: Request, session: dict)
 
     cur.execute(
         """
-        INSERT INTO learners (learner_ref, uln, first_name, last_name, email, employer, programme, level,
+        INSERT INTO learners (learner_ref, uln, first_name, last_name, email, mobile, employer, programme, level,
                                start_date, planned_end_date, actual_end_date, withdrawal_date, status,
                                tutor_id, cohort_id, external_system_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
         """,
         (
             payload.learnerRef,
@@ -165,6 +167,7 @@ def _create_learner(cur, payload: LearnerInput, request: Request, session: dict)
             payload.firstName,
             payload.lastName,
             payload.email,
+            payload.mobile,
             payload.employer,
             payload.programme,
             payload.level,
@@ -243,6 +246,7 @@ def _update_learner(cur, learner_id: int, payload: LearnerUpdate, request: Reque
         "firstName": "first_name",
         "lastName": "last_name",
         "email": "email",
+        "mobile": "mobile",
         "employer": "employer",
         "programme": "programme",
         "level": "level",

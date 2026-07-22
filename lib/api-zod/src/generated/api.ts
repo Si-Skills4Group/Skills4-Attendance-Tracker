@@ -3554,7 +3554,11 @@ export const ListAuditLogResponse = zod.object({
 
 export const GetSettingsResponse = zod.object({
   "organisationName": zod.string(),
-  "lowAttendanceThreshold": zod.number()
+  "lowAttendanceThreshold": zod.number(),
+  "budSyncMaxLearnerCreations": zod.number(),
+  "budSyncMaxLearnerUpdates": zod.number(),
+  "budSyncMaxCohortCreations": zod.number(),
+  "budSyncMaxTutorTransfers": zod.number()
 })
 
 
@@ -3562,16 +3566,341 @@ export const GetSettingsResponse = zod.object({
 export const updateSettingsBodyLowAttendanceThresholdMin = 0;
 export const updateSettingsBodyLowAttendanceThresholdMax = 100;
 
+export const updateSettingsBodyBudSyncMaxLearnerCreationsMin = 0;
+export const updateSettingsBodyBudSyncMaxLearnerCreationsMax = 1000;
+
+export const updateSettingsBodyBudSyncMaxLearnerUpdatesMin = 0;
+export const updateSettingsBodyBudSyncMaxLearnerUpdatesMax = 1000;
+
+export const updateSettingsBodyBudSyncMaxCohortCreationsMin = 0;
+export const updateSettingsBodyBudSyncMaxCohortCreationsMax = 1000;
+
+export const updateSettingsBodyBudSyncMaxTutorTransfersMin = 0;
+export const updateSettingsBodyBudSyncMaxTutorTransfersMax = 1000;
+
 
 
 export const UpdateSettingsBody = zod.object({
   "organisationName": zod.string().min(1).optional(),
-  "lowAttendanceThreshold": zod.number().min(updateSettingsBodyLowAttendanceThresholdMin).max(updateSettingsBodyLowAttendanceThresholdMax).optional()
+  "lowAttendanceThreshold": zod.number().min(updateSettingsBodyLowAttendanceThresholdMin).max(updateSettingsBodyLowAttendanceThresholdMax).optional(),
+  "budSyncMaxLearnerCreations": zod.number().min(updateSettingsBodyBudSyncMaxLearnerCreationsMin).max(updateSettingsBodyBudSyncMaxLearnerCreationsMax).optional(),
+  "budSyncMaxLearnerUpdates": zod.number().min(updateSettingsBodyBudSyncMaxLearnerUpdatesMin).max(updateSettingsBodyBudSyncMaxLearnerUpdatesMax).optional(),
+  "budSyncMaxCohortCreations": zod.number().min(updateSettingsBodyBudSyncMaxCohortCreationsMin).max(updateSettingsBodyBudSyncMaxCohortCreationsMax).optional(),
+  "budSyncMaxTutorTransfers": zod.number().min(updateSettingsBodyBudSyncMaxTutorTransfersMin).max(updateSettingsBodyBudSyncMaxTutorTransfersMax).optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
   "organisationName": zod.string(),
-  "lowAttendanceThreshold": zod.number()
+  "lowAttendanceThreshold": zod.number(),
+  "budSyncMaxLearnerCreations": zod.number(),
+  "budSyncMaxLearnerUpdates": zod.number(),
+  "budSyncMaxCohortCreations": zod.number(),
+  "budSyncMaxTutorTransfers": zod.number()
+})
+
+
+export const GetBudSyncStatusResponse = zod.object({
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "matchedLearnerCount": zod.number(),
+  "unmatchedLearnerCount": zod.number(),
+  "activeBaseline": zod.union([zod.object({
+  "id": zod.number(),
+  "establishedAt": zod.coerce.date(),
+  "establishedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "status": zod.enum(['active', 'superseded']),
+  "notes": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "supersededAt": zod.coerce.date().nullish(),
+  "supersededBy": zod.number().nullish(),
+  "resetReason": zod.string().nullish()
+}),zod.null()])
+})
+
+
+export const EstablishBudSyncBaselineBody = zod.object({
+  "notes": zod.string().nullish()
+})
+
+export const EstablishBudSyncBaselineResponse = zod.object({
+  "id": zod.number(),
+  "establishedAt": zod.coerce.date(),
+  "establishedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "status": zod.enum(['active', 'superseded']),
+  "notes": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "supersededAt": zod.coerce.date().nullish(),
+  "supersededBy": zod.number().nullish(),
+  "resetReason": zod.string().nullish()
+})
+
+
+
+
+
+export const ResetBudSyncBaselineBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const ResetBudSyncBaselineResponse = zod.object({
+  "id": zod.number(),
+  "establishedAt": zod.coerce.date(),
+  "establishedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "status": zod.enum(['active', 'superseded']),
+  "notes": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "supersededAt": zod.coerce.date().nullish(),
+  "supersededBy": zod.number().nullish(),
+  "resetReason": zod.string().nullish()
+})
+
+
+export const GetBudSyncBaselineHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "establishedAt": zod.coerce.date(),
+  "establishedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "status": zod.enum(['active', 'superseded']),
+  "notes": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "supersededAt": zod.coerce.date().nullish(),
+  "supersededBy": zod.number().nullish(),
+  "resetReason": zod.string().nullish()
+})
+export const GetBudSyncBaselineHistoryResponse = zod.array(GetBudSyncBaselineHistoryResponseItem)
+
+
+export const CreateBudSyncPreviewResponse = zod.object({
+  "id": zod.number(),
+  "baselineId": zod.number(),
+  "status": zod.enum(['ready', 'committing', 'completed', 'failed']),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "startedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "totalSourceRowsExamined": zod.number(),
+  "newLearnersDetected": zod.number(),
+  "learnerUpdatesDetected": zod.number(),
+  "cohortsProposed": zod.number(),
+  "allocationsProposed": zod.number(),
+  "transfersProposed": zod.number(),
+  "approvedCount": zod.number(),
+  "appliedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "conflictCount": zod.number(),
+  "errorCount": zod.number(),
+  "approvalReason": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "errorSummary": zod.string().nullable()
+})
+
+
+export const listBudSyncJobsQueryPageDefault = 1;
+export const listBudSyncJobsQueryPageSizeDefault = 25;
+
+export const ListBudSyncJobsQueryParams = zod.object({
+  "page": zod.coerce.number().default(listBudSyncJobsQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listBudSyncJobsQueryPageSizeDefault)
+})
+
+export const ListBudSyncJobsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "baselineId": zod.number(),
+  "status": zod.enum(['ready', 'committing', 'completed', 'failed']),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "startedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "totalSourceRowsExamined": zod.number(),
+  "newLearnersDetected": zod.number(),
+  "learnerUpdatesDetected": zod.number(),
+  "cohortsProposed": zod.number(),
+  "allocationsProposed": zod.number(),
+  "transfersProposed": zod.number(),
+  "approvedCount": zod.number(),
+  "appliedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "conflictCount": zod.number(),
+  "errorCount": zod.number(),
+  "approvalReason": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "errorSummary": zod.string().nullable()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const GetBudSyncJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const GetBudSyncJobResponse = zod.object({
+  "id": zod.number(),
+  "baselineId": zod.number(),
+  "status": zod.enum(['ready', 'committing', 'completed', 'failed']),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "startedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "totalSourceRowsExamined": zod.number(),
+  "newLearnersDetected": zod.number(),
+  "learnerUpdatesDetected": zod.number(),
+  "cohortsProposed": zod.number(),
+  "allocationsProposed": zod.number(),
+  "transfersProposed": zod.number(),
+  "approvedCount": zod.number(),
+  "appliedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "conflictCount": zod.number(),
+  "errorCount": zod.number(),
+  "approvalReason": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "errorSummary": zod.string().nullable()
+})
+
+
+export const ListBudSyncJobItemsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const listBudSyncJobItemsQueryPageDefault = 1;
+export const listBudSyncJobItemsQueryPageSizeDefault = 25;
+
+export const ListBudSyncJobItemsQueryParams = zod.object({
+  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped']).optional(),
+  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']).optional(),
+  "page": zod.coerce.number().default(listBudSyncJobItemsQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listBudSyncJobItemsQueryPageSizeDefault)
+})
+
+export const ListBudSyncJobItemsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "syncJobId": zod.number(),
+  "sourceIdentifier": zod.string(),
+  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped']),
+  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']),
+  "internalLearnerId": zod.number().nullable(),
+  "proposedValues": zod.record(zod.string(), zod.unknown()),
+  "previousValues": zod.record(zod.string(), zod.unknown()),
+  "warnings": zod.array(zod.string()),
+  "reason": zod.string().nullable(),
+  "approved": zod.boolean(),
+  "applied": zod.boolean(),
+  "outcome": zod.string().nullable(),
+  "errorCode": zod.string().nullable(),
+  "processedAt": zod.coerce.date().nullable(),
+  "sourceLearnerReference": zod.string().nullable(),
+  "sourceFirstName": zod.string().nullable(),
+  "sourceLastName": zod.string().nullable()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const UpdateBudSyncJobItemParams = zod.object({
+  "jobId": zod.coerce.number(),
+  "itemId": zod.coerce.number()
+})
+
+export const UpdateBudSyncJobItemBody = zod.object({
+  "fieldUpdates": zod.record(zod.string(), zod.string()).nullish(),
+  "approved": zod.boolean().nullish()
+})
+
+export const UpdateBudSyncJobItemResponse = zod.object({
+  "id": zod.number(),
+  "syncJobId": zod.number(),
+  "sourceIdentifier": zod.string(),
+  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped']),
+  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']),
+  "internalLearnerId": zod.number().nullable(),
+  "proposedValues": zod.record(zod.string(), zod.unknown()),
+  "previousValues": zod.record(zod.string(), zod.unknown()),
+  "warnings": zod.array(zod.string()),
+  "reason": zod.string().nullable(),
+  "approved": zod.boolean(),
+  "applied": zod.boolean(),
+  "outcome": zod.string().nullable(),
+  "errorCode": zod.string().nullable(),
+  "processedAt": zod.coerce.date().nullable(),
+  "sourceLearnerReference": zod.string().nullable(),
+  "sourceFirstName": zod.string().nullable(),
+  "sourceLastName": zod.string().nullable()
+})
+
+
+export const CommitBudSyncJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+
+
+
+
+export const CommitBudSyncJobBody = zod.object({
+  "itemIds": zod.array(zod.number()).min(1),
+  "approvalReason": zod.string().min(1),
+  "limitOverrideReason": zod.string().nullish()
+})
+
+export const CommitBudSyncJobResponse = zod.object({
+  "id": zod.number(),
+  "baselineId": zod.number(),
+  "status": zod.enum(['ready', 'committing', 'completed', 'failed']),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "startedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "totalSourceRowsExamined": zod.number(),
+  "newLearnersDetected": zod.number(),
+  "learnerUpdatesDetected": zod.number(),
+  "cohortsProposed": zod.number(),
+  "allocationsProposed": zod.number(),
+  "transfersProposed": zod.number(),
+  "approvedCount": zod.number(),
+  "appliedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "conflictCount": zod.number(),
+  "errorCount": zod.number(),
+  "approvalReason": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "errorSummary": zod.string().nullable()
+})
+
+
+export const listBudSyncUnmatchedPreBaselineQueryPageDefault = 1;
+export const listBudSyncUnmatchedPreBaselineQueryPageSizeDefault = 25;
+
+export const ListBudSyncUnmatchedPreBaselineQueryParams = zod.object({
+  "page": zod.coerce.number().default(listBudSyncUnmatchedPreBaselineQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listBudSyncUnmatchedPreBaselineQueryPageSizeDefault)
+})
+
+export const ListBudSyncUnmatchedPreBaselineResponse = zod.object({
+  "items": zod.array(zod.object({
+  "sourceIdentifier": zod.string(),
+  "internalLearnerId": zod.number().nullable(),
+  "reason": zod.string().nullable(),
+  "sourceLearnerReference": zod.string().nullable(),
+  "sourceFirstName": zod.string().nullable(),
+  "sourceLastName": zod.string().nullable()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
 })
 
 

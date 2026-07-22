@@ -1332,6 +1332,10 @@ export interface AuditLogListResponse {
 export interface AppSettings {
   organisationName: string;
   lowAttendanceThreshold: number;
+  budSyncMaxLearnerCreations: number;
+  budSyncMaxLearnerUpdates: number;
+  budSyncMaxCohortCreations: number;
+  budSyncMaxTutorTransfers: number;
 }
 
 export interface SettingsUpdate {
@@ -1342,6 +1346,227 @@ export interface SettingsUpdate {
      * @maximum 100
      */
   lowAttendanceThreshold?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxLearnerCreations?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxLearnerUpdates?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxCohortCreations?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  budSyncMaxTutorTransfers?: number;
+}
+
+export type BudSyncBaselineStatus = typeof BudSyncBaselineStatus[keyof typeof BudSyncBaselineStatus];
+
+
+export const BudSyncBaselineStatus = {
+  active: 'active',
+  superseded: 'superseded',
+} as const;
+
+export type BudSyncJobStatus = typeof BudSyncJobStatus[keyof typeof BudSyncJobStatus];
+
+
+export const BudSyncJobStatus = {
+  ready: 'ready',
+  committing: 'committing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type BudSyncMatchStatus = typeof BudSyncMatchStatus[keyof typeof BudSyncMatchStatus];
+
+
+export const BudSyncMatchStatus = {
+  new: 'new',
+  existing_update: 'existing_update',
+  unchanged: 'unchanged',
+  conflict: 'conflict',
+  existing_before_trial: 'existing_before_trial',
+  skipped: 'skipped',
+} as const;
+
+export type BudSyncActionType = typeof BudSyncActionType[keyof typeof BudSyncActionType];
+
+
+export const BudSyncActionType = {
+  create_learner: 'create_learner',
+  update_learner: 'update_learner',
+  create_cohort: 'create_cohort',
+  create_allocation: 'create_allocation',
+  transfer_tutor: 'transfer_tutor',
+  change_start_date: 'change_start_date',
+  change_status: 'change_status',
+  none: 'none',
+} as const;
+
+export interface BudSyncBaseline {
+  id: number;
+  establishedAt: string;
+  establishedBy: number;
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  sourceRowCount: number;
+  status: BudSyncBaselineStatus;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  correlationId: string | null;
+  /** @nullable */
+  supersededAt?: string | null;
+  /** @nullable */
+  supersededBy?: number | null;
+  /** @nullable */
+  resetReason?: string | null;
+}
+
+export interface BudSyncBaselineInput {
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface BudSyncBaselineResetInput {
+  /** @minLength 1 */
+  reason: string;
+}
+
+export interface BudSyncStatus {
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  sourceRowCount: number;
+  matchedLearnerCount: number;
+  unmatchedLearnerCount: number;
+  activeBaseline: BudSyncBaseline | null;
+}
+
+export interface BudSyncJob {
+  id: number;
+  baselineId: number;
+  status: BudSyncJobStatus;
+  startedAt: string;
+  /** @nullable */
+  completedAt: string | null;
+  startedBy: number;
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  totalSourceRowsExamined: number;
+  newLearnersDetected: number;
+  learnerUpdatesDetected: number;
+  cohortsProposed: number;
+  allocationsProposed: number;
+  transfersProposed: number;
+  approvedCount: number;
+  appliedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  errorCount: number;
+  /** @nullable */
+  approvalReason: string | null;
+  /** @nullable */
+  correlationId: string | null;
+  /** @nullable */
+  errorSummary: string | null;
+}
+
+export interface BudSyncJobListResponse {
+  items: BudSyncJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type BudSyncItemProposedValues = { [key: string]: unknown };
+
+export type BudSyncItemPreviousValues = { [key: string]: unknown };
+
+export interface BudSyncItem {
+  id: number;
+  syncJobId: number;
+  sourceIdentifier: string;
+  matchStatus: BudSyncMatchStatus;
+  actionType: BudSyncActionType;
+  /** @nullable */
+  internalLearnerId: number | null;
+  proposedValues: BudSyncItemProposedValues;
+  previousValues: BudSyncItemPreviousValues;
+  warnings: string[];
+  /** @nullable */
+  reason: string | null;
+  approved: boolean;
+  applied: boolean;
+  /** @nullable */
+  outcome: string | null;
+  /** @nullable */
+  errorCode: string | null;
+  /** @nullable */
+  processedAt: string | null;
+  /** @nullable */
+  sourceLearnerReference: string | null;
+  /** @nullable */
+  sourceFirstName: string | null;
+  /** @nullable */
+  sourceLastName: string | null;
+}
+
+export interface BudSyncItemListResponse {
+  items: BudSyncItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * @nullable
+ */
+export type BudSyncItemUpdateInputFieldUpdates = {[key: string]: string} | null;
+
+export interface BudSyncItemUpdateInput {
+  /** @nullable */
+  fieldUpdates?: BudSyncItemUpdateInputFieldUpdates;
+  /** @nullable */
+  approved?: boolean | null;
+}
+
+export interface BudSyncCommitInput {
+  /** @minItems 1 */
+  itemIds: number[];
+  /** @minLength 1 */
+  approvalReason: string;
+  /** @nullable */
+  limitOverrideReason?: string | null;
+}
+
+export interface BudSyncUnmatchedPreBaselineItem {
+  sourceIdentifier: string;
+  /** @nullable */
+  internalLearnerId: number | null;
+  /** @nullable */
+  reason: string | null;
+  /** @nullable */
+  sourceLearnerReference: string | null;
+  /** @nullable */
+  sourceFirstName: string | null;
+  /** @nullable */
+  sourceLastName: string | null;
+}
+
+export interface BudSyncUnmatchedPreBaselineResponse {
+  items: BudSyncUnmatchedPreBaselineItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export type PeriodParamParameter = typeof PeriodParamParameter[keyof typeof PeriodParamParameter];
@@ -1704,6 +1929,23 @@ userId?: number;
 action?: string;
 dateFrom?: string;
 dateTo?: string;
+page?: number;
+pageSize?: number;
+};
+
+export type ListBudSyncJobsParams = {
+page?: number;
+pageSize?: number;
+};
+
+export type ListBudSyncJobItemsParams = {
+matchStatus?: BudSyncMatchStatus;
+actionType?: BudSyncActionType;
+page?: number;
+pageSize?: number;
+};
+
+export type ListBudSyncUnmatchedPreBaselineParams = {
 page?: number;
 pageSize?: number;
 };

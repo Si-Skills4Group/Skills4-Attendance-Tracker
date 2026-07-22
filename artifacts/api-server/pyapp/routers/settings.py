@@ -9,13 +9,21 @@ router = APIRouter(tags=["settings"])
 
 SETTINGS_SELECT = (
     'SELECT id, organisation_name AS "organisationName", '
-    'low_attendance_threshold AS "lowAttendanceThreshold" FROM app_settings'
+    'low_attendance_threshold AS "lowAttendanceThreshold", '
+    'bud_sync_max_learner_creations AS "budSyncMaxLearnerCreations", '
+    'bud_sync_max_learner_updates AS "budSyncMaxLearnerUpdates", '
+    'bud_sync_max_cohort_creations AS "budSyncMaxCohortCreations", '
+    'bud_sync_max_tutor_transfers AS "budSyncMaxTutorTransfers" FROM app_settings'
 )
 
 
 class SettingsUpdate(BaseModel):
     organisationName: str | None = Field(default=None, min_length=1)
     lowAttendanceThreshold: float | None = Field(default=None, ge=0, le=100)
+    budSyncMaxLearnerCreations: int | None = Field(default=None, ge=0, le=1000)
+    budSyncMaxLearnerUpdates: int | None = Field(default=None, ge=0, le=1000)
+    budSyncMaxCohortCreations: int | None = Field(default=None, ge=0, le=1000)
+    budSyncMaxTutorTransfers: int | None = Field(default=None, ge=0, le=1000)
 
 
 def _get_or_create_settings(cur) -> dict:
@@ -41,7 +49,14 @@ def update_settings(payload: SettingsUpdate, request: Request, _session: dict = 
         existing = _get_or_create_settings(cur)
 
         updates = payload.model_dump(exclude_unset=True)
-        column_map = {"organisationName": "organisation_name", "lowAttendanceThreshold": "low_attendance_threshold"}
+        column_map = {
+            "organisationName": "organisation_name",
+            "lowAttendanceThreshold": "low_attendance_threshold",
+            "budSyncMaxLearnerCreations": "bud_sync_max_learner_creations",
+            "budSyncMaxLearnerUpdates": "bud_sync_max_learner_updates",
+            "budSyncMaxCohortCreations": "bud_sync_max_cohort_creations",
+            "budSyncMaxTutorTransfers": "bud_sync_max_tutor_transfers",
+        }
         set_clauses = [f"{column_map[k]} = %s" for k in updates]
         params = list(updates.values())
         if set_clauses:
