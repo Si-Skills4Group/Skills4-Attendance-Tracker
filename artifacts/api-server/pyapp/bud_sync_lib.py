@@ -112,12 +112,21 @@ def get_source_status(cur) -> dict:
 
 
 def establish_baseline(cur, request: Request, session: dict, notes: str | None = None) -> dict:
-    """Zero business writes -- only ever inserts one bud_sync_baseline row.
-    Records already present in public.learner_progress at this instant are
-    the trial's "before" line: nothing about them is ever proposed as new
-    merely because they are unmatched. Scoped to status_desc = 'In Progress'
-    only, matching _fetch_bud_rows -- a Completed/Withdrawn/Pending/etc row's
-    synced_at must never influence the baseline this trial actually uses."""
+    """Zero business writes -- only ever inserts one bud_sync_baseline row
+    plus its identity snapshot (bud_sync_baseline_snapshot), both trial
+    bookkeeping, never a learner/cohort/allocation. Records already present
+    in public.learner_progress at this instant are the trial's "before"
+    line: nothing about them is ever proposed as new merely because they
+    are unmatched. Scoped to status_desc = 'In Progress' only, matching
+    _fetch_bud_rows -- a Completed/Withdrawn/Pending/etc row must never
+    influence the baseline this trial actually uses.
+
+    The snapshot -- which learning_plan_ids exist right now -- is what
+    actually answers "did this Bud record exist before the trial started",
+    not source_max_synced_at: real Bud data bulk-touches synced_at across
+    the whole table on every sync, whether or not a given row's data
+    changed, so a pure timestamp cutoff would treat every pre-existing
+    row as newly eligible again the very next time Bud syncs."""
     if get_active_baseline(cur) is not None:
         raise HTTPException(status_code=409, detail="A trial baseline is already active. Reset it first.")
 
@@ -139,6 +148,19 @@ def establish_baseline(cur, request: Request, session: dict, notes: str | None =
         (session["userId"], source["maxSyncedAt"], source["rowCount"], notes, get_correlation_id() or None),
     )
     baseline = cur.fetchone()
+
+    cur.execute(
+        """
+        INSERT INTO bud_sync_baseline_snapshot (baseline_id, source_identifier)
+        SELECT %s, learning_plan_id
+        FROM (
+            SELECT DISTINCT learning_plan_id FROM public.learner_progress
+            WHERE status_desc = %s AND learning_plan_id IS NOT NULL
+        ) AS eligible_rows
+        ON CONFLICT (baseline_id, source_identifier) DO NOTHING
+        """,
+        (baseline["id"], _ELIGIBLE_STATUS_DESC),
+    )
 
     write_audit_log(
         request, action="bud_sync_baseline_established", entity_type="bud_sync_baseline",
@@ -178,6 +200,11 @@ def list_baseline_history(cur) -> list[dict]:
         """
     )
     return cur.fetchall()
+
+
+def _get_baseline_snapshot_ids(cur, baseline_id: int) -> set[str]:
+    cur.execute("SELECT source_identifier FROM bud_sync_baseline_snapshot WHERE baseline_id = %s", (baseline_id,))
+    return {row["source_identifier"] for row in cur.fetchall()}
 
 
 # ---------------------------------------------------------------------------
@@ -324,14 +351,25 @@ def _diff_simple_fields(bud_row: dict, accepted_or_current: dict, current_uln: s
     return diff
 
 
-def classify_row(cur, bud_row: dict, baseline: dict) -> dict:
+def classify_row(cur, bud_row: dict, baseline: dict, baseline_snapshot_ids: set[str] | None = None) -> dict:
     """Pure classification against current DB state -- never writes
     anything. Returns a dict shaped for insertion into bud_sync_item
-    (minus id/sync_job_id, filled in by the caller)."""
+    (minus id/sync_job_id, filled in by the caller).
+
+    baseline_snapshot_ids is the set of learning_plan_ids captured in
+    bud_sync_baseline_snapshot at baseline-establishment time -- pass it in
+    (run_preview fetches it once per run) to avoid a query per row; if
+    omitted, it's fetched here for a single-row call (e.g. tests/one-off
+    checks). A row's *presence in that snapshot*, not its synced_at, is
+    what answers "did this Bud record exist before the trial started":
+    real Bud data bulk-touches synced_at across the whole table on every
+    sync regardless of whether a row's data changed, so a pure timestamp
+    cutoff would treat every pre-existing row as newly eligible again the
+    very next time Bud syncs (confirmed against production data)."""
     plan_id = bud_row["learningPlanId"]
-    is_post_baseline = bool(
-        bud_row["syncedAt"] and baseline["sourceMaxSyncedAt"] and bud_row["syncedAt"] > baseline["sourceMaxSyncedAt"]
-    ) or (bud_row["syncedAt"] and not baseline["sourceMaxSyncedAt"])
+    if baseline_snapshot_ids is None:
+        baseline_snapshot_ids = _get_baseline_snapshot_ids(cur, baseline["id"])
+    is_post_baseline = plan_id not in baseline_snapshot_ids
 
     base_item = {
         "source_identifier": plan_id,
@@ -533,6 +571,7 @@ def run_preview(cur, request: Request, session: dict) -> dict:
         raise HTTPException(status_code=409, detail="No active trial baseline. Establish one before previewing.")
 
     bud_rows = _fetch_bud_rows(cur)
+    baseline_snapshot_ids = _get_baseline_snapshot_ids(cur, baseline["id"])
 
     cur.execute(
         """
@@ -546,7 +585,7 @@ def run_preview(cur, request: Request, session: dict) -> dict:
     counts = {"new": 0, "existing_update": 0, "unchanged": 0, "conflict": 0, "existing_before_trial": 0, "skipped": 0}
     action_counts = {"cohorts_proposed": 0, "allocations_proposed": 0, "transfers_proposed": 0}
     for bud_row in bud_rows:
-        item = classify_row(cur, bud_row, baseline)
+        item = classify_row(cur, bud_row, baseline, baseline_snapshot_ids)
         counts[item["match_status"]] += 1
         if item["action_type"] == "create_learner":
             action_counts["cohorts_proposed"] += 1 if item["proposed_values"].get("cohort", {}).get("action") == "create" else 0

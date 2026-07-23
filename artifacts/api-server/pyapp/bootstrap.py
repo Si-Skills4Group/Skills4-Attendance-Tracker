@@ -608,6 +608,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_cohort_mapping_sync_key ON bud_cohort_
 ALTER TABLE bud_sync_item ADD COLUMN IF NOT EXISTS source_learner_reference text;
 ALTER TABLE bud_sync_item ADD COLUMN IF NOT EXISTS source_first_name text;
 ALTER TABLE bud_sync_item ADD COLUMN IF NOT EXISTS source_last_name text;
+
+-- Identity snapshot of every eligible Bud row present at the moment a
+-- baseline is established. Confirmed against real Bud data that
+-- synced_at is bulk-touched across the *entire* table on every Bud sync,
+-- not only on rows that actually changed -- a pure synced_at > baseline
+-- cutoff would therefore treat every pre-existing row as "new" again the
+-- day after any Bud sync. This snapshot is the actual "did this Bud
+-- record exist before the trial started" answer; membership in it, not
+-- a timestamp comparison, is what gates new-learner/first-time-link
+-- eligibility.
+CREATE TABLE IF NOT EXISTS bud_sync_baseline_snapshot (
+  id serial PRIMARY KEY,
+  baseline_id integer NOT NULL,
+  source_identifier text NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bud_sync_baseline_snapshot_baseline_id ON bud_sync_baseline_snapshot (baseline_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_sync_baseline_snapshot_unique
+  ON bud_sync_baseline_snapshot (baseline_id, source_identifier);
 """
 
 

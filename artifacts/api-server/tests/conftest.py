@@ -355,6 +355,7 @@ def baseline_factory(db, admin_user):
 
     db.execute("DELETE FROM bud_sync_item")
     db.execute("DELETE FROM bud_sync_job")
+    db.execute("DELETE FROM bud_sync_baseline_snapshot")
     db.execute("DELETE FROM bud_sync_baseline")
     created_ids = []
 
@@ -368,6 +369,7 @@ def baseline_factory(db, admin_user):
 
     db.execute("DELETE FROM bud_sync_item")
     db.execute("DELETE FROM bud_sync_job")
+    db.execute("DELETE FROM bud_sync_baseline_snapshot")
     db.execute("DELETE FROM bud_sync_baseline")
 
 

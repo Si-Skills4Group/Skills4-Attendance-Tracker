@@ -5,6 +5,7 @@ never issues a write against public.learner_progress and never builds an
 alternate Bud API client."""
 import ast
 import inspect
+import re
 
 from pyapp import auth as auth_module, bud_sync_lib
 
@@ -99,10 +100,21 @@ class TestBudSourceRemainsReadOnly:
     def test_bud_sync_lib_contains_no_write_statements_against_learner_progress(self):
         """Same static-AST technique as test_bud_progress.py's own
         TestModuleIsReadOnly -- inspects only the SQL string literals passed
-        to cur.execute(...), not prose comments/docstrings."""
+        to cur.execute(...), not prose comments/docstrings. Checks that a
+        write verb's actual target table is learner_progress (e.g. "INSERT
+        INTO public.learner_progress"), not merely that the two strings
+        co-occur somewhere in the statement -- a write to a different
+        table (e.g. bud_sync_baseline_snapshot) that reads FROM
+        learner_progress in a subquery is legitimate and must not trip
+        this check."""
         source = inspect.getsource(bud_sync_lib)
         tree = ast.parse(source)
-        write_verbs = ("INSERT INTO", "UPDATE ", "DELETE FROM", "DROP ", "ALTER ", "TRUNCATE ")
+        write_target_patterns = (
+            re.compile(r"INSERT\s+INTO\s+(?:public\.)?learner_progress\b", re.IGNORECASE),
+            re.compile(r"UPDATE\s+(?:public\.)?learner_progress\b", re.IGNORECASE),
+            re.compile(r"DELETE\s+FROM\s+(?:public\.)?learner_progress\b", re.IGNORECASE),
+            re.compile(r"(?:DROP|ALTER|TRUNCATE)\s+TABLE\s+(?:public\.)?learner_progress\b", re.IGNORECASE),
+        )
         execute_call_sql: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "execute":
@@ -112,7 +124,7 @@ class TestBudSourceRemainsReadOnly:
 
         write_statements_against_learner_progress = [
             sql for sql in execute_call_sql
-            if "learner_progress" in sql.lower() and any(verb in sql.upper() for verb in write_verbs)
+            if any(pattern.search(sql) for pattern in write_target_patterns)
         ]
         assert write_statements_against_learner_progress == []
 
