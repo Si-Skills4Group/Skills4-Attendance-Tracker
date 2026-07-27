@@ -50,6 +50,8 @@ export * from './budSyncItemUpdateInputFieldUpdates';
 export * from './budSyncJob';
 export * from './budSyncJobListResponse';
 export * from './budSyncJobStatus';
+export * from './budSyncJobSummary';
+export * from './budSyncLinkExistingInput';
 export * from './budSyncMatchStatus';
 export * from './budSyncStatus';
 export * from './budSyncUnmatchedPreBaselineItem';

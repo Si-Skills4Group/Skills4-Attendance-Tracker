@@ -290,36 +290,49 @@ def update_learner(learner_id: int, payload: LearnerUpdate, request: Request, se
         return _update_learner(cur, learner_id, payload, request, session)
 
 
+def _change_learner_status(
+    cur, learner_id: int, status: str, actual_end_date, withdrawal_date,
+) -> tuple[dict, dict]:
+    """Shared validation + UPDATE for the one place learners.status ever
+    changes -- reused by the change-status endpoint below and by the Bud
+    sync trial's automatic status-change application (pyapp/bud_sync_lib.py)
+    so both paths get the same "withdrawalDate required for withdrawn,
+    actualEndDate required for completed" guard. Never invents either
+    date -- the caller must supply them or this raises. Returns
+    (existing_row, full_row_with_names) for the caller's own audit call."""
+    cur.execute("SELECT * FROM learners WHERE id = %s AND deleted_at IS NULL", (learner_id,))
+    existing = cur.fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    actual_end_date = actual_end_date or existing["actual_end_date"]
+    withdrawal_date = withdrawal_date or existing["withdrawal_date"]
+
+    if status == "withdrawn" and not withdrawal_date:
+        raise HTTPException(status_code=400, detail="withdrawalDate is required when withdrawing a learner")
+    if status == "completed" and not actual_end_date:
+        raise HTTPException(status_code=400, detail="actualEndDate is required when completing a learner")
+
+    _validate_learner_dates(existing["start_date"], existing["planned_end_date"], actual_end_date, withdrawal_date)
+
+    cur.execute(
+        """
+        UPDATE learners
+        SET status = %s, actual_end_date = %s, withdrawal_date = %s, updated_at = now()
+        WHERE id = %s
+        """,
+        (status, actual_end_date, withdrawal_date, learner_id),
+    )
+    cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
+    return existing, cur.fetchone()
+
+
 @router.post("/learners/{learner_id}/change-status")
 def change_learner_status(
     learner_id: int, payload: LearnerStatusChangeInput, request: Request, _session: dict = Depends(require_admin)
 ):
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM learners WHERE id = %s AND deleted_at IS NULL", (learner_id,))
-        existing = cur.fetchone()
-        if not existing:
-            raise HTTPException(status_code=404, detail="Learner not found")
-
-        actual_end_date = payload.actualEndDate or existing["actual_end_date"]
-        withdrawal_date = payload.withdrawalDate or existing["withdrawal_date"]
-
-        if payload.status == "withdrawn" and not withdrawal_date:
-            raise HTTPException(status_code=400, detail="withdrawalDate is required when withdrawing a learner")
-        if payload.status == "completed" and not actual_end_date:
-            raise HTTPException(status_code=400, detail="actualEndDate is required when completing a learner")
-
-        _validate_learner_dates(existing["start_date"], existing["planned_end_date"], actual_end_date, withdrawal_date)
-
-        cur.execute(
-            """
-            UPDATE learners
-            SET status = %s, actual_end_date = %s, withdrawal_date = %s, updated_at = now()
-            WHERE id = %s
-            """,
-            (payload.status, actual_end_date, withdrawal_date, learner_id),
-        )
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s", (learner_id,))
-        full = cur.fetchone()
+        existing, full = _change_learner_status(cur, learner_id, payload.status, payload.actualEndDate, payload.withdrawalDate)
 
     write_audit_log(
         request,

@@ -2701,6 +2701,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/jobs/{jobId}/summary:
+    get:
+      operationId: getBudSyncJobSummary
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Backend-computed actionable-queue counts for the dashboard summary cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJobSummary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /bud-sync/jobs/{jobId}/items:
     get:
       operationId: listBudSyncJobItems
@@ -2763,6 +2785,53 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/jobs/{jobId}/items/{itemId}/link-existing:
+    post:
+      operationId: linkBudSyncJobItemToExistingLearner
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudSyncLinkExistingInput"
+      responses:
+        "200":
+          description: >-
+            New Learners tab's "mark as already represented" action -- links
+            this Bud row to an existing Attendance learner the Administrator
+            picked, instead of creating a new one.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJob"
+        "400":
+          description: Only a 'new' item can be manually linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The chosen learner is already linked to a different Bud record
           content:
             application/json:
               schema:
@@ -4710,7 +4779,7 @@ components:
 
     BudSyncMatchStatus:
       type: string
-      enum: [new, existing_update, unchanged, conflict, existing_before_trial, skipped]
+      enum: [new, existing_update, unchanged, conflict, existing_before_trial, skipped, status_change]
 
     BudSyncActionType:
       type: string
@@ -4801,6 +4870,7 @@ components:
           approvalReason,
           correlationId,
           errorSummary,
+          statusChangesDetected,
         ]
       properties:
         id: { type: integer }
@@ -4824,6 +4894,7 @@ components:
         approvalReason: { type: ["string", "null"] }
         correlationId: { type: ["string", "null"] }
         errorSummary: { type: ["string", "null"] }
+        statusChangesDetected: { type: integer }
 
     BudSyncJobListResponse:
       type: object
@@ -4835,6 +4906,31 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    BudSyncJobSummary:
+      type: object
+      required:
+        [
+          statusChangesCount,
+          newLearnersCount,
+          conflictsCount,
+          statusChangesAppliedToday,
+          learnersCreatedToday,
+          lastSuccessfulSyncAt,
+        ]
+      properties:
+        statusChangesCount: { type: integer }
+        newLearnersCount: { type: integer }
+        conflictsCount: { type: integer }
+        statusChangesAppliedToday: { type: integer }
+        learnersCreatedToday: { type: integer }
+        lastSuccessfulSyncAt: { type: ["string", "null"], format: date-time }
+
+    BudSyncLinkExistingInput:
+      type: object
+      required: [learnerId]
+      properties:
+        learnerId: { type: integer }
 
     BudSyncItem:
       type: object
@@ -4858,6 +4954,7 @@ components:
           sourceLearnerReference,
           sourceFirstName,
           sourceLastName,
+          createdAt,
         ]
       properties:
         id: { type: integer }
@@ -4884,6 +4981,7 @@ components:
         sourceLearnerReference: { type: ["string", "null"] }
         sourceFirstName: { type: ["string", "null"] }
         sourceLastName: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
 
     BudSyncItemListResponse:
       type: object

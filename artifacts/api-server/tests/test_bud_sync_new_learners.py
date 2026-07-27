@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import pytest
 from fastapi import HTTPException
 
-from pyapp.bud_sync_lib import classify_row, list_items, run_commit, run_preview, update_item
+from pyapp.bud_sync_lib import classify_row, get_job_summary, link_existing_learner, list_items, run_commit, run_preview, update_item
 
 
 def _tomorrow() -> str:
@@ -164,13 +164,64 @@ class TestItemDisplayIdentity:
         assert item["sourceLastName"] == "Franklin"
 
 
+class TestAmbiguousReferenceScoping:
+    """Regression test for a real bug found while verifying against
+    production: two Bud rows sharing a learner_reference that matches NO
+    internal learner at all must never become a conflict -- Bud commonly
+    has several historical learning plans for people this trial has never
+    tracked (re-enrolments, programme changes), and that's unrelated to
+    the internal-matching-ambiguity rule, which only applies once a
+    reference actually corresponds to an internal learner.learner_ref."""
+
+    def test_a_reference_ambiguous_only_within_bud_is_not_a_conflict(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-AMBIG' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        shared_reference = "BUD-REF-NOBODY-INTERNAL"
+        # Two historical Bud rows for the same never-tracked person -- no
+        # internal learner has this learner_ref, so this is not an
+        # internal-matching conflict.
+        bud_row_factory(learner_reference=shared_reference, status_desc="Withdrawn", start_date=_tomorrow())
+        new_row = bud_row_factory(
+            learner_reference=shared_reference, tutor_id="BUD-T-AMBIG", start_date=_tomorrow(),
+            synced_at="2099-01-01T00:00:00Z",
+        )
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            "SELECT match_status FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s",
+            (job["id"], new_row["learningPlanId"]),
+        )
+        assert db.fetchone()["match_status"] == "new"
+
+    def test_a_reference_ambiguous_and_matching_an_internal_learner_is_still_a_conflict(
+        self, db, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = learner_factory()
+        baseline = baseline_factory()
+        # Two Bud rows share a reference that DOES match an internal
+        # learner -- this is the genuine internal-matching ambiguity case.
+        bud_row_factory(learner_reference=learner["learner_ref"], status_desc="Withdrawn")
+        second_row = bud_row_factory(learner_reference=learner["learner_ref"], synced_at="2099-01-01T00:00:00Z")
+
+        item = classify_row(db, second_row, baseline)
+        assert item["match_status"] == "conflict"
+        assert item["reason"] == "learner_reference_matches_multiple_bud_rows"
+
+
 class TestStatusEligibility:
-    """Only Bud rows with status_desc == 'In Progress' are ever considered
-    by this trial -- confirmed as a real, exact value in production data
-    (alongside Completed/Withdrawn/Pending/On Break/etc)."""
+    """New-learner (unmatched) eligibility is still restricted to
+    status_desc == 'In Progress' -- confirmed as a real, exact value in
+    production data (alongside Completed/Withdrawn/Pending/On Break/etc).
+    A non-actionable unmatched row still gets a classified item (for
+    accurate Sync History bookkeeping), just never 'new' -- see
+    TestMatchedLearnerEligibilityAtAnyStatus below for why this rule does
+    NOT extend to already-matched learners."""
 
     @pytest.mark.parametrize("status_desc", ["Completed", "Withdrawn", "Pending", "On Break", "In End Point Assessment"])
-    def test_a_non_in_progress_row_is_never_proposed(
+    def test_a_non_in_progress_unmatched_row_is_never_proposed_as_new(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, status_desc,
     ):
         tutor = tutor_factory()
@@ -179,8 +230,8 @@ class TestStatusEligibility:
         row = bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-STATUS", start_date=_tomorrow(), status_desc=status_desc)
 
         job = run_preview(db, request_factory(admin_user), admin_user)
-        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s", (job["id"], row["learningPlanId"]))
-        assert db.fetchone() is None
+        db.execute("SELECT match_status FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s", (job["id"], row["learningPlanId"]))
+        assert db.fetchone()["match_status"] == "existing_before_trial"
 
     def test_an_in_progress_row_is_still_proposed(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
@@ -194,12 +245,18 @@ class TestStatusEligibility:
         db.execute("SELECT match_status FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s", (job["id"], row["learningPlanId"]))
         assert db.fetchone()["match_status"] == "new"
 
-    def test_a_learner_who_moves_out_of_in_progress_stops_being_updated(
+
+class TestMatchedLearnerEligibilityAtAnyStatus:
+    """Corrected rule: a MATCHED learner must remain eligible for
+    status-change detection at any status_desc -- the 'In Progress only'
+    filter exists solely to stop historical backfill of brand-new,
+    unmatched learners. Applying it to already-matched learners too was
+    the defect that made status-change detection (e.g. In Progress -> BIL)
+    impossible."""
+
+    def test_a_learner_who_moves_to_withdrawn_is_detected_as_a_status_change(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
     ):
-        """Once linked while In Progress, a later Bud change to a different
-        status must not be proposed as an update -- it simply falls out of
-        the trial's consideration from that point forward."""
         learner = learner_factory(email="old@example.com", uln="ULN-STATUS-1")
         baseline_factory()
         bud_row_factory(unique_learner_number="ULN-STATUS-1", learner_email="new@example.com", synced_at="2099-01-01T00:00:00Z", status_desc="In Progress")
@@ -217,11 +274,22 @@ class TestStatusEligibility:
         )
 
         job2 = run_preview(db, request_factory(admin_user), admin_user)
-        db.execute("SELECT count(*)::int AS c FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job2["id"], learner["id"]))
-        assert db.fetchone()["c"] == 0
+        db.execute(
+            'SELECT match_status, proposed_values AS "proposedValues" FROM bud_sync_item '
+            "WHERE sync_job_id = %s AND internal_learner_id = %s",
+            (job2["id"], learner["id"]),
+        )
+        item = db.fetchone()
+        # Detected, not silently dropped -- and never invented an effective
+        # withdrawal date Bud never supplied.
+        assert item["match_status"] == "status_change"
+        assert item["proposedValues"]["statusChange"]["kind"] == "needs_date"
+        assert item["proposedValues"]["statusChange"]["targetStatus"] == "withdrawn"
 
-        db.execute("SELECT email FROM learners WHERE id = %s", (learner["id"],))
-        assert db.fetchone()["email"] == "new@example.com"  # unchanged since the withdrawal
+        db.execute("SELECT status, email FROM learners WHERE id = %s", (learner["id"],))
+        row = db.fetchone()
+        assert row["status"] == "active"  # not applied without the missing date
+        assert row["email"] == "new@example.com"  # the field update was already committed in job 1
 
 
 class TestNewLearnerCommit:
@@ -319,3 +387,97 @@ class TestNewLearnerCommit:
         if cohort_id:
             db.execute("DELETE FROM bud_cohort_mapping WHERE cohort_id = %s", (cohort_id,))
             db.execute("DELETE FROM cohorts WHERE id = %s", (cohort_id,))
+
+
+class TestManualLinkExisting:
+    """New Learners tab's 'Mark as already represented' action: an
+    Administrator manually confirms an unmatched Bud row is actually a
+    specific existing Attendance learner, instead of creating a new one."""
+
+    def test_manual_link_marks_the_item_applied_and_writes_the_link(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-MANUAL-1' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        row = bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-MANUAL-1", start_date=_tomorrow())
+        learner = learner_factory()
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s", (job["id"], row["learningPlanId"]))
+        item_id = db.fetchone()["id"]
+
+        result = link_existing_learner(db, job["id"], item_id, learner["id"], request_factory(admin_user), admin_user)
+        assert result["id"] == job["id"]
+
+        db.execute("SELECT applied, outcome, internal_learner_id AS \"internalLearnerId\" FROM bud_sync_item WHERE id = %s", (item_id,))
+        item = db.fetchone()
+        assert item["applied"] is True
+        assert item["outcome"] == "manually_linked"
+        assert item["internalLearnerId"] == learner["id"]
+
+        db.execute("SELECT bud_learning_plan_id AS \"planId\" FROM bud_learner_link WHERE internal_learner_id = %s", (learner["id"],))
+        assert db.fetchone()["planId"] == row["learningPlanId"]
+
+        db.execute("SELECT count(*)::int AS c FROM audit_logs WHERE action = 'bud_sync_manual_link_established' AND entity_id = %s", (learner["id"],))
+        assert db.fetchone()["c"] == 1
+
+    def test_manual_link_is_only_offered_from_a_new_item(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner1 = learner_factory(uln="ULN-MANUAL-2")
+        learner2 = learner_factory()
+        baseline_factory()
+        bud_row_factory(unique_learner_number="ULN-MANUAL-2", learner_email="changed@example.com", synced_at="2099-01-01T00:00:00Z")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job["id"], learner1["id"]))
+        item_id = db.fetchone()["id"]
+
+        with pytest.raises(HTTPException) as exc_info:
+            link_existing_learner(db, job["id"], item_id, learner2["id"], request_factory(admin_user), admin_user)
+        assert exc_info.value.status_code == 400
+
+    def test_manual_link_rejects_a_learner_already_linked_to_a_different_bud_record(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-MANUAL-3' WHERE id = %s", (tutor["tutorId"],))
+        already_linked_learner = learner_factory(uln="ULN-MANUAL-3")
+        baseline_factory()
+        bud_row_factory(unique_learner_number="ULN-MANUAL-3", learner_email="changed@example.com", synced_at="2099-01-01T00:00:00Z")
+        new_row = bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-MANUAL-3", start_date=_tomorrow())
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job["id"], already_linked_learner["id"]))
+        existing_item_id = db.fetchone()["id"]
+        update_item(db, job["id"], existing_item_id, None, True)
+        run_commit(db, job["id"], [existing_item_id], "establish link", None, request_factory(admin_user), admin_user)
+
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s", (job2["id"], new_row["learningPlanId"]))
+        new_item_id = db.fetchone()["id"]
+
+        with pytest.raises(HTTPException) as exc_info:
+            link_existing_learner(db, job2["id"], new_item_id, already_linked_learner["id"], request_factory(admin_user), admin_user)
+        assert exc_info.value.status_code == 409
+
+
+class TestJobSummary:
+    def test_summary_counts_match_the_operational_queues(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-SUMMARY' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-SUMMARY", start_date=_tomorrow())  # new learner
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", start_date=_tomorrow())  # conflict: no tutor mapping
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        summary = get_job_summary(db, job["id"])
+
+        assert summary["newLearnersCount"] == 1
+        assert summary["conflictsCount"] == 1
+        assert summary["statusChangesCount"] == 0
+        assert summary["statusChangesAppliedToday"] == 0
+        assert summary["learnersCreatedToday"] == 0

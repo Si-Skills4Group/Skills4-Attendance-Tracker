@@ -3698,7 +3698,8 @@ export const CreateBudSyncPreviewResponse = zod.object({
   "errorCount": zod.number(),
   "approvalReason": zod.string().nullable(),
   "correlationId": zod.string().nullable(),
-  "errorSummary": zod.string().nullable()
+  "errorSummary": zod.string().nullable(),
+  "statusChangesDetected": zod.number()
 })
 
 
@@ -3732,7 +3733,8 @@ export const ListBudSyncJobsResponse = zod.object({
   "errorCount": zod.number(),
   "approvalReason": zod.string().nullable(),
   "correlationId": zod.string().nullable(),
-  "errorSummary": zod.string().nullable()
+  "errorSummary": zod.string().nullable(),
+  "statusChangesDetected": zod.number()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -3765,7 +3767,22 @@ export const GetBudSyncJobResponse = zod.object({
   "errorCount": zod.number(),
   "approvalReason": zod.string().nullable(),
   "correlationId": zod.string().nullable(),
-  "errorSummary": zod.string().nullable()
+  "errorSummary": zod.string().nullable(),
+  "statusChangesDetected": zod.number()
+})
+
+
+export const GetBudSyncJobSummaryParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const GetBudSyncJobSummaryResponse = zod.object({
+  "statusChangesCount": zod.number(),
+  "newLearnersCount": zod.number(),
+  "conflictsCount": zod.number(),
+  "statusChangesAppliedToday": zod.number(),
+  "learnersCreatedToday": zod.number(),
+  "lastSuccessfulSyncAt": zod.coerce.date().nullable()
 })
 
 
@@ -3777,7 +3794,7 @@ export const listBudSyncJobItemsQueryPageDefault = 1;
 export const listBudSyncJobItemsQueryPageSizeDefault = 25;
 
 export const ListBudSyncJobItemsQueryParams = zod.object({
-  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped']).optional(),
+  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped', 'status_change']).optional(),
   "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']).optional(),
   "page": zod.coerce.number().default(listBudSyncJobItemsQueryPageDefault),
   "pageSize": zod.coerce.number().default(listBudSyncJobItemsQueryPageSizeDefault)
@@ -3788,7 +3805,7 @@ export const ListBudSyncJobItemsResponse = zod.object({
   "id": zod.number(),
   "syncJobId": zod.number(),
   "sourceIdentifier": zod.string(),
-  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped']),
+  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped', 'status_change']),
   "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']),
   "internalLearnerId": zod.number().nullable(),
   "proposedValues": zod.record(zod.string(), zod.unknown()),
@@ -3802,7 +3819,8 @@ export const ListBudSyncJobItemsResponse = zod.object({
   "processedAt": zod.coerce.date().nullable(),
   "sourceLearnerReference": zod.string().nullable(),
   "sourceFirstName": zod.string().nullable(),
-  "sourceLastName": zod.string().nullable()
+  "sourceLastName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -3824,7 +3842,7 @@ export const UpdateBudSyncJobItemResponse = zod.object({
   "id": zod.number(),
   "syncJobId": zod.number(),
   "sourceIdentifier": zod.string(),
-  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped']),
+  "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped', 'status_change']),
   "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']),
   "internalLearnerId": zod.number().nullable(),
   "proposedValues": zod.record(zod.string(), zod.unknown()),
@@ -3838,7 +3856,43 @@ export const UpdateBudSyncJobItemResponse = zod.object({
   "processedAt": zod.coerce.date().nullable(),
   "sourceLearnerReference": zod.string().nullable(),
   "sourceFirstName": zod.string().nullable(),
-  "sourceLastName": zod.string().nullable()
+  "sourceLastName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const LinkBudSyncJobItemToExistingLearnerParams = zod.object({
+  "jobId": zod.coerce.number(),
+  "itemId": zod.coerce.number()
+})
+
+export const LinkBudSyncJobItemToExistingLearnerBody = zod.object({
+  "learnerId": zod.number()
+})
+
+export const LinkBudSyncJobItemToExistingLearnerResponse = zod.object({
+  "id": zod.number(),
+  "baselineId": zod.number(),
+  "status": zod.enum(['ready', 'committing', 'completed', 'failed']),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "startedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "totalSourceRowsExamined": zod.number(),
+  "newLearnersDetected": zod.number(),
+  "learnerUpdatesDetected": zod.number(),
+  "cohortsProposed": zod.number(),
+  "allocationsProposed": zod.number(),
+  "transfersProposed": zod.number(),
+  "approvedCount": zod.number(),
+  "appliedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "conflictCount": zod.number(),
+  "errorCount": zod.number(),
+  "approvalReason": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "errorSummary": zod.string().nullable(),
+  "statusChangesDetected": zod.number()
 })
 
 
@@ -3877,7 +3931,8 @@ export const CommitBudSyncJobResponse = zod.object({
   "errorCount": zod.number(),
   "approvalReason": zod.string().nullable(),
   "correlationId": zod.string().nullable(),
-  "errorSummary": zod.string().nullable()
+  "errorSummary": zod.string().nullable(),
+  "statusChangesDetected": zod.number()
 })
 
 

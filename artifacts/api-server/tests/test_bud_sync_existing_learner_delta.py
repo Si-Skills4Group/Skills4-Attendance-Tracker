@@ -5,6 +5,9 @@ bud_tutor_id (never tutor_name) and go through apply_transfer, and
 historical attendance is never touched by any of this."""
 from datetime import date, timedelta
 
+import pytest
+from fastapi import HTTPException
+
 from pyapp.bud_sync_lib import classify_row, run_commit, run_preview, update_item
 
 
@@ -50,13 +53,21 @@ class TestFieldUpdateDetection:
         )
         assert db.fetchone()["match_status"] == "unchanged"
 
-    def test_a_pre_baseline_match_is_not_reconstructed(self, db, bud_row_factory, baseline_factory, learner_factory):
+    def test_a_matched_learner_is_processed_even_if_the_bud_row_predates_the_baseline(
+        self, db, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        """Corrected rule: the baseline/no-historical-backfill gate applies
+        only to brand-new, UNMATCHED learners -- an already-matched
+        learner must remain eligible for status/field-change detection
+        regardless of when their Bud record first appeared, otherwise a
+        pre-baseline learner's status could never be tracked at all."""
         learner = learner_factory(email="old@example.com", uln="ULN-DELTA-3")
         row = bud_row_factory(unique_learner_number="ULN-DELTA-3", learner_email="new@example.com", synced_at="2000-01-01T00:00:00Z")
         baseline = baseline_factory()
 
         item = classify_row(db, row, baseline)
-        assert item["match_status"] == "existing_before_trial"
+        assert item["match_status"] == "existing_update"
+        assert item["proposed_values"]["fields"]["email"]["after"] == "new@example.com"
         assert item["internal_learner_id"] == learner["id"]
 
     def test_comparison_is_against_accepted_snapshot_not_live_internal_value(
@@ -238,6 +249,132 @@ class TestStartDateChange:
         assert db.fetchone()["cohort_id"] == cohort["id"]  # no automatic cohort re-grouping this trial
 
         db.execute("DELETE FROM attendance_records WHERE session_id = %s", (session["id"],))
+
+
+class TestStatusChangeApplication:
+    """The core fix this refinement makes: a matched learner's Bud status
+    change is actually detected and (where safe) applied -- not just a
+    passive warning. Automatic transitions (active<->paused) apply without
+    an effective date; withdrawn/completed always require the
+    Administrator to supply one, never invented from synced_at."""
+
+    def _link_learner(self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, uln, status_desc="In Progress"):
+        learner = learner_factory(uln=uln, status="active")
+        baseline_factory()
+        bud_row_factory(unique_learner_number=uln, synced_at="2099-01-01T00:00:00Z", status_desc=status_desc)
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job["id"], learner["id"]))
+        item_id = db.fetchone()["id"]
+        update_item(db, job["id"], item_id, None, True)
+        run_commit(db, job["id"], [item_id], "establish link", None, request_factory(admin_user), admin_user)
+        return learner
+
+    def test_an_automatic_transition_is_applied_and_updates_the_snapshot(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = self._link_learner(db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, "ULN-SC-1")
+
+        db.execute("UPDATE public.learner_progress SET status_desc = 'On Break', synced_at = '2099-06-01T00:00:00Z' WHERE unique_learner_number = 'ULN-SC-1'")
+
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            'SELECT id, match_status, approved, proposed_values AS "proposedValues" FROM bud_sync_item '
+            "WHERE sync_job_id = %s AND internal_learner_id = %s", (job2["id"], learner["id"]),
+        )
+        item = db.fetchone()
+        assert item["match_status"] == "status_change"
+        assert item["proposedValues"]["statusChange"]["kind"] == "automatic"
+        assert item["approved"] is True  # preview auto-preselects a fully safe transition
+
+        run_commit(db, job2["id"], [item["id"]], "apply On Break", None, request_factory(admin_user), admin_user)
+
+        db.execute("SELECT status FROM learners WHERE id = %s", (learner["id"],))
+        assert db.fetchone()["status"] == "paused"
+
+        db.execute("SELECT accepted_values AS \"acceptedValues\" FROM bud_learner_link WHERE internal_learner_id = %s", (learner["id"],))
+        assert db.fetchone()["acceptedValues"]["statusDesc"] == "On Break"
+
+        db.execute("SELECT count(*)::int AS c FROM audit_logs WHERE action = 'bud_status_change_applied' AND entity_id = %s", (learner["id"],))
+        assert db.fetchone()["c"] == 1
+
+    def test_a_needs_date_transition_blocks_approval_until_the_date_is_supplied(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = self._link_learner(db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, "ULN-SC-2")
+
+        db.execute("UPDATE public.learner_progress SET status_desc = 'Withdrawn', synced_at = '2099-06-01T00:00:00Z' WHERE unique_learner_number = 'ULN-SC-2'")
+
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            'SELECT id, approved FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s', (job2["id"], learner["id"]),
+        )
+        item = db.fetchone()
+        assert item["approved"] is False  # never auto-preselected without a date
+
+        with pytest.raises(HTTPException) as exc_info:
+            update_item(db, job2["id"], item["id"], None, True)
+        assert exc_info.value.status_code == 400
+
+        updated = update_item(db, job2["id"], item["id"], {"statusChange.effectiveDate": "2026-08-01"}, True)
+        assert updated["approved"] is True
+
+        run_commit(db, job2["id"], [item["id"]], "apply withdrawal", None, request_factory(admin_user), admin_user)
+
+        db.execute("SELECT status, withdrawal_date AS \"withdrawalDate\" FROM learners WHERE id = %s", (learner["id"],))
+        row = db.fetchone()
+        assert row["status"] == "withdrawn"
+        assert str(row["withdrawalDate"]) == "2026-08-01"
+
+    def test_a_status_change_never_touches_historical_attendance(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+        cohort_factory, tutor_factory, attendance_session_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner = learner_factory(uln="ULN-SC-3", status="active", tutor_id=tutor["tutorId"], cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"], session_date="2026-01-05")
+        db.execute(
+            "INSERT INTO attendance_records (session_id, learner_id, status, hours_attended, minutes_late, created_by) "
+            "VALUES (%s, %s, 'present', 7, 0, %s)",
+            (session["id"], learner["id"], admin_user["userId"]),
+        )
+
+        baseline_factory()
+        bud_row_factory(unique_learner_number="ULN-SC-3", synced_at="2099-01-01T00:00:00Z", status_desc="In Progress")
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job["id"], learner["id"]))
+        item_id = db.fetchone()["id"]
+        update_item(db, job["id"], item_id, None, True)
+        run_commit(db, job["id"], [item_id], "establish link", None, request_factory(admin_user), admin_user)
+
+        db.execute("UPDATE public.learner_progress SET status_desc = 'On Break', synced_at = '2099-06-01T00:00:00Z' WHERE unique_learner_number = 'ULN-SC-3'")
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job2["id"], learner["id"]))
+        item_id2 = db.fetchone()["id"]
+        run_commit(db, job2["id"], [item_id2], "apply On Break", None, request_factory(admin_user), admin_user)
+
+        db.execute(
+            "SELECT status, hours_attended AS \"hoursAttended\" FROM attendance_records WHERE session_id = %s AND learner_id = %s",
+            (session["id"], learner["id"]),
+        )
+        row = db.fetchone()
+        assert row["status"] == "present"
+        assert float(row["hoursAttended"]) == 7.0
+
+        db.execute("DELETE FROM attendance_records WHERE session_id = %s", (session["id"],))
+
+    def test_an_unrecognised_bud_status_is_a_conflict(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = self._link_learner(db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, "ULN-SC-4")
+
+        db.execute("UPDATE public.learner_progress SET status_desc = 'Some Future Bud Status', synced_at = '2099-06-01T00:00:00Z' WHERE unique_learner_number = 'ULN-SC-4'")
+
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            "SELECT match_status FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job2["id"], learner["id"]),
+        )
+        assert db.fetchone()["match_status"] == "conflict"
 
 
 def _active_baseline(db):

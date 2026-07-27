@@ -567,7 +567,8 @@ CREATE INDEX IF NOT EXISTS idx_bud_sync_item_match_status ON bud_sync_item (sync
 
 ALTER TABLE bud_sync_item DROP CONSTRAINT IF EXISTS bud_sync_item_match_status_check;
 ALTER TABLE bud_sync_item ADD CONSTRAINT bud_sync_item_match_status_check
-  CHECK (match_status IN ('new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped'));
+  CHECK (match_status IN ('new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped',
+                           'status_change'));
 
 ALTER TABLE bud_sync_item DROP CONSTRAINT IF EXISTS bud_sync_item_action_type_check;
 ALTER TABLE bud_sync_item ADD CONSTRAINT bud_sync_item_action_type_check
@@ -636,6 +637,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_sync_baseline_snapshot_unique
 -- alongside other DDL in the same implicit transaction as long as nothing
 -- in this same statement batch uses the new value yet (nothing here does).
 ALTER TYPE attendance_status ADD VALUE IF NOT EXISTS 'bil';
+
+-- Phase 11 refinement: real Bud status-change detection/application,
+-- alongside the existing per-job counters.
+ALTER TABLE bud_sync_job ADD COLUMN IF NOT EXISTS status_changes_detected integer NOT NULL DEFAULT 0;
 """
 
 

@@ -1,24 +1,41 @@
-"""Controlled Bud delta-synchronisation trial (Phase 11) -- an
-Administrator-only, preview-then-commit workflow that proposes (never
-silently applies) creating learners who newly appear in Bud after a trial
-baseline, and updating already-matched learners based on Bud changes
-observed after that baseline. This module never performs a historical
-backfill: a Bud row observed at-or-before the active baseline is always
-classified `existing_before_trial` and excluded, regardless of whether it
-matches an internal learner.
+"""Controlled Bud delta-synchronisation trial (Phase 11, refined) -- an
+Administrator-only, preview-then-commit workflow with two jobs:
+
+1. Detect a Bud status change for a learner who already exists in
+   Attendance, and update their learner status where that's safe (never
+   inventing an effective date Bud didn't supply).
+2. Detect a Bud learner who does not yet exist in Attendance (matched via
+   learner_reference) and let an Administrator review + approve creating
+   them.
 
 public.learner_progress is owned entirely by a separate, already-deployed
 sync service -- every query here is a plain SELECT, and this module must
 never write to it.
 
-Matching hierarchy (see the Phase 11 plan for the evidence behind this):
+Matching hierarchy (see the Phase 11 refinement plan for the evidence):
 1. Already Bud-linked (bud_learner_link.bud_learning_plan_id) -- an
    established link always wins.
-2. learners.uln = learner_progress.unique_learner_number, exact match to
-   exactly one internal learner (the only cross-system identifier that is
-   actually unique-indexed on the internal side today).
-3. No reliable identifier -> unmatched.
+2. learner_progress.learner_reference = learners.learner_ref, exact match
+   to exactly one internal learner. Primary hierarchy step: learner_ref is
+   NOT NULL UNIQUE on every internal learner, while uln is populated on
+   almost none of them (confirmed against real data). If this same
+   learner_reference value appears on more than one Bud row, that's a
+   conflict -- never guessed, even when exactly one candidate looks current.
+3. Fallback: learners.uln = learner_progress.unique_learner_number, for a
+   learner with no learner_ref match. If reference-match and uln-match
+   would resolve to two *different* internal learners, that's a conflict.
+4. No reliable identifier -> unmatched.
 Never matched by name, email, or tutor_name.
+
+Eligibility differs by whether a row is matched (see classify_row):
+a MATCHED learner is eligible for status-change detection at *any*
+status_desc, with no baseline gate at all -- eligibility there is purely
+"a reliable match exists and the current Bud status differs from the last
+accepted one". An UNMATCHED row keeps the historical-backfill guard (must
+be absent from the baseline snapshot, i.e. genuinely new since the trial
+started) *and* is only proposed as a new learner at status_desc =
+'In Progress'; anything else unmatched is simply not actionable and never
+shown in an operational queue.
 """
 from __future__ import annotations
 
@@ -29,6 +46,7 @@ from fastapi import HTTPException, Request
 
 from .allocation_lib import apply_transfer
 from .audit import write_audit_log
+from .bud_status_mapping import classify_status_transition
 from .correlation import get_correlation_id
 
 # Bud-owned learner fields this trial will propose synchronising, and their
@@ -74,16 +92,17 @@ def get_active_baseline(cur) -> dict | None:
 
 
 def get_source_status(cur) -> dict:
-    """Read-only snapshot used by the trial's status card, both before and
-    after a baseline exists -- never mutates anything. Scoped to the same
-    status_desc = 'In Progress' rows the rest of the trial considers, so
-    these counts describe what the trial will actually act on, not the
-    whole Bud table (which also carries Completed/Withdrawn/Pending/etc
-    rows this trial never touches)."""
+    """Read-only snapshot used by the trial's status card and Sync History,
+    both before and after a baseline exists -- never mutates anything.
+    Covers the whole source table (not just status_desc = 'In Progress'):
+    matched-learner status changes are eligible at any status, so a
+    status-filtered count here would understate what the trial can act on.
+    matchedLearnerCount uses the same primary hierarchy as classify_row --
+    learner_reference against learners.learner_ref first, uln as a
+    fallback -- so this number reflects the real, corrected match rate."""
     cur.execute(
         'SELECT count(*)::int AS "rowCount", max(synced_at) AS "maxSyncedAt" '
-        "FROM public.learner_progress WHERE status_desc = %s",
-        (_ELIGIBLE_STATUS_DESC,),
+        "FROM public.learner_progress WHERE learning_plan_id IS NOT NULL"
     )
     source = cur.fetchone()
     baseline = get_active_baseline(cur)
@@ -92,14 +111,22 @@ def get_source_status(cur) -> dict:
     unmatched_count = 0
     if source["rowCount"]:
         cur.execute(
-            "SELECT unique_learner_number AS uln FROM public.learner_progress "
-            "WHERE unique_learner_number IS NOT NULL AND unique_learner_number <> '' AND status_desc = %s",
-            (_ELIGIBLE_STATUS_DESC,),
+            """
+            SELECT count(DISTINCT lp.learning_plan_id)::int AS count
+            FROM public.learner_progress lp
+            WHERE lp.learning_plan_id IS NOT NULL AND (
+                EXISTS (
+                    SELECT 1 FROM learners l
+                    WHERE l.deleted_at IS NULL AND l.learner_ref = lp.learner_reference
+                ) OR EXISTS (
+                    SELECT 1 FROM learners l
+                    WHERE l.deleted_at IS NULL AND l.uln IS NOT NULL AND l.uln <> ''
+                          AND l.uln = lp.unique_learner_number
+                )
+            )
+            """
         )
-        ulns = [r["uln"] for r in cur.fetchall()]
-        if ulns:
-            cur.execute("SELECT count(*)::int AS count FROM learners WHERE uln = ANY(%s)", (ulns,))
-            matched_count = cur.fetchone()["count"]
+        matched_count = cur.fetchone()["count"]
         unmatched_count = source["rowCount"] - matched_count
 
     return {
@@ -116,24 +143,25 @@ def establish_baseline(cur, request: Request, session: dict, notes: str | None =
     plus its identity snapshot (bud_sync_baseline_snapshot), both trial
     bookkeeping, never a learner/cohort/allocation. Records already present
     in public.learner_progress at this instant are the trial's "before"
-    line: nothing about them is ever proposed as new merely because they
-    are unmatched. Scoped to status_desc = 'In Progress' only, matching
-    _fetch_bud_rows -- a Completed/Withdrawn/Pending/etc row must never
-    influence the baseline this trial actually uses.
+    line: an unmatched row is never proposed as a new learner merely
+    because it's unmatched. Covers every status_desc, not just
+    'In Progress' -- the snapshot answers "did this exact Bud record
+    (learning_plan_id) exist before the trial started" regardless of what
+    status it held then, since a record's status can itself change over
+    time and that must never make an otherwise-pre-existing record look new.
 
     The snapshot -- which learning_plan_ids exist right now -- is what
-    actually answers "did this Bud record exist before the trial started",
-    not source_max_synced_at: real Bud data bulk-touches synced_at across
-    the whole table on every sync, whether or not a given row's data
-    changed, so a pure timestamp cutoff would treat every pre-existing
-    row as newly eligible again the very next time Bud syncs."""
+    actually answers that question, not source_max_synced_at: real Bud
+    data bulk-touches synced_at across the whole table on every sync,
+    whether or not a given row's data changed, so a pure timestamp cutoff
+    would treat every pre-existing row as newly eligible again the very
+    next time Bud syncs."""
     if get_active_baseline(cur) is not None:
         raise HTTPException(status_code=409, detail="A trial baseline is already active. Reset it first.")
 
     cur.execute(
         'SELECT count(*)::int AS "rowCount", max(synced_at) AS "maxSyncedAt" '
-        "FROM public.learner_progress WHERE status_desc = %s",
-        (_ELIGIBLE_STATUS_DESC,),
+        "FROM public.learner_progress WHERE learning_plan_id IS NOT NULL"
     )
     source = cur.fetchone()
 
@@ -155,11 +183,11 @@ def establish_baseline(cur, request: Request, session: dict, notes: str | None =
         SELECT %s, learning_plan_id
         FROM (
             SELECT DISTINCT learning_plan_id FROM public.learner_progress
-            WHERE status_desc = %s AND learning_plan_id IS NOT NULL
-        ) AS eligible_rows
+            WHERE learning_plan_id IS NOT NULL
+        ) AS all_rows
         ON CONFLICT (baseline_id, source_identifier) DO NOTHING
         """,
-        (baseline["id"], _ELIGIBLE_STATUS_DESC),
+        (baseline["id"],),
     )
 
     write_audit_log(
@@ -213,16 +241,16 @@ def _get_baseline_snapshot_ids(cur, baseline_id: int) -> set[str]:
 
 
 def _fetch_bud_rows(cur) -> list[dict]:
-    """Only 'In Progress' Bud rows are ever considered for this trial --
-    confirmed against real production data that this is an exact, real
-    status_desc value (alongside Completed/Withdrawn/Pending/On Break/etc).
-    A learner whose Bud status_desc is anything else is excluded entirely:
-    never proposed as new, never proposed as an update, and -- if it was
-    previously 'In Progress' and has since moved on -- simply stops being
-    considered by this trial from that point forward (no update is ever
-    proposed to reflect the status change itself; see the field-ownership
-    notes on status_desc for why that's a warning-only signal, not an
-    actionable one, this trial)."""
+    """Every Bud row with a learning_plan_id, at any status_desc -- fetched
+    unconditionally. Eligibility is applied in classify_row, not here,
+    because the right eligibility rule differs by whether the row matches an
+    existing Attendance learner: a matched learner must be considered at any
+    status (that's the whole point of status-change detection), while an
+    unmatched row is only eligible for new-learner proposal at
+    _ELIGIBLE_STATUS_DESC. Fetching everything here also fixes a second,
+    latent bug: run_commit's staleness re-check called this same function,
+    so a matched item whose status changed between preview and commit used
+    to vanish from the fresh fetch and get wrongly rejected as stale."""
     cur.execute(
         """
         SELECT learning_plan_id AS "learningPlanId", apprentice_id AS "apprenticeId",
@@ -233,9 +261,8 @@ def _fetch_bud_rows(cur) -> list[dict]:
                programme_name AS "programmeName", status_desc AS "statusDesc",
                learning_plan_url AS "learningPlanUrl", synced_at AS "syncedAt"
         FROM public.learner_progress
-        WHERE learning_plan_id IS NOT NULL AND status_desc = %s
-        """,
-        (_ELIGIBLE_STATUS_DESC,),
+        WHERE learning_plan_id IS NOT NULL
+        """
     )
     rows = cur.fetchall()
     # Defensive dedup, mirroring bud_progress.py's own "latest synced_at
@@ -279,11 +306,48 @@ def _find_link_by_learner_id(cur, learner_id: int) -> dict | None:
 def _find_learners_by_uln(cur, uln: str) -> list[dict]:
     cur.execute(
         'SELECT id, first_name AS "firstName", last_name AS "lastName", tutor_id AS "tutorId", '
-        'cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt" '
-        "FROM learners WHERE uln = %s AND deleted_at IS NULL",
+        'cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
+        'status FROM learners WHERE uln = %s AND deleted_at IS NULL',
         (uln,),
     )
     return cur.fetchall()
+
+
+def _find_learners_by_reference(cur, learner_reference: str) -> list[dict]:
+    """Primary matching hierarchy step: learner_progress.learner_reference
+    against learners.learner_ref (NOT NULL UNIQUE on every internal
+    learner). Confirmed against real production data as the fix for the
+    trial's previous 0-matched-learner defect -- uln alone matches almost
+    nothing since it's populated on very few internal learners."""
+    cur.execute(
+        'SELECT id, first_name AS "firstName", last_name AS "lastName", tutor_id AS "tutorId", '
+        'cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
+        'status FROM learners WHERE learner_ref = %s AND deleted_at IS NULL',
+        (learner_reference,),
+    )
+    return cur.fetchall()
+
+
+def _get_ambiguous_learner_references(cur) -> set[str]:
+    """learner_reference values that (a) match an internal learner.learner_ref
+    and (b) appear on more than one Bud row. Deliberately scoped to (a) --
+    two Bud rows sharing a reference that matches *nobody* internally isn't
+    an internal-matching conflict at all, it just means Bud itself has
+    multiple historical records for a person this trial has never tracked
+    (confirmed common in production: apprentices with several learning
+    plans/re-enrolments over time). Confirmed against real data: ~94 of
+    ~805 referenced learners have multiple learning plans sharing one
+    learner_reference -- per the agreed rule, that specific case is always
+    a conflict, never a guess at which row is authoritative."""
+    cur.execute(
+        """
+        SELECT lp.learner_reference FROM public.learner_progress lp
+        WHERE lp.learner_reference IS NOT NULL AND lp.learner_reference <> '' AND lp.learning_plan_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM learners l WHERE l.deleted_at IS NULL AND l.learner_ref = lp.learner_reference)
+        GROUP BY lp.learner_reference HAVING count(DISTINCT lp.learning_plan_id) > 1
+        """
+    )
+    return {row["learner_reference"] for row in cur.fetchall()}
 
 
 def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None) -> dict | None:
@@ -351,24 +415,28 @@ def _diff_simple_fields(bud_row: dict, accepted_or_current: dict, current_uln: s
     return diff
 
 
-def classify_row(cur, bud_row: dict, baseline: dict, baseline_snapshot_ids: set[str] | None = None) -> dict:
+def classify_row(
+    cur, bud_row: dict, baseline: dict,
+    baseline_snapshot_ids: set[str] | None = None, ambiguous_learner_references: set[str] | None = None,
+) -> dict:
     """Pure classification against current DB state -- never writes
     anything. Returns a dict shaped for insertion into bud_sync_item
     (minus id/sync_job_id, filled in by the caller).
 
-    baseline_snapshot_ids is the set of learning_plan_ids captured in
-    bud_sync_baseline_snapshot at baseline-establishment time -- pass it in
-    (run_preview fetches it once per run) to avoid a query per row; if
-    omitted, it's fetched here for a single-row call (e.g. tests/one-off
-    checks). A row's *presence in that snapshot*, not its synced_at, is
-    what answers "did this Bud record exist before the trial started":
-    real Bud data bulk-touches synced_at across the whole table on every
-    sync regardless of whether a row's data changed, so a pure timestamp
-    cutoff would treat every pre-existing row as newly eligible again the
-    very next time Bud syncs (confirmed against production data)."""
+    baseline_snapshot_ids / ambiguous_learner_references are precomputed
+    once per run_preview call to avoid a query per row; if omitted, both
+    are fetched here for a single-row call (e.g. tests/one-off checks). A
+    row's *presence in that snapshot*, not its synced_at, is what answers
+    "did this Bud record exist before the trial started": real Bud data
+    bulk-touches synced_at across the whole table on every sync regardless
+    of whether a row's data changed, so a pure timestamp cutoff would treat
+    every pre-existing row as newly eligible again the very next time Bud
+    syncs (confirmed against production data)."""
     plan_id = bud_row["learningPlanId"]
     if baseline_snapshot_ids is None:
         baseline_snapshot_ids = _get_baseline_snapshot_ids(cur, baseline["id"])
+    if ambiguous_learner_references is None:
+        ambiguous_learner_references = _get_ambiguous_learner_references(cur)
     is_post_baseline = plan_id not in baseline_snapshot_ids
 
     base_item = {
@@ -381,41 +449,75 @@ def classify_row(cur, bud_row: dict, baseline: dict, baseline_snapshot_ids: set[
     }
 
     link = _find_link_by_plan_id(cur, plan_id)
+    matched_learner: dict | None = None
 
-    if link is None and bud_row.get("uln"):
-        matches = _find_learners_by_uln(cur, bud_row["uln"])
-        if len(matches) > 1:
+    if link is None:
+        learner_reference = bud_row.get("learnerReference")
+        reference_matches: list[dict] = []
+        if learner_reference:
+            if learner_reference in ambiguous_learner_references:
+                return {**base_item, "match_status": "conflict", "action_type": "none",
+                        "reason": "learner_reference_matches_multiple_bud_rows"}
+            reference_matches = _find_learners_by_reference(cur, learner_reference)
+            if len(reference_matches) > 1:
+                return {**base_item, "match_status": "conflict", "action_type": "none",
+                        "reason": "learner_reference_matches_multiple_internal_learners"}
+
+        uln_matches: list[dict] = []
+        if bud_row.get("uln"):
+            uln_matches = _find_learners_by_uln(cur, bud_row["uln"])
+            if len(uln_matches) > 1:
+                return {**base_item, "match_status": "conflict", "action_type": "none",
+                        "reason": "uln_matches_multiple_internal_learners"}
+
+        if reference_matches and uln_matches and reference_matches[0]["id"] != uln_matches[0]["id"]:
             return {**base_item, "match_status": "conflict", "action_type": "none",
-                    "reason": "uln_matches_multiple_internal_learners"}
-        if len(matches) == 1:
-            existing_link_for_learner = _find_link_by_learner_id(cur, matches[0]["id"])
+                    "reason": "learner_reference_and_uln_disagree"}
+
+        matched_learner = reference_matches[0] if reference_matches else (uln_matches[0] if uln_matches else None)
+
+        if matched_learner is not None:
+            base_item["internal_learner_id"] = matched_learner["id"]
+            existing_link_for_learner = _find_link_by_learner_id(cur, matched_learner["id"])
             if existing_link_for_learner and existing_link_for_learner["budLearningPlanId"] != plan_id:
-                return {**base_item, "match_status": "conflict", "action_type": "none", "internal_learner_id": matches[0]["id"],
+                return {**base_item, "match_status": "conflict", "action_type": "none",
                         "reason": "learner_already_linked_to_a_different_bud_record"}
             if existing_link_for_learner is None:
-                if not is_post_baseline:
-                    return {**base_item, "match_status": "existing_before_trial", "action_type": "none",
-                            "internal_learner_id": matches[0]["id"], "reason": "matched_but_observed_at_or_before_baseline"}
-                link = None  # first-ever link will be established on approval; fall through to existing_update path
-                base_item["internal_learner_id"] = matches[0]["id"]
-            else:
-                link = existing_link_for_learner
-                base_item["internal_learner_id"] = matches[0]["id"]
+                # First-ever observation for an already-existing Attendance
+                # learner: no prior accepted snapshot exists, so this flows
+                # through the normal existing-update classification with an
+                # empty accepted-values dict -- every Bud-owned field looks
+                # "changed" and is proposed for review (matching this
+                # trial's original, already-tested behaviour), except
+                # status: with nothing accepted yet to diff against, a
+                # status difference here is "filling a gap", not a change
+                # requiring review, so _classify_existing_learner_update
+                # deliberately skips status-change detection when accepted
+                # is empty. No baseline gate applies here (unlike
+                # new-learner detection): a match is a match regardless of
+                # when the Bud record first appeared.
+                return _classify_existing_learner_update(
+                    cur, bud_row, base_item, {"acceptedValues": {}, "acceptedSyncedAt": None},
+                )
+            link = existing_link_for_learner
 
     if link is not None:
         base_item["internal_learner_id"] = link["internalLearnerId"]
-        if not (bud_row["syncedAt"] and link["acceptedSyncedAt"] and bud_row["syncedAt"] > link["acceptedSyncedAt"]) and link["acceptedSyncedAt"] is not None:
-            return {**base_item, "match_status": "unchanged", "action_type": "none", "reason": "no_change_since_last_accepted_snapshot"}
         return _classify_existing_learner_update(cur, bud_row, base_item, link)
 
-    if base_item["internal_learner_id"]:
-        # ULN-matched, not yet linked, first post-baseline observation.
-        return _classify_existing_learner_update(cur, bud_row, base_item, {"acceptedValues": {}, "acceptedSyncedAt": None})
-
-    # No match at all.
+    # No match at all -- unmatched eligibility keeps the historical-backfill
+    # guard (never import what already existed before the trial started)
+    # and is only ever proposed as a new learner at the one confirmed
+    # "actively enrolling" status; anything else unmatched simply isn't
+    # actionable and must never flood an operational queue.
+    if not bud_row.get("learnerReference"):
+        return {**base_item, "match_status": "conflict", "action_type": "none", "reason": "missing_learner_reference"}
     if not is_post_baseline:
         return {**base_item, "match_status": "existing_before_trial", "action_type": "none",
                 "reason": "unmatched_but_observed_at_or_before_baseline"}
+    if bud_row.get("statusDesc") != _ELIGIBLE_STATUS_DESC:
+        return {**base_item, "match_status": "existing_before_trial", "action_type": "none",
+                "reason": "unmatched_non_actionable_status"}
     return _classify_new_learner(cur, bud_row, base_item)
 
 
@@ -471,6 +573,9 @@ def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
             "tutor": {"budTutorId": bud_row.get("budTutorId"), "internalTutorId": tutor["id"]},
             "cohort": cohort_action,
             "allocation": {"effectiveDate": str(start_date_value), "immediate": immediate},
+            # Display-only -- never passed to LearnerInput/_create_learner,
+            # which only ever reads proposed_values["learner"].
+            "budStatus": bud_row.get("statusDesc"),
         },
         "previous_values": {"budSyncedAt": str(bud_row["syncedAt"]) if bud_row.get("syncedAt") else None},
         "warnings": warnings,
@@ -481,8 +586,8 @@ def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
 def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link: dict) -> dict:
     cur.execute(
         'SELECT id, first_name AS "firstName", last_name AS "lastName", email, mobile, programme, uln, '
-        'tutor_id AS "tutorId", cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt" '
-        "FROM learners WHERE id = %s AND deleted_at IS NULL",
+        'tutor_id AS "tutorId", cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
+        'status FROM learners WHERE id = %s AND deleted_at IS NULL',
         (base_item["internal_learner_id"],),
     )
     learner = cur.fetchone()
@@ -524,22 +629,61 @@ def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link:
     if start_date_change:
         proposed["startDateChange"] = start_date_change
 
-    if bud_row.get("statusDesc") and bud_row["statusDesc"] != accepted.get("statusDesc"):
-        warnings.append(f"Bud status_desc changed ('{accepted.get('statusDesc')}' -> '{bud_row['statusDesc']}') -- "
-                         "review manually; not auto-mapped to an internal status this trial.")
+    status_change = None
+    bud_status_desc = bud_row.get("statusDesc")
+    # accepted is {} on a first-ever observation (see classify_row) -- with
+    # nothing previously accepted to diff against, a status "difference"
+    # here is filling a gap, not a change requiring review.
+    if accepted and bud_status_desc and bud_status_desc != accepted.get("statusDesc"):
+        transition = classify_status_transition(learner["status"], bud_status_desc)
+        if transition["kind"] == "unrecognised":
+            return {
+                **base_item, "match_status": "conflict", "action_type": "none",
+                "reason": "unsupported_status_transition",
+                "warnings": [f"Bud reports status_desc '{bud_status_desc}', which has no agreed internal mapping."],
+            }
+        if transition["kind"] != "no_change":
+            status_change = {
+                "previousAcceptedStatusDesc": accepted.get("statusDesc"),
+                "currentStatusDesc": bud_status_desc,
+                "currentLearnerStatus": learner["status"],
+                "kind": transition["kind"],
+                "targetStatus": transition["targetStatus"],
+                "dateField": transition["dateField"],
+                "effectiveDate": None,
+            }
+            if transition["kind"] == "needs_date":
+                warnings.append(
+                    f"Bud status changed to '{bud_status_desc}' -- {transition['dateField']} is required "
+                    "from the Administrator before this can be applied."
+                )
+            elif transition["kind"] == "informational":
+                warnings.append(
+                    f"Bud status changed to '{bud_status_desc}' -- informational only, Bud hasn't finalised "
+                    "this yet, so no Attendance status change is applied."
+                )
+    if status_change:
+        proposed["statusChange"] = status_change
 
     if not proposed and not warnings:
         return {**base_item, "match_status": "unchanged", "action_type": "none", "reason": "no_proposable_change"}
 
-    action_type = "update_learner"
-    if tutor_transfer:
+    match_status = "status_change" if status_change else "existing_update"
+
+    if status_change and status_change["kind"] in ("automatic", "needs_date"):
+        action_type = "change_status"
+    elif tutor_transfer:
         action_type = "transfer_tutor"
     elif start_date_change:
         action_type = "change_start_date"
+    elif fields_diff:
+        action_type = "update_learner"
+    else:
+        action_type = "none"  # informational-only status blip: nothing to apply, just acknowledge + snapshot
 
     return {
         **base_item,
-        "match_status": "existing_update",
+        "match_status": match_status,
         "action_type": action_type,
         "proposed_values": proposed,
         "previous_values": {
@@ -559,10 +703,22 @@ def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link:
 _ITEM_INSERT_SQL = """
     INSERT INTO bud_sync_item
         (sync_job_id, source_identifier, match_status, action_type, internal_learner_id,
-         proposed_values, previous_values, warnings, reason,
+         proposed_values, previous_values, warnings, reason, approved,
          source_learner_reference, source_first_name, source_last_name)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
+
+
+def _is_auto_approvable(item: dict) -> bool:
+    """Preview may auto-preselect (approved=true) a proposal it classified
+    as fully safe -- 'automatic' status changes only. This never bypasses
+    the Administrator-triggered commit step; it only means the checkbox
+    starts ticked instead of unticked. Every other item -- new learners,
+    needs_date/informational status changes, field/tutor/date updates,
+    conflicts -- defaults to unapproved."""
+    if item["match_status"] == "status_change":
+        return item["proposed_values"].get("statusChange", {}).get("kind") == "automatic"
+    return False
 
 
 def run_preview(cur, request: Request, session: dict) -> dict:
@@ -572,6 +728,7 @@ def run_preview(cur, request: Request, session: dict) -> dict:
 
     bud_rows = _fetch_bud_rows(cur)
     baseline_snapshot_ids = _get_baseline_snapshot_ids(cur, baseline["id"])
+    ambiguous_learner_references = _get_ambiguous_learner_references(cur)
 
     cur.execute(
         """
@@ -582,10 +739,11 @@ def run_preview(cur, request: Request, session: dict) -> dict:
     )
     job_id = cur.fetchone()["id"]
 
-    counts = {"new": 0, "existing_update": 0, "unchanged": 0, "conflict": 0, "existing_before_trial": 0, "skipped": 0}
+    counts = {"new": 0, "existing_update": 0, "unchanged": 0, "conflict": 0,
+              "existing_before_trial": 0, "status_change": 0}
     action_counts = {"cohorts_proposed": 0, "allocations_proposed": 0, "transfers_proposed": 0}
     for bud_row in bud_rows:
-        item = classify_row(cur, bud_row, baseline, baseline_snapshot_ids)
+        item = classify_row(cur, bud_row, baseline, baseline_snapshot_ids, ambiguous_learner_references)
         counts[item["match_status"]] += 1
         if item["action_type"] == "create_learner":
             action_counts["cohorts_proposed"] += 1 if item["proposed_values"].get("cohort", {}).get("action") == "create" else 0
@@ -599,6 +757,7 @@ def run_preview(cur, request: Request, session: dict) -> dict:
                 job_id, item["source_identifier"], item["match_status"], item["action_type"],
                 item["internal_learner_id"], json.dumps(item["proposed_values"], default=str),
                 json.dumps(item["previous_values"], default=str), json.dumps(item["warnings"]), item["reason"],
+                _is_auto_approvable(item),
                 bud_row.get("learnerReference"), bud_row.get("learnerForename"), bud_row.get("learnerSurname"),
             ),
         )
@@ -608,12 +767,12 @@ def run_preview(cur, request: Request, session: dict) -> dict:
         UPDATE bud_sync_job SET
             new_learners_detected = %s, learner_updates_detected = %s,
             cohorts_proposed = %s, allocations_proposed = %s, transfers_proposed = %s,
-            conflict_count = %s, skipped_count = %s
+            conflict_count = %s, skipped_count = %s, status_changes_detected = %s
         WHERE id = %s
         """,
         (counts["new"], counts["existing_update"], action_counts["cohorts_proposed"],
          action_counts["allocations_proposed"], action_counts["transfers_proposed"],
-         counts["conflict"], counts["existing_before_trial"], job_id),
+         counts["conflict"], counts["existing_before_trial"], counts["status_change"], job_id),
     )
 
     write_audit_log(
@@ -634,7 +793,7 @@ def get_job(cur, job_id: int) -> dict:
                transfers_proposed AS "transfersProposed", approved_count AS "approvedCount",
                applied_count AS "appliedCount", skipped_count AS "skippedCount", conflict_count AS "conflictCount",
                error_count AS "errorCount", approval_reason AS "approvalReason", correlation_id AS "correlationId",
-               error_summary AS "errorSummary"
+               error_summary AS "errorSummary", status_changes_detected AS "statusChangesDetected"
         FROM bud_sync_job WHERE id = %s
         """,
         (job_id,),
@@ -652,7 +811,8 @@ def list_jobs(cur, page: int, page_size: int) -> dict:
         """
         SELECT id, baseline_id AS "baselineId", status, started_at AS "startedAt", completed_at AS "completedAt",
                new_learners_detected AS "newLearnersDetected", learner_updates_detected AS "learnerUpdatesDetected",
-               conflict_count AS "conflictCount", applied_count AS "appliedCount"
+               conflict_count AS "conflictCount", applied_count AS "appliedCount",
+               status_changes_detected AS "statusChangesDetected"
         FROM bud_sync_job ORDER BY started_at DESC LIMIT %s OFFSET %s
         """,
         (page_size, (page - 1) * page_size),
@@ -680,7 +840,8 @@ def list_items(cur, job_id: int, match_status: str | None, action_type: str | No
                proposed_values AS "proposedValues", previous_values AS "previousValues", warnings, reason,
                approved, applied, outcome, error_code AS "errorCode", processed_at AS "processedAt",
                source_learner_reference AS "sourceLearnerReference",
-               source_first_name AS "sourceFirstName", source_last_name AS "sourceLastName"
+               source_first_name AS "sourceFirstName", source_last_name AS "sourceLastName",
+               created_at AS "createdAt"
         FROM bud_sync_item WHERE {where} ORDER BY id LIMIT %s OFFSET %s
         """,
         [*params, page_size, (page - 1) * page_size],
@@ -718,6 +879,11 @@ def get_unmatched_pre_baseline(cur, page: int, page_size: int) -> dict:
 
 
 def _item_missing_fields(item: dict) -> list[str]:
+    if item["actionType"] == "change_status":
+        status_change = item["proposedValues"].get("statusChange", {})
+        if status_change.get("kind") == "needs_date" and not status_change.get("effectiveDate"):
+            return [f"statusChange.{status_change.get('dateField', 'effectiveDate')}"]
+        return []
     if item["actionType"] != "create_learner":
         return []
     missing = []
@@ -778,12 +944,115 @@ def update_item(cur, job_id: int, item_id: int, field_updates: dict | None, appr
                proposed_values AS "proposedValues", previous_values AS "previousValues", warnings, reason,
                approved, applied, outcome, error_code AS "errorCode", processed_at AS "processedAt",
                source_learner_reference AS "sourceLearnerReference",
-               source_first_name AS "sourceFirstName", source_last_name AS "sourceLastName"
+               source_first_name AS "sourceFirstName", source_last_name AS "sourceLastName",
+               created_at AS "createdAt"
         FROM bud_sync_item WHERE id = %s
         """,
         (item_id,),
     )
     return cur.fetchone()
+
+
+def link_existing_learner(cur, job_id: int, item_id: int, target_learner_id: int, request: Request, session: dict) -> dict:
+    """New Learners tab's 'Mark as already represented' action: the
+    Administrator has manually confirmed a specific existing Attendance
+    learner is this Bud row, without waiting for an automatic
+    learner_reference/uln match. Only ever offered from a 'new' item --
+    never bypasses the create-learner review for anything else. Writes the
+    link directly (there is no 'existing learner' service call needed --
+    bud_learner_link is this trial's own bookkeeping table), captured in
+    the same transaction as its audit entry so both roll back together."""
+    cur.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job_id,))
+    job = cur.fetchone()
+    if not job:
+        raise HTTPException(status_code=404, detail="Sync job not found")
+    if job["status"] != "ready":
+        raise HTTPException(status_code=409, detail=f"Job is not in a reviewable state (status={job['status']})")
+
+    cur.execute(
+        'SELECT id, source_identifier AS "sourceIdentifier", match_status AS "matchStatus" '
+        "FROM bud_sync_item WHERE id = %s AND sync_job_id = %s",
+        (item_id, job_id),
+    )
+    item = cur.fetchone()
+    if not item:
+        raise HTTPException(status_code=404, detail="Sync item not found")
+    if item["matchStatus"] != "new":
+        raise HTTPException(status_code=400, detail="Only a 'new learner' item can be manually linked to an existing learner")
+
+    cur.execute("SELECT id FROM learners WHERE id = %s AND deleted_at IS NULL", (target_learner_id,))
+    if not cur.fetchone():
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    existing_link = _find_link_by_learner_id(cur, target_learner_id)
+    if existing_link and existing_link["budLearningPlanId"] != item["sourceIdentifier"]:
+        raise HTTPException(status_code=409, detail="This learner is already linked to a different Bud record")
+
+    fresh_rows = {r["learningPlanId"]: r for r in _fetch_bud_rows(cur)}
+    fresh_row = fresh_rows.get(item["sourceIdentifier"])
+    if fresh_row is None:
+        raise HTTPException(status_code=409, detail="This Bud row is no longer present in the source -- generate a new preview")
+
+    with cur.connection.transaction():
+        _upsert_learner_link(cur, target_learner_id, fresh_row, job_id)
+        cur.execute(
+            "UPDATE bud_sync_item SET approved = true, applied = true, outcome = 'manually_linked', "
+            "internal_learner_id = %s, processed_at = now() WHERE id = %s",
+            (target_learner_id, item_id),
+        )
+        write_audit_log(
+            request, action="bud_sync_manual_link_established", entity_type="learner", entity_id=target_learner_id,
+            new_value={"sourceIdentifier": item["sourceIdentifier"], "syncItemId": item_id}, cur=cur,
+        )
+
+    return get_job(cur, job_id)
+
+
+def get_job_summary(cur, job_id: int) -> dict:
+    """Backend-computed operational counts for the dashboard summary cards
+    -- GROUP BY on bud_sync_item, not fetched-then-filtered client-side.
+    Scoped to the given job (normally the most recent one) rather than
+    across every job ever run, since a stale job's conflicts/status
+    changes are no longer the live picture."""
+    cur.execute(
+        """
+        SELECT match_status, count(*)::int AS count
+        FROM bud_sync_item WHERE sync_job_id = %s AND applied = false
+        GROUP BY match_status
+        """,
+        (job_id,),
+    )
+    open_counts = {row["match_status"]: row["count"] for row in cur.fetchall()}
+
+    today = date.today()
+    cur.execute(
+        """
+        SELECT count(*)::int AS count FROM bud_sync_item
+        WHERE sync_job_id = %s AND applied = true AND action_type = 'change_status' AND processed_at::date = %s
+        """,
+        (job_id, today),
+    )
+    applied_today = cur.fetchone()["count"]
+    cur.execute(
+        """
+        SELECT count(*)::int AS count FROM bud_sync_item
+        WHERE sync_job_id = %s AND applied = true AND action_type = 'create_learner' AND processed_at::date = %s
+        """,
+        (job_id, today),
+    )
+    created_today = cur.fetchone()["count"]
+
+    cur.execute("SELECT completed_at AS \"completedAt\" FROM bud_sync_job WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1")
+    last_commit = cur.fetchone()
+
+    return {
+        "statusChangesCount": open_counts.get("status_change", 0),
+        "newLearnersCount": open_counts.get("new", 0),
+        "conflictsCount": open_counts.get("conflict", 0),
+        "statusChangesAppliedToday": applied_today,
+        "learnersCreatedToday": created_today,
+        "lastSuccessfulSyncAt": last_commit["completedAt"] if last_commit else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -819,7 +1088,7 @@ def _count_batch_actions(items: list[dict]) -> dict:
             counts["learnerCreations"] += 1
             if item["proposedValues"].get("cohort", {}).get("action") == "create":
                 counts["cohortCreations"] += 1
-        elif item["actionType"] in ("update_learner", "change_start_date"):
+        elif item["actionType"] in ("update_learner", "change_start_date", "change_status"):
             counts["learnerUpdates"] += 1
         elif item["actionType"] == "transfer_tutor":
             counts["tutorTransfers"] += 1
@@ -930,7 +1199,7 @@ def _apply_new_learner(cur, item: dict, request: Request, session: dict) -> int:
 
 
 def _apply_existing_learner_update(cur, item: dict, request: Request, session: dict) -> int:
-    from .routers.learners import LearnerUpdate, _update_learner
+    from .routers.learners import LearnerUpdate, _change_learner_status, _update_learner
 
     learner_id = item["internalLearnerId"]
     proposed = item["proposedValues"]
@@ -950,6 +1219,33 @@ def _apply_existing_learner_update(cur, item: dict, request: Request, session: d
         apply_transfer(
             cur, learner, proposed["tutorTransfer"]["internalTutorId"], learner["cohortId"],
             date.today(), "Bud sync trial - tutor transfer", session["userId"],
+        )
+
+    status_change = proposed.get("statusChange")
+    if status_change and status_change["kind"] in ("automatic", "needs_date"):
+        # _change_learner_status is the one place learners.status ever
+        # changes (pyapp/routers/learners.py) -- reused here so the same
+        # "withdrawalDate required for withdrawn, actualEndDate required
+        # for completed" guard applies to a Bud-driven change exactly as it
+        # does to a manual one. For "needs_date" this raises if the
+        # Administrator hasn't supplied the date yet -- but approval is
+        # already blocked in that case (_item_missing_fields), so this
+        # should never actually be reached without a date present.
+        cur.execute("SELECT status FROM learners WHERE id = %s AND deleted_at IS NULL", (learner_id,))
+        previous_status = cur.fetchone()["status"]
+        # effectiveDate round-trips through jsonb as a plain string --
+        # _change_learner_status/_validate_learner_dates compare it against
+        # real date objects, so it must be parsed before use (unlike the
+        # HTTP path, where Pydantic already did this for a manual change).
+        effective_date = date.fromisoformat(status_change["effectiveDate"]) if status_change.get("effectiveDate") else None
+        actual_end_date = effective_date if status_change["dateField"] == "actualEndDate" else None
+        withdrawal_date = effective_date if status_change["dateField"] == "withdrawalDate" else None
+        _change_learner_status(cur, learner_id, status_change["targetStatus"], actual_end_date, withdrawal_date)
+        write_audit_log(
+            request, action="bud_status_change_applied", entity_type="learner", entity_id=learner_id,
+            previous_value={"status": previous_status, "budStatusDesc": status_change.get("previousAcceptedStatusDesc")},
+            new_value={"status": status_change["targetStatus"], "budStatusDesc": status_change["currentStatusDesc"]},
+            cur=cur,
         )
 
     return learner_id
@@ -1058,7 +1354,15 @@ def run_commit(cur, job_id: int, item_ids: list[int], approval_reason: str, limi
                 fresh_row = fresh_bud_rows_by_plan_id.get(item["sourceIdentifier"])
                 if item["actionType"] == "create_learner":
                     learner_id = _apply_new_learner(cur, item, request, session)
-                elif item["actionType"] in ("update_learner", "transfer_tutor", "change_start_date"):
+                elif item["actionType"] in ("update_learner", "transfer_tutor", "change_start_date", "change_status") or (
+                    item["actionType"] == "none" and item["matchStatus"] == "status_change"
+                ):
+                    # An informational-only status blip (action_type "none")
+                    # still needs the accepted snapshot bumped on commit --
+                    # otherwise it would re-appear identically forever.
+                    # _apply_existing_learner_update is a no-op for it
+                    # beyond that, by design (its statusChange branch only
+                    # acts on "automatic"/"needs_date" kinds).
                     learner_id = _apply_existing_learner_update(cur, item, request, session)
                 else:
                     cur.execute(

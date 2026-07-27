@@ -34,4 +34,5 @@ export interface BudSyncJob {
   correlationId: string | null;
   /** @nullable */
   errorSummary: string | null;
+  statusChangesDetected: number;
 }

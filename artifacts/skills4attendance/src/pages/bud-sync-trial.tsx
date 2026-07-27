@@ -5,13 +5,18 @@ import {
   useResetBudSyncBaseline,
   useCreateBudSyncPreview,
   useGetBudSyncJob,
+  useGetBudSyncJobSummary,
   useListBudSyncJobItems,
   useUpdateBudSyncJobItem,
   useCommitBudSyncJob,
+  useLinkBudSyncJobItemToExistingLearner,
+  useListLearners,
   useGetSettings,
   getGetBudSyncStatusQueryKey,
   getGetBudSyncJobQueryKey,
+  getGetBudSyncJobSummaryQueryKey,
   getListBudSyncJobItemsQueryKey,
+  getListLearnersQueryKey,
   type BudSyncItem,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,24 +28,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { RefreshCw, Loader2, AlertTriangle, ShieldAlert, Info } from "lucide-react";
+import { RefreshCw, Loader2, AlertTriangle, ShieldAlert, Info, ArrowRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
-
-const MATCH_STATUS_OPTIONS = [
-  { value: "all", label: "All statuses" },
-  { value: "new", label: "New" },
-  { value: "existing_update", label: "Existing update" },
-  { value: "unchanged", label: "Unchanged" },
-  { value: "conflict", label: "Conflict" },
-  { value: "existing_before_trial", label: "Before trial" },
-];
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
   create_learner: "Create learner",
@@ -53,7 +49,35 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   none: "No action",
 };
 
+type StatusChangeValues = {
+  previousAcceptedStatusDesc: string | null;
+  currentStatusDesc: string;
+  currentLearnerStatus: string;
+  kind: "automatic" | "needs_date" | "informational" | "unrecognised";
+  targetStatus: string | null;
+  dateField: string | null;
+  effectiveDate: string | null;
+};
+
+function statusChangeOf(item: BudSyncItem): StatusChangeValues | null {
+  return (item.proposedValues?.statusChange as StatusChangeValues | undefined) ?? null;
+}
+
+function statusChangeOutcomeLabel(item: BudSyncItem): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
+  if (item.applied) return { label: item.outcome === "stale_source_rejected" || item.outcome === "stale_internal_rejected" ? "Stale — rejected" : "Applied", variant: item.outcome?.includes("rejected") ? "destructive" : "default" };
+  const change = statusChangeOf(item);
+  if (change?.kind === "needs_date") return { label: "Awaiting information", variant: "secondary" };
+  if (change?.kind === "informational") return { label: "Informational", variant: "outline" };
+  if (item.approved) return { label: "Approved — pending commit", variant: "secondary" };
+  return { label: "Awaiting review", variant: "outline" };
+}
+
 function missingFieldPaths(item: BudSyncItem): string[] {
+  if (item.actionType === "change_status") {
+    const change = statusChangeOf(item);
+    if (change?.kind === "needs_date" && !change.effectiveDate) return [`statusChange.${change.dateField ?? "effectiveDate"}`];
+    return [];
+  }
   if (item.actionType !== "create_learner") return [];
   const missing: string[] = [];
   const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
@@ -71,8 +95,13 @@ function missingFieldPaths(item: BudSyncItem): string[] {
 function actionTypeForLimit(item: BudSyncItem): "learnerCreations" | "learnerUpdates" | "cohortCreations" | "tutorTransfers" | null {
   if (item.actionType === "create_learner") return "learnerCreations";
   if (item.actionType === "transfer_tutor") return "tutorTransfers";
-  if (item.actionType === "update_learner" || item.actionType === "change_start_date") return "learnerUpdates";
+  if (item.actionType === "update_learner" || item.actionType === "change_start_date" || item.actionType === "change_status") return "learnerUpdates";
   return null;
+}
+
+function itemDisplayName(item: BudSyncItem | null): string {
+  if (!item) return "";
+  return `${item.sourceFirstName ?? ""} ${item.sourceLastName ?? ""}`.trim() || item.sourceLearnerReference || "item";
 }
 
 export default function BudSyncTrialPage() {
@@ -83,13 +112,15 @@ export default function BudSyncTrialPage() {
   const [resetReason, setResetReason] = React.useState("");
 
   const [activeJobId, setActiveJobId] = React.useState<number | null>(null);
-  const [matchStatusFilter, setMatchStatusFilter] = React.useState<string>("all");
+  const [activeTab, setActiveTab] = React.useState("status-changes");
   const [reviewItem, setReviewItem] = React.useState<BudSyncItem | null>(null);
   const [reviewFields, setReviewFields] = React.useState<Record<string, string>>({});
   const [commitDialogOpen, setCommitDialogOpen] = React.useState(false);
   const [approvalReason, setApprovalReason] = React.useState("");
   const [limitOverrideReason, setLimitOverrideReason] = React.useState("");
   const [overLimitInfo, setOverLimitInfo] = React.useState<Record<string, number> | null>(null);
+  const [linkItem, setLinkItem] = React.useState<BudSyncItem | null>(null);
+  const [linkSearch, setLinkSearch] = React.useState("");
 
   const { data: status, isLoading: statusLoading } = useGetBudSyncStatus();
   const { data: settings } = useGetSettings();
@@ -99,25 +130,40 @@ export default function BudSyncTrialPage() {
   const previewMutation = useCreateBudSyncPreview();
   const updateItemMutation = useUpdateBudSyncJobItem();
   const commitMutation = useCommitBudSyncJob();
+  const linkExistingMutation = useLinkBudSyncJobItemToExistingLearner();
 
   const { data: job } = useGetBudSyncJob(activeJobId ?? 0, {
     query: { enabled: activeJobId !== null, queryKey: getGetBudSyncJobQueryKey(activeJobId ?? 0) },
   });
 
-  const { data: itemsData, isLoading: itemsLoading } = useListBudSyncJobItems(
-    activeJobId ?? 0,
-    { matchStatus: matchStatusFilter !== "all" ? (matchStatusFilter as any) : undefined, pageSize: 200 },
-    {
-      query: {
-        enabled: activeJobId !== null,
-        queryKey: getListBudSyncJobItemsQueryKey(activeJobId ?? 0, { matchStatus: matchStatusFilter !== "all" ? (matchStatusFilter as any) : undefined, pageSize: 200 }),
-      },
-    },
+  const { data: summary } = useGetBudSyncJobSummary(activeJobId ?? 0, {
+    query: { enabled: activeJobId !== null, queryKey: getGetBudSyncJobSummaryQueryKey(activeJobId ?? 0) },
+  });
+
+  const statusChangeParams = { matchStatus: "status_change" as const, pageSize: 200 };
+  const newLearnerParams = { matchStatus: "new" as const, pageSize: 200 };
+  const conflictParams = { matchStatus: "conflict" as const, pageSize: 200 };
+
+  const { data: statusChangeItems, isLoading: statusChangesLoading } = useListBudSyncJobItems(activeJobId ?? 0, statusChangeParams, {
+    query: { enabled: activeJobId !== null, queryKey: getListBudSyncJobItemsQueryKey(activeJobId ?? 0, statusChangeParams) },
+  });
+  const { data: newLearnerItems, isLoading: newLearnersLoading } = useListBudSyncJobItems(activeJobId ?? 0, newLearnerParams, {
+    query: { enabled: activeJobId !== null, queryKey: getListBudSyncJobItemsQueryKey(activeJobId ?? 0, newLearnerParams) },
+  });
+  const { data: conflictItems, isLoading: conflictsLoading } = useListBudSyncJobItems(activeJobId ?? 0, conflictParams, {
+    query: { enabled: activeJobId !== null, queryKey: getListBudSyncJobItemsQueryKey(activeJobId ?? 0, conflictParams) },
+  });
+
+  const linkSearchParams = { search: linkSearch, pageSize: 10 };
+  const { data: linkCandidates } = useListLearners(
+    linkSearchParams,
+    { query: { enabled: !!linkItem && linkSearch.trim().length > 1, queryKey: getListLearnersQueryKey(linkSearchParams) } },
   );
 
   const invalidateJob = () => {
     if (activeJobId === null) return;
     queryClient.invalidateQueries({ queryKey: getGetBudSyncJobQueryKey(activeJobId) });
+    queryClient.invalidateQueries({ queryKey: getGetBudSyncJobSummaryQueryKey(activeJobId) });
     queryClient.invalidateQueries({ queryKey: getListBudSyncJobItemsQueryKey(activeJobId, {}) });
   };
 
@@ -154,10 +200,13 @@ export default function BudSyncTrialPage() {
     previewMutation.mutate(undefined, {
       onSuccess: (newJob) => {
         setActiveJobId(newJob.id);
-        setMatchStatusFilter("all");
-        toast({ title: "Preview generated", description: `${newJob.newLearnersDetected} new, ${newJob.learnerUpdatesDetected} updated, ${newJob.conflictCount} conflicts.` });
+        setActiveTab("status-changes");
+        toast({
+          title: "Bud checked for changes",
+          description: `${newJob.statusChangesDetected} status change(s), ${newJob.newLearnersDetected} new learner(s), ${newJob.conflictCount} conflict(s).`,
+        });
       },
-      onError: (err) => toast({ title: "Preview failed", description: getErrorMessage(err), variant: "destructive" }),
+      onError: (err) => toast({ title: "Could not check Bud for changes", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 
@@ -196,7 +245,24 @@ export default function BudSyncTrialPage() {
     );
   };
 
-  const approvedItems = (itemsData?.items ?? []).filter((i) => i.approved);
+  const submitLink = (learnerId: number) => {
+    if (!linkItem) return;
+    linkExistingMutation.mutate(
+      { jobId: linkItem.syncJobId, itemId: linkItem.id, data: { learnerId } },
+      {
+        onSuccess: () => {
+          invalidateJob();
+          setLinkItem(null);
+          setLinkSearch("");
+          toast({ title: "Linked to existing learner" });
+        },
+        onError: (err) => toast({ title: "Could not link learner", description: getErrorMessage(err), variant: "destructive" }),
+      },
+    );
+  };
+
+  const allVisibleItems = [...(statusChangeItems?.items ?? []), ...(newLearnerItems?.items ?? [])];
+  const approvedItems = allVisibleItems.filter((i) => i.approved && !i.applied);
   const commitSummary = approvedItems.reduce(
     (acc, item) => {
       const key = actionTypeForLimit(item);
@@ -204,6 +270,7 @@ export default function BudSyncTrialPage() {
       if (item.actionType === "create_learner" && (item.proposedValues?.cohort as any)?.action === "create") {
         acc.cohortCreations += 1;
       }
+      if (item.actionType === "transfer_tutor") acc.tutorTransfers += 1;
       return acc;
     },
     { learnerCreations: 0, learnerUpdates: 0, cohortCreations: 0, tutorTransfers: 0 },
@@ -259,141 +326,269 @@ export default function BudSyncTrialPage() {
         <CardContent className="p-4 flex gap-3 items-start">
           <Info className="w-5 h-5 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800 dark:text-amber-400">
-            Only learners newly appearing after the trial baseline, and post-baseline changes to existing
-            Attendance learners, are eligible. Existing unmatched Bud learners are excluded.
+            Bud synchronisation trial: learners whose Bud status has changed are shown in Status Changes at any
+            status. Learners newly appearing after the trial baseline are shown in New Learners for your review.
+            Existing unmatched Bud learners from before the trial are excluded — see Sync History.
           </p>
         </CardContent>
       </Card>
 
       <Card className="mb-6 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg">Bud source status</CardTitle>
+          <CardTitle className="text-lg">Baseline &amp; source status</CardTitle>
           <CardDescription>
-            {statusLoading ? "Loading…" : status?.sourceMaxSyncedAt ? `Last synced ${format(parseISO(status.sourceMaxSyncedAt), "MMM d, yyyy HH:mm")}` : "No Bud data synced yet"}
+            {statusLoading ? "Loading…" : status?.sourceMaxSyncedAt ? `Last Bud source sync ${format(parseISO(status.sourceMaxSyncedAt), "MMM d, yyyy HH:mm")}` : "No Bud data synced yet"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="text-2xl font-bold">{status?.sourceRowCount ?? "—"}</div>
-            <div className="text-xs text-muted-foreground">Bud rows visible</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold">{status?.matchedLearnerCount ?? "—"}</div>
-            <div className="text-xs text-muted-foreground">Matched learners</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold">{status?.unmatchedLearnerCount ?? "—"}</div>
-            <div className="text-xs text-muted-foreground">Unmatched Bud rows</div>
-          </div>
+        <CardContent className="flex items-center justify-between gap-4">
           <div>
             {hasActiveBaseline ? (
-              <>
-                <div className="text-sm font-medium">
-                  Baseline #{status?.activeBaseline?.id} — {status?.activeBaseline && format(parseISO(status.activeBaseline.establishedAt), "MMM d, yyyy")}
-                </div>
-                <Button variant="outline" size="sm" className="mt-1" onClick={() => setResetDialogOpen(true)}>
-                  Reset Baseline
-                </Button>
-              </>
+              <div className="text-sm font-medium">
+                Baseline #{status?.activeBaseline?.id} established {status?.activeBaseline && format(parseISO(status.activeBaseline.establishedAt), "MMM d, yyyy")}
+              </div>
             ) : (
+              <div className="text-sm text-muted-foreground">No trial baseline established yet</div>
+            )}
+            <div className="text-xs text-muted-foreground mt-1">
+              Trial limits: {settings?.budSyncMaxLearnerCreations ?? "—"} creations · {settings?.budSyncMaxLearnerUpdates ?? "—"} updates ·{" "}
+              {settings?.budSyncMaxCohortCreations ?? "—"} cohorts · {settings?.budSyncMaxTutorTransfers ?? "—"} transfers per commit
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {hasActiveBaseline && (
+              <Button variant="outline" size="sm" onClick={() => setResetDialogOpen(true)}>
+                Reset Baseline
+              </Button>
+            )}
+            {!hasActiveBaseline && (
               <Button onClick={handleEstablishBaseline} disabled={establishMutation.isPending} size="sm">
                 {establishMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Establish Trial Baseline
               </Button>
             )}
+            <Button onClick={handlePreview} disabled={!hasActiveBaseline || previewMutation.isPending} className="hover-elevate shadow-sm">
+              {previewMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Check Bud for Changes
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-sm text-muted-foreground">
-          Trial limits: {settings?.budSyncMaxLearnerCreations ?? "—"} creations · {settings?.budSyncMaxLearnerUpdates ?? "—"} updates ·{" "}
-          {settings?.budSyncMaxCohortCreations ?? "—"} cohorts · {settings?.budSyncMaxTutorTransfers ?? "—"} transfers per commit
-        </div>
-        <Button onClick={handlePreview} disabled={!hasActiveBaseline || previewMutation.isPending} className="hover-elevate shadow-sm">
-          {previewMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Run Preview
-        </Button>
-      </div>
-
       {job && (
-        <Card className="mb-6 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Preview #{job.id}</CardTitle>
-            <CardDescription>
-              {job.totalSourceRowsExamined} Bud rows examined · {job.newLearnersDetected} new · {job.learnerUpdatesDetected} updated ·{" "}
-              {job.conflictCount} conflicts · {job.skippedCount} before trial
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 mb-4">
-              <Label className="text-xs text-muted-foreground" htmlFor="bud-sync-match-status">Change type</Label>
-              <Select value={matchStatusFilter} onValueChange={setMatchStatusFilter}>
-                <SelectTrigger id="bud-sync-match-status" aria-label="Change type" className="w-[220px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MATCH_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card className="shadow-sm">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{summary?.statusChangesCount ?? "—"}</div>
+                <div className="text-xs text-muted-foreground">Status changes requiring processing</div>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{summary?.newLearnersCount ?? "—"}</div>
+                <div className="text-xs text-muted-foreground">New learners requiring review</div>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">{summary?.conflictsCount ?? "—"}</div>
+                <div className="text-xs text-muted-foreground">Conflicts requiring investigation</div>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold">
+                  {summary?.lastSuccessfulSyncAt ? format(parseISO(summary.lastSuccessfulSyncAt), "MMM d") : "—"}
+                </div>
+                <div className="text-xs text-muted-foreground">Last successful sync</div>
+              </CardContent>
+            </Card>
+          </div>
 
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10"></TableHead>
-                    <TableHead>ID</TableHead>
-                    <TableHead>First Name</TableHead>
-                    <TableHead>Last Name</TableHead>
-                    <TableHead>Change type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Warnings</TableHead>
-                    <TableHead className="text-right">Review</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {itemsLoading ? (
-                    <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading…</TableCell></TableRow>
-                  ) : (itemsData?.items.length ?? 0) === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No items match this filter.</TableCell></TableRow>
-                  ) : (
-                    itemsData?.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={item.approved}
-                            disabled={item.matchStatus === "conflict"}
-                            onCheckedChange={() => toggleApproval(item)}
-                            aria-label={`Approve item ${item.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{item.sourceLearnerReference ?? "—"}</TableCell>
-                        <TableCell className="text-sm">{item.sourceFirstName ?? "—"}</TableCell>
-                        <TableCell className="text-sm">{item.sourceLastName ?? "—"}</TableCell>
-                        <TableCell className="text-sm">{ACTION_TYPE_LABELS[item.actionType] ?? item.actionType}</TableCell>
-                        <TableCell>
-                          <Badge variant={item.matchStatus === "conflict" ? "destructive" : item.matchStatus === "new" ? "default" : "secondary"}>
-                            {item.matchStatus.replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {item.warnings.length > 0 && (
-                            <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-500">
-                              <AlertTriangle className="w-3.5 h-3.5" /> {item.warnings.length}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => openReview(item)}>View</Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-4 max-w-2xl mb-6">
+              <TabsTrigger value="status-changes">Status Changes</TabsTrigger>
+              <TabsTrigger value="new-learners">New Learners</TabsTrigger>
+              <TabsTrigger value="conflicts">Conflicts</TabsTrigger>
+              <TabsTrigger value="sync-history">Sync History</TabsTrigger>
+            </TabsList>
 
+            <TabsContent value="status-changes">
+              <Card className="shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>First name</TableHead>
+                          <TableHead>Last name</TableHead>
+                          <TableHead>Current Attendance status</TableHead>
+                          <TableHead>New Bud status</TableHead>
+                          <TableHead>Detected at</TableHead>
+                          <TableHead>Processing outcome</TableHead>
+                          <TableHead className="text-right">Review</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {statusChangesLoading ? (
+                          <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading…</TableCell></TableRow>
+                        ) : (statusChangeItems?.items.length ?? 0) === 0 ? (
+                          <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No status changes detected.</TableCell></TableRow>
+                        ) : (
+                          statusChangeItems?.items.map((item) => {
+                            const change = statusChangeOf(item);
+                            const outcome = statusChangeOutcomeLabel(item);
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell className="font-mono text-xs">{item.sourceLearnerReference ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{item.sourceFirstName ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{item.sourceLastName ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{change?.currentLearnerStatus ?? "—"}</TableCell>
+                                <TableCell className="text-sm">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <span className="text-muted-foreground">{change?.previousAcceptedStatusDesc ?? "(none)"}</span>
+                                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                                    <span className="font-medium">{change?.currentStatusDesc}</span>
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {item.createdAt ? format(parseISO(item.createdAt), "MMM d, yyyy HH:mm") : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={outcome.variant}>{outcome.label}</Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button variant="ghost" size="sm" onClick={() => openReview(item)}>Review</Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="new-learners">
+              <Card className="shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10"></TableHead>
+                          <TableHead>ID</TableHead>
+                          <TableHead>First name</TableHead>
+                          <TableHead>Last name</TableHead>
+                          <TableHead>Bud status</TableHead>
+                          <TableHead>Programme</TableHead>
+                          <TableHead>Start date</TableHead>
+                          <TableHead>Match result</TableHead>
+                          <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {newLearnersLoading ? (
+                          <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading…</TableCell></TableRow>
+                        ) : (newLearnerItems?.items.length ?? 0) === 0 ? (
+                          <TableRow><TableCell colSpan={9} className="h-24 text-center text-muted-foreground">No eligible new learners detected.</TableCell></TableRow>
+                        ) : (
+                          newLearnerItems?.items.map((item) => {
+                            const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
+                            return (
+                              <TableRow key={item.id}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={item.approved}
+                                    onCheckedChange={() => toggleApproval(item)}
+                                    aria-label={`Approve item ${item.id}`}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-mono text-xs">{item.sourceLearnerReference ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{item.sourceFirstName ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{item.sourceLastName ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{(item.proposedValues?.budStatus as string) ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{(learner.programme as string) ?? "—"}</TableCell>
+                                <TableCell className="text-sm">{(learner.startDate as string) ?? "—"}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">New — no Attendance match</TableCell>
+                                <TableCell className="text-right space-x-1">
+                                  <Button variant="ghost" size="sm" onClick={() => openReview(item)}>Review and create</Button>
+                                  <Button variant="ghost" size="sm" onClick={() => setLinkItem(item)}>Already represented</Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="conflicts">
+              <Card className="shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ID</TableHead>
+                          <TableHead>First name</TableHead>
+                          <TableHead>Last name</TableHead>
+                          <TableHead>Reason</TableHead>
+                          <TableHead>Warnings</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {conflictsLoading ? (
+                          <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading…</TableCell></TableRow>
+                        ) : (conflictItems?.items.length ?? 0) === 0 ? (
+                          <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No conflicts.</TableCell></TableRow>
+                        ) : (
+                          conflictItems?.items.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell className="font-mono text-xs">{item.sourceLearnerReference ?? "—"}</TableCell>
+                              <TableCell className="text-sm">{item.sourceFirstName ?? "—"}</TableCell>
+                              <TableCell className="text-sm">{item.sourceLastName ?? "—"}</TableCell>
+                              <TableCell className="text-sm flex items-center gap-1.5">
+                                <ShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-500 shrink-0" />
+                                {item.reason?.replace(/_/g, " ")}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{item.warnings.join("; ") || "—"}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="sync-history">
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg">Preview #{job.id}</CardTitle>
+                  <CardDescription>Technical details for this sync run.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div><div className="text-lg font-semibold">{job.totalSourceRowsExamined}</div><div className="text-xs text-muted-foreground">Bud rows examined</div></div>
+                  <div><div className="text-lg font-semibold">{job.skippedCount}</div><div className="text-xs text-muted-foreground">Existing before trial / non-actionable</div></div>
+                  <div><div className="text-lg font-semibold">{status?.matchedLearnerCount ?? "—"}</div><div className="text-xs text-muted-foreground">Matched learners (source-wide)</div></div>
+                  <div><div className="text-lg font-semibold">{status?.unmatchedLearnerCount ?? "—"}</div><div className="text-xs text-muted-foreground">Unmatched Bud rows (source-wide)</div></div>
+                  <div><div className="text-lg font-semibold">{job.appliedCount}</div><div className="text-xs text-muted-foreground">Applied (last commit)</div></div>
+                  <div><div className="text-lg font-semibold">{job.errorCount}</div><div className="text-xs text-muted-foreground">Errors</div></div>
+                  <div className="col-span-2"><div className="text-lg font-semibold font-mono truncate">{job.correlationId ?? "—"}</div><div className="text-xs text-muted-foreground">Correlation ID</div></div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          {activeTab !== "sync-history" && (
             <div className="flex justify-end mt-6">
               <Button
                 variant="destructive"
@@ -403,8 +598,8 @@ export default function BudSyncTrialPage() {
                 Commit {approvedItems.length} Approved Change{approvedItems.length === 1 ? "" : "s"}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </>
       )}
 
       {/* Reset baseline dialog */}
@@ -435,9 +630,7 @@ export default function BudSyncTrialPage() {
       <Dialog open={!!reviewItem} onOpenChange={(o) => { if (!o) setReviewItem(null); }}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>
-              Review {reviewItem ? `${reviewItem.sourceFirstName ?? ""} ${reviewItem.sourceLastName ?? ""}`.trim() || reviewItem.sourceLearnerReference || "item" : ""}
-            </DialogTitle>
+            <DialogTitle>Review {itemDisplayName(reviewItem)}</DialogTitle>
             <DialogDescription>{reviewItem && (ACTION_TYPE_LABELS[reviewItem.actionType] ?? reviewItem.actionType)}</DialogDescription>
           </DialogHeader>
           {reviewItem && (
@@ -449,12 +642,21 @@ export default function BudSyncTrialPage() {
                 </div>
               ) : (
                 <>
+                  {reviewItem.actionType === "change_status" && statusChangeOf(reviewItem) && (
+                    <div className="text-sm space-y-1 bg-muted/40 rounded-md p-3">
+                      <div>Previous accepted Bud status: <span className="font-medium">{statusChangeOf(reviewItem)!.previousAcceptedStatusDesc ?? "(none)"}</span></div>
+                      <div>Current Attendance status: <span className="font-medium">{statusChangeOf(reviewItem)!.currentLearnerStatus}</span></div>
+                      <div>New Bud status: <span className="font-medium">{statusChangeOf(reviewItem)!.currentStatusDesc}</span></div>
+                      <div>Proposed Attendance action: <span className="font-medium">{statusChangeOf(reviewItem)!.targetStatus ? `Set status to ${statusChangeOf(reviewItem)!.targetStatus}` : "None (informational only)"}</span></div>
+                    </div>
+                  )}
                   <pre className="text-xs bg-muted/40 rounded-md p-3 overflow-auto">{JSON.stringify(reviewItem.proposedValues, null, 2)}</pre>
                   {missingFieldPaths(reviewItem).map((path) => (
                     <div key={path} className="space-y-1">
                       <Label htmlFor={`field-${path}`}>{path}</Label>
                       <Input
                         id={`field-${path}`}
+                        type={path.startsWith("statusChange.") ? "date" : "text"}
                         value={reviewFields[path] ?? ""}
                         onChange={(e) => setReviewFields((f) => ({ ...f, [path]: e.target.value }))}
                       />
@@ -477,6 +679,40 @@ export default function BudSyncTrialPage() {
                 Approve
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mark as already represented dialog */}
+      <Dialog open={!!linkItem} onOpenChange={(o) => { if (!o) { setLinkItem(null); setLinkSearch(""); } }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Mark {itemDisplayName(linkItem)} as already represented</DialogTitle>
+            <DialogDescription>Search for the existing Attendance learner this Bud row actually is.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="link-existing-search">Search learners</Label>
+            <Input id="link-existing-search" value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Name or reference" />
+            <div className="max-h-60 overflow-auto divide-y">
+              {(linkCandidates?.items ?? []).map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  className="w-full text-left py-2 px-1 hover:bg-muted/50 text-sm flex items-center justify-between"
+                  onClick={() => submitLink(l.id)}
+                  disabled={linkExistingMutation.isPending}
+                >
+                  <span>{l.firstName} {l.lastName}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{l.learnerRef}</span>
+                </button>
+              ))}
+              {linkSearch.trim().length > 1 && (linkCandidates?.items.length ?? 0) === 0 && (
+                <p className="text-xs text-muted-foreground py-2">No matching learners.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setLinkItem(null); setLinkSearch(""); }}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

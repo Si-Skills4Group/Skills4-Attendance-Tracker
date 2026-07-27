@@ -1397,6 +1397,7 @@ export const BudSyncMatchStatus = {
   conflict: 'conflict',
   existing_before_trial: 'existing_before_trial',
   skipped: 'skipped',
+  status_change: 'status_change',
 } as const;
 
 export type BudSyncActionType = typeof BudSyncActionType[keyof typeof BudSyncActionType];
@@ -1479,6 +1480,7 @@ export interface BudSyncJob {
   correlationId: string | null;
   /** @nullable */
   errorSummary: string | null;
+  statusChangesDetected: number;
 }
 
 export interface BudSyncJobListResponse {
@@ -1486,6 +1488,20 @@ export interface BudSyncJobListResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface BudSyncJobSummary {
+  statusChangesCount: number;
+  newLearnersCount: number;
+  conflictsCount: number;
+  statusChangesAppliedToday: number;
+  learnersCreatedToday: number;
+  /** @nullable */
+  lastSuccessfulSyncAt: string | null;
+}
+
+export interface BudSyncLinkExistingInput {
+  learnerId: number;
 }
 
 export type BudSyncItemProposedValues = { [key: string]: unknown };
@@ -1519,6 +1535,7 @@ export interface BudSyncItem {
   sourceFirstName: string | null;
   /** @nullable */
   sourceLastName: string | null;
+  createdAt: string;
 }
 
 export interface BudSyncItemListResponse {

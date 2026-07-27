@@ -34,6 +34,10 @@ class CommitInput(BaseModel):
     limitOverrideReason: str | None = None
 
 
+class LinkExistingInput(BaseModel):
+    learnerId: int
+
+
 @router.get("/bud-sync/status")
 def get_status(_session: dict = Depends(require_admin)):
     with get_cursor() as cur:
@@ -80,10 +84,17 @@ def get_job(job_id: int, _session: dict = Depends(require_admin)):
         return bud_sync_lib.get_job(cur, job_id)
 
 
+@router.get("/bud-sync/jobs/{job_id}/summary")
+def get_job_summary(job_id: int, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return bud_sync_lib.get_job_summary(cur, job_id)
+
+
 @router.get("/bud-sync/jobs/{job_id}/items")
 def list_items(
     job_id: int,
-    matchStatus: Literal["new", "existing_update", "unchanged", "conflict", "existing_before_trial", "skipped"] | None = None,
+    matchStatus: Literal["new", "existing_update", "unchanged", "conflict", "existing_before_trial",
+                          "skipped", "status_change"] | None = None,
     actionType: Literal["create_learner", "update_learner", "create_cohort", "create_allocation",
                          "transfer_tutor", "change_start_date", "change_status", "none"] | None = None,
     page: int = 1,
@@ -92,6 +103,14 @@ def list_items(
 ):
     with get_cursor() as cur:
         return bud_sync_lib.list_items(cur, job_id, matchStatus, actionType, page, pageSize)
+
+
+@router.post("/bud-sync/jobs/{job_id}/items/{item_id}/link-existing")
+def link_existing(
+    job_id: int, item_id: int, payload: LinkExistingInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        return bud_sync_lib.link_existing_learner(cur, job_id, item_id, payload.learnerId, request, session)
 
 
 @router.patch("/bud-sync/jobs/{job_id}/items/{item_id}")

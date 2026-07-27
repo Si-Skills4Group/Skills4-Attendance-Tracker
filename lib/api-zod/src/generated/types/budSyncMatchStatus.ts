@@ -16,4 +16,5 @@ export const BudSyncMatchStatus = {
   conflict: 'conflict',
   existing_before_trial: 'existing_before_trial',
   skipped: 'skipped',
+  status_change: 'status_change',
 } as const;

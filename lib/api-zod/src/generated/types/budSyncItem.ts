@@ -37,4 +37,5 @@ export interface BudSyncItem {
   sourceFirstName: string | null;
   /** @nullable */
   sourceLastName: string | null;
+  createdAt: Date;
 }

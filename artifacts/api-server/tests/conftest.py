@@ -308,7 +308,7 @@ def bud_row_factory(db):
             learner_surname="Learner",
             learner_email=f"bud-learner-{suffix}@example.com",
             learner_mobile=None,
-            learner_reference=None,
+            learner_reference=f"BUD-REF-{suffix}",
             unique_learner_number=f"ULN{suffix}",
             start_date="2026-02-01",
             tutor_name="Bud Tutor",
