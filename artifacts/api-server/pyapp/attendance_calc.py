@@ -13,10 +13,11 @@ class AttendanceTotals(TypedDict):
 
 
 # A record only counts toward the learner's schedule when they were expected
-# to be there. "not_expected" (e.g. not yet allocated to the cohort) and
-# "withdrawn" (recorded after the learner left the programme) are excluded.
+# to be there. "not_expected" (e.g. not yet allocated to the cohort),
+# "withdrawn" (recorded after the learner left the programme), and "bil"
+# (a formal break in learning) are excluded.
 def _is_scheduled(status: str) -> bool:
-    return status not in ("not_expected", "withdrawn")
+    return status not in ("not_expected", "withdrawn", "bil")
 
 
 def compute_attendance_totals(records: list[dict]) -> AttendanceTotals:

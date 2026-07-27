@@ -120,7 +120,7 @@ class RegisterCompletionSummary(BaseModel):
 _METRICS_SELECT_COLUMNS = """
     COALESCE(SUM(CASE WHEN ar.status IN ('present', 'late')
                        THEN COALESCE(ar.hours_attended, 0) * 60 ELSE 0 END), 0)::float AS "attendedMinutes",
-    COALESCE(SUM(CASE WHEN ar.status IS NULL OR ar.status NOT IN ('not_expected', 'withdrawn')
+    COALESCE(SUM(CASE WHEN ar.status IS NULL OR ar.status NOT IN ('not_expected', 'withdrawn', 'bil')
                        THEN s.planned_duration_hours * 60 ELSE 0 END), 0)::float AS "expectedMinutes",
     COALESCE(SUM(CASE WHEN ar.status = 'absent_authorised'
                        THEN s.planned_duration_hours * 60 ELSE 0 END), 0)::float AS "authorisedAbsenceMinutes",
@@ -131,7 +131,7 @@ _METRICS_SELECT_COLUMNS = """
     COALESCE(SUM(CASE WHEN ar.status = 'late' THEN ar.minutes_late ELSE 0 END), 0)::int AS "lateMinutes",
     COALESCE(COUNT(*) FILTER (WHERE ar.status = 'late'), 0) AS "lateSessionCount",
     COALESCE(COUNT(*) FILTER (WHERE ar.status IS NULL), 0) AS "missingRecordCount",
-    COALESCE(COUNT(*) FILTER (WHERE ar.status IS NOT NULL AND ar.status NOT IN ('not_expected', 'withdrawn')), 0)
+    COALESCE(COUNT(*) FILTER (WHERE ar.status IS NOT NULL AND ar.status NOT IN ('not_expected', 'withdrawn', 'bil')), 0)
         AS "completedRegisterRowCount"
 """
 

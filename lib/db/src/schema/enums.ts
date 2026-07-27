@@ -16,6 +16,7 @@ export const attendanceStatusEnum = pgEnum("attendance_status", [
   "late",
   "not_expected",
   "withdrawn",
+  "bil",
 ]);
 
 export const deliveryDayEnum = pgEnum("delivery_day", [

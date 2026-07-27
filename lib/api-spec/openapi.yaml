@@ -2906,6 +2906,7 @@ components:
         - late
         - not_expected
         - withdrawn
+        - bil
 
     SessionStatus:
       type: string

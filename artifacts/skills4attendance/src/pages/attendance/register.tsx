@@ -55,7 +55,7 @@ type DraftEntry = {
   _requireOverrideReason: boolean;
 };
 
-const ZERO_HOURS_STATUSES: AttendanceStatus[] = ["absent_authorised", "absent_unauthorised", "not_expected", "withdrawn"];
+const ZERO_HOURS_STATUSES: AttendanceStatus[] = ["absent_authorised", "absent_unauthorised", "not_expected", "withdrawn", "bil"];
 
 const STATUS_LABELS: Record<AttendanceStatus, string> = {
   present: "Present",
@@ -64,6 +64,7 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
   absent_unauthorised: "Absent (Unauthorised)",
   not_expected: "Not Expected",
   withdrawn: "Withdrawn",
+  bil: "BIL",
 };
 
 function buildDraft(entry: {
@@ -815,6 +816,7 @@ export default function RegisterPage() {
                           <SelectItem value="absent_unauthorised">Absent (Unauth)</SelectItem>
                           <SelectItem value="not_expected">Not Expected</SelectItem>
                           <SelectItem value="withdrawn">Withdrawn</SelectItem>
+                          <SelectItem value="bil">BIL</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>

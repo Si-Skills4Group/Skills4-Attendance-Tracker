@@ -22,6 +22,7 @@ export function AttendanceStatusBadge({ status }: { status: AttendanceStatus }) 
     absent_unauthorised: { className: "bg-rose-100 text-rose-800 border-rose-200", label: "Absent (Unauth)" },
     not_expected: { className: "bg-slate-100 text-slate-800 border-slate-200", label: "Not Expected" },
     withdrawn: { className: "bg-zinc-100 text-zinc-600 border-zinc-200", label: "Withdrawn" },
+    bil: { className: "bg-indigo-100 text-indigo-800 border-indigo-200", label: "BIL" },
   };
 
   const v = variants[status] || variants.present;

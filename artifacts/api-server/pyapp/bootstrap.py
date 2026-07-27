@@ -627,6 +627,15 @@ CREATE TABLE IF NOT EXISTS bud_sync_baseline_snapshot (
 CREATE INDEX IF NOT EXISTS idx_bud_sync_baseline_snapshot_baseline_id ON bud_sync_baseline_snapshot (baseline_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_sync_baseline_snapshot_unique
   ON bud_sync_baseline_snapshot (baseline_id, source_identifier);
+
+-- BIL (Break in Learning): a formal, zero-hours pause in an apprentice's
+-- learning plan -- excluded from scheduled/attendance totals the same way
+-- not_expected/withdrawn already are (see attendance_calc.py/
+-- attendance_metrics.py). Postgres has no "ADD VALUE IF NOT EXISTS" prior
+-- to v10 but this server runs v16, and adding a value is safe to run
+-- alongside other DDL in the same implicit transaction as long as nothing
+-- in this same statement batch uses the new value yet (nothing here does).
+ALTER TYPE attendance_status ADD VALUE IF NOT EXISTS 'bil';
 """
 
 

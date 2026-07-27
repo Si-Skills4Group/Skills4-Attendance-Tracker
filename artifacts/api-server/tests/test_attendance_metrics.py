@@ -198,6 +198,24 @@ class TestFetchAttendanceMetrics:
         )
         assert metrics.expectedMinutes == 0
 
+    def test_bil_status_is_excluded_from_expected_minutes(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "bil")
+
+        metrics = fetch_attendance_metrics(
+            db, scope="learner", scope_id=learner["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert metrics.expectedMinutes == 0
+        assert metrics.attendedMinutes == 0
+        assert metrics.attendancePercentage is None
+
     def test_cancelled_sessions_are_excluded(
         self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
     ):

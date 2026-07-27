@@ -16,4 +16,5 @@ export const AttendanceStatus = {
   late: 'late',
   not_expected: 'not_expected',
   withdrawn: 'withdrawn',
+  bil: 'bil',
 } as const;

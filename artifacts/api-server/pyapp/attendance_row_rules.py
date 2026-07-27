@@ -10,12 +10,12 @@ from datetime import date
 from typing import Literal, TypedDict
 
 AttendanceStatus = Literal[
-    "present", "absent_authorised", "absent_unauthorised", "late", "not_expected", "withdrawn"
+    "present", "absent_authorised", "absent_unauthorised", "late", "not_expected", "withdrawn", "bil"
 ]
 
 # Statuses where the learner did not accrue attendance time -- hours and
 # minutes-late must be exactly zero, never left to a stray nonzero value.
-ZERO_HOURS_STATUSES = {"absent_authorised", "absent_unauthorised", "not_expected", "withdrawn"}
+ZERO_HOURS_STATUSES = {"absent_authorised", "absent_unauthorised", "not_expected", "withdrawn", "bil"}
 
 _TRACKED_FIELDS = ("status", "hoursAttended", "minutesLate", "notes", "overrideReason")
 _MATERIAL_FIELDS = {"status", "hoursAttended"}

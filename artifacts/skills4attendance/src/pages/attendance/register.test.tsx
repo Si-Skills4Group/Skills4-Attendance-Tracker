@@ -354,6 +354,32 @@ describe('RegisterPage', () => {
     );
   });
 
+  it('offers a BIL status option that zeroes hours and minutes late like the other zero-hours statuses', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('combobox', { name: /attendance status for bob smith/i }));
+    await user.click(await screen.findByText('BIL'));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    expect(mockSaveMutate).toHaveBeenCalledWith(
+      {
+        id: 200,
+        data: expect.objectContaining({
+          registerVersion: 1,
+          changeReason: undefined,
+          entries: [
+            expect.objectContaining({ learnerId: 2, status: 'bil', hoursAttended: 0, minutesLate: 0 }),
+          ],
+        }),
+      },
+      expect.anything(),
+    );
+  });
+
   it('Complete Register saves first, then completes with the freshly-saved version', async () => {
     mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
     const savedSession = makeSession({ registerVersion: 2 });

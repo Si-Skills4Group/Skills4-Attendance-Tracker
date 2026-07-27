@@ -85,6 +85,19 @@ class TestWithdrawn:
         assert any(e["field"] == "hoursAttended" for e in errors)
 
 
+class TestBil:
+    def test_zero_hours_and_minutes_is_valid(self):
+        assert _validate(status="bil", hours_attended=0, minutes_late=0) == []
+
+    def test_nonzero_hours_is_rejected(self):
+        errors = _validate(status="bil", hours_attended=2, minutes_late=0)
+        assert any(e["field"] == "hoursAttended" for e in errors)
+
+    def test_nonzero_minutes_late_is_rejected(self):
+        errors = _validate(status="bil", hours_attended=0, minutes_late=15)
+        assert any(e["field"] == "minutesLate" for e in errors)
+
+
 class TestExcessHoursOverride:
     def test_tutor_exceeding_planned_hours_is_rejected_even_with_reason(self):
         errors = _validate(
