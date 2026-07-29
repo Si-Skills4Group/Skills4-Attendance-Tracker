@@ -118,6 +118,11 @@ export default function RegisterPage() {
   const [rowErrors, setRowErrors] = React.useState<Record<number, string[]>>({});
   const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved">("idle");
 
+  const savedIdleTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => {
+    if (savedIdleTimeoutRef.current) clearTimeout(savedIdleTimeoutRef.current);
+  }, []);
+
   const initRef = React.useRef<string>("");
   React.useEffect(() => {
     if (register && initRef.current !== JSON.stringify(register.entries)) {
@@ -309,7 +314,8 @@ export default function RegisterPage() {
     }, {
       onSuccess: (result) => {
         setSaveState("saved");
-        setTimeout(() => setSaveState("idle"), 2000);
+        if (savedIdleTimeoutRef.current) clearTimeout(savedIdleTimeoutRef.current);
+        savedIdleTimeoutRef.current = setTimeout(() => setSaveState("idle"), 2000);
         applySavedResult(result);
         setReasonDialog(null);
         setReasonInput("");

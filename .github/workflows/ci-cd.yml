@@ -79,7 +79,7 @@ jobs:
 
       - name: Run backend test suite
         working-directory: artifacts/api-server
-        run: pytest
+        run: python -m pytest
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/attendance_test
 
