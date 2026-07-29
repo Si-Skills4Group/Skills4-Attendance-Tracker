@@ -195,7 +195,14 @@ export default function TutorImportPage() {
     confirmMutation.mutate(
       { jobId },
       {
-        onSuccess: () => setConfirmOpen(false),
+        onSuccess: (result) => {
+          setConfirmOpen(false);
+          toast({
+            title: "Import complete",
+            description: `${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`,
+          });
+          jobQuery.refetch();
+        },
         onError: (err) => {
           setConfirmOpen(false);
           toast({ title: "Import failed", description: getErrorMessage(err), variant: "destructive" });

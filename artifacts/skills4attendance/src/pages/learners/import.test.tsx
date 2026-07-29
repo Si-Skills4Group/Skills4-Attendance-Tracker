@@ -43,7 +43,7 @@ const duplicateRow = {
   errors: [], warnings: [], importResult: null, importError: null, createdAt: '2026-01-01T00:00:00Z',
 };
 
-let mockJob: { data: any; isError: boolean };
+let mockJob: { data: any; isError: boolean; refetch: ReturnType<typeof vi.fn> };
 let mockRows: { data: any; isLoading: boolean };
 let uploadMutate: ReturnType<typeof vi.fn>;
 let resolveMutate: ReturnType<typeof vi.fn>;
@@ -51,6 +51,11 @@ let confirmMutate: ReturnType<typeof vi.fn>;
 let cancelMutate: ReturnType<typeof vi.fn>;
 let templateRefetch: ReturnType<typeof vi.fn>;
 let errorsRefetch: ReturnType<typeof vi.fn>;
+let toastSpy: ReturnType<typeof vi.fn>;
+
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: toastSpy }),
+}));
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetLearnerImportTemplate: () => ({ isFetching: false, refetch: templateRefetch }),
@@ -78,7 +83,7 @@ function renderAtLocation(searchPath = '') {
 }
 
 beforeEach(() => {
-  mockJob = { data: undefined, isError: false };
+  mockJob = { data: undefined, isError: false, refetch: vi.fn() };
   mockRows = { data: undefined, isLoading: false };
   uploadMutate = vi.fn();
   resolveMutate = vi.fn();
@@ -86,6 +91,7 @@ beforeEach(() => {
   cancelMutate = vi.fn();
   templateRefetch = vi.fn().mockResolvedValue({ data: { csv: 'a,b\n', filename: 'template.csv' } });
   errorsRefetch = vi.fn().mockResolvedValue({ data: { csv: 'a,b\n', filename: 'errors.csv' } });
+  toastSpy = vi.fn();
 });
 
 describe('LearnerImportPage', () => {
@@ -119,7 +125,7 @@ describe('LearnerImportPage', () => {
   });
 
   it('shows classification counts and rows for a ready job', () => {
-    mockJob = { data: readyJob, isError: false };
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
     mockRows = { data: { items: [newRow, duplicateRow], total: 2, page: 1, pageSize: 25 }, isLoading: false };
     renderAtLocation('job=7');
 
@@ -136,7 +142,7 @@ describe('LearnerImportPage', () => {
   });
 
   it('lets an admin resolve a duplicate row to update', () => {
-    mockJob = { data: readyJob, isError: false };
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
     mockRows = { data: { items: [duplicateRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
     renderAtLocation('job=7');
 
@@ -150,7 +156,7 @@ describe('LearnerImportPage', () => {
   });
 
   it('does not offer a resolution choice for a new row -- it always creates', () => {
-    mockJob = { data: readyJob, isError: false };
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
     mockRows = { data: { items: [newRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
     renderAtLocation('job=7');
 
@@ -159,7 +165,7 @@ describe('LearnerImportPage', () => {
   });
 
   it('opens a confirmation dialog before confirming the import', () => {
-    mockJob = { data: readyJob, isError: false };
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
     mockRows = { data: { items: [newRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
     renderAtLocation('job=7');
 
@@ -172,10 +178,49 @@ describe('LearnerImportPage', () => {
     expect(confirmMutate).toHaveBeenCalledWith({ jobId: 7 }, expect.anything());
   });
 
+  it('shows an Import complete toast and refetches the job after a successful confirm', () => {
+    confirmMutate = vi.fn((_vars, opts) =>
+      opts?.onSuccess?.({ totalRows: 2, created: 1, updated: 1, skipped: 0 }),
+    );
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
+    mockRows = { data: { items: [newRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /confirm import/i }));
+
+    expect(mockJob.refetch).toHaveBeenCalled();
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Import complete',
+        description: expect.stringContaining('1 created, 1 updated, 0 skipped'),
+      }),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows an Import failed toast and refetches the job when confirm errors', () => {
+    confirmMutate = vi.fn((_vars, opts) => opts?.onError?.(new Error('boom')));
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
+    mockRows = { data: { items: [newRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm import/i }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /confirm import/i }));
+
+    expect(mockJob.refetch).toHaveBeenCalled();
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Import failed', variant: 'destructive' }),
+    );
+  });
+
   it('shows the completed results step with counts and an error report download', () => {
     mockJob = {
       data: { ...readyJob, status: 'completed', invalidCount: 1, resultSummary: { totalRows: 2, created: 1, updated: 0, skipped: 1 } },
       isError: false,
+      refetch: vi.fn(),
     };
     renderAtLocation('job=7');
 
@@ -187,6 +232,7 @@ describe('LearnerImportPage', () => {
     mockJob = {
       data: { ...readyJob, status: 'completed', resultSummary: { totalRows: 1, created: 1, updated: 0, skipped: 0 } },
       isError: false,
+      refetch: vi.fn(),
     };
     renderAtLocation('job=7');
 
@@ -194,7 +240,7 @@ describe('LearnerImportPage', () => {
   });
 
   it('shows a cancelled state with a way to start over', () => {
-    mockJob = { data: { ...readyJob, status: 'cancelled' }, isError: false };
+    mockJob = { data: { ...readyJob, status: 'cancelled' }, isError: false, refetch: vi.fn() };
     renderAtLocation('job=7');
 
     expect(screen.getByText('Import cancelled')).toBeInTheDocument();
@@ -202,7 +248,7 @@ describe('LearnerImportPage', () => {
   });
 
   it('shows a not-found state when the job id in the URL no longer exists', () => {
-    mockJob = { data: undefined, isError: true };
+    mockJob = { data: undefined, isError: true, refetch: vi.fn() };
     renderAtLocation('job=999');
 
     expect(screen.getByText('Import job not found')).toBeInTheDocument();
