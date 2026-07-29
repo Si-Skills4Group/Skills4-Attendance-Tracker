@@ -39,6 +39,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 
+      - name: Build the lib project reference the frontend needs
+        run: npx tsc --build lib/api-client-react
+
       - run: pnpm --filter @workspace/skills4attendance run typecheck
 
       - run: pnpm --filter @workspace/skills4attendance run test
