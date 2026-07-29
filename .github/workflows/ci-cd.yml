@@ -1,0 +1,132 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag for this deploy (e.g. a short description of the change)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  ACR_NAME: s4attgzn5bhacr
+  ACR_LOGIN_SERVER: s4attgzn5bhacr.azurecr.io
+  IMAGE_NAME: skills4attendance
+  RESOURCE_GROUP: Skills-4-Attendance-Tracker
+  CONTAINER_APP: s4-attendance-app-gzn5bh
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+
+      - run: pnpm --filter @workspace/skills4attendance run typecheck
+
+      - run: pnpm --filter @workspace/skills4attendance run test
+
+      - name: Build (verifies the production bundle compiles)
+        run: pnpm --filter @workspace/skills4attendance run build
+        env:
+          PORT: "4173"
+          BASE_PATH: "/"
+
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: attendance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run backend test suite
+        working-directory: artifacts/api-server
+        run: pytest
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/attendance_test
+
+  deploy:
+    needs: [test-frontend, test-backend]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg VITE_ENTRA_CLIENT_ID=${{ vars.VITE_ENTRA_CLIENT_ID }} \
+            --build-arg VITE_ENTRA_TENANT_ID=${{ vars.VITE_ENTRA_TENANT_ID }} \
+            --build-arg VITE_ENTRA_AUTHORITY=${{ vars.VITE_ENTRA_AUTHORITY }} \
+            --build-arg VITE_ENTRA_REDIRECT_URI=${{ vars.VITE_ENTRA_REDIRECT_URI }} \
+            --build-arg VITE_ENTRA_POST_LOGOUT_REDIRECT_URI=${{ vars.VITE_ENTRA_POST_LOGOUT_REDIRECT_URI }} \
+            --build-arg VITE_API_SCOPE=${{ vars.VITE_API_SCOPE }} \
+            -t ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }} \
+            -t ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest \
+            .
+
+      - name: Push image
+        run: |
+          docker push ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+          docker push ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
+
+      - name: Smoke test
+        run: |
+          curl -sf "https://s4-attendance-app-gzn5bh.thankfuldesert-ce8f3462.uksouth.azurecontainerapps.io/api/health/live"
+          curl -sf "https://s4-attendance-app-gzn5bh.thankfuldesert-ce8f3462.uksouth.azurecontainerapps.io/api/health/ready"
