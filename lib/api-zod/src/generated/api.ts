@@ -74,7 +74,8 @@ export const GetAdminDashboardResponse = zod.object({
   "cohortId": zod.number(),
   "cohortName": zod.string(),
   "sessionDate": zod.coerce.date(),
-  "tutorName": zod.string()
+  "tutorName": zod.string(),
+  "isCoverSession": zod.boolean()
 })),
   "recentlyEditedAttendance": zod.array(zod.object({
   "id": zod.number(),
@@ -149,14 +150,16 @@ export const GetTutorDashboardResponse = zod.object({
   "cohortId": zod.number(),
   "cohortName": zod.string(),
   "sessionDate": zod.coerce.date(),
-  "tutorName": zod.string()
+  "tutorName": zod.string(),
+  "isCoverSession": zod.boolean()
 }),zod.null()]),
   "sessionsAwaitingCompletion": zod.array(zod.object({
   "id": zod.number(),
   "cohortId": zod.number(),
   "cohortName": zod.string(),
   "sessionDate": zod.coerce.date(),
-  "tutorName": zod.string()
+  "tutorName": zod.string(),
+  "isCoverSession": zod.boolean()
 })),
   "lowAttendanceLearners": zod.array(zod.object({
   "learnerId": zod.number(),
@@ -227,7 +230,8 @@ export const GetTutorDashboardCohortsResponseItem = zod.object({
   "cohortId": zod.number(),
   "cohortName": zod.string(),
   "sessionDate": zod.coerce.date(),
-  "tutorName": zod.string()
+  "tutorName": zod.string(),
+  "isCoverSession": zod.boolean()
 }),zod.null()]),
   "attendancePercentage": zod.union([zod.number(),zod.null()]),
   "registerCompletion": zod.object({
@@ -259,7 +263,8 @@ export const GetTutorOutstandingRegistersResponse = zod.object({
   "cohortId": zod.number(),
   "cohortName": zod.string(),
   "sessionDate": zod.coerce.date(),
-  "tutorName": zod.string()
+  "tutorName": zod.string(),
+  "isCoverSession": zod.boolean()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -421,7 +426,8 @@ export const GetAdminOutstandingRegistersResponse = zod.object({
   "cohortId": zod.number(),
   "cohortName": zod.string(),
   "sessionDate": zod.coerce.date(),
-  "tutorName": zod.string()
+  "tutorName": zod.string(),
+  "isCoverSession": zod.boolean()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -1840,6 +1846,16 @@ export const ListAttendanceSessionsResponseItem = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1891,6 +1907,16 @@ export const CreateAttendanceSessionResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1927,6 +1953,16 @@ export const GetAttendanceSessionResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -1992,6 +2028,16 @@ export const UpdateAttendanceSessionResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2035,6 +2081,16 @@ export const CancelAttendanceSessionResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2097,6 +2153,16 @@ export const GenerateSessionRegisterResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2199,6 +2265,16 @@ export const SaveAttendanceRegisterResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2253,6 +2329,16 @@ export const CompleteRegisterResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2310,6 +2396,16 @@ export const LockAttendanceRegisterResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2353,6 +2449,128 @@ export const UnlockAttendanceRegisterResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * Upsert semantics: assigns a cover tutor when none is active, or changes the existing one. Administrator-only. Applies to this one session only -- the cohort's own tutor, learner allocations, and historical attendance authorship are never changed.
+ */
+export const AssignCoverTutorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AssignCoverTutorBody = zod.object({
+  "coverTutorId": zod.number(),
+  "reason": zod.enum(['tutor_sickness', 'annual_leave', 'emergency_cover', 'tutor_unavailable', 'operational_reassignment', 'other']),
+  "notes": zod.string().optional(),
+  "registerVersion": zod.number()
+})
+
+export const AssignCoverTutorResponse = zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
+  "createdBy": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * Removes an active cover tutor. Administrator-only. Never deletes attendance already recorded while cover was active -- if any exists, requires confirmWithAttendance to proceed.
+ */
+export const RemoveCoverTutorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const removeCoverTutorBodyConfirmWithAttendanceDefault = false;
+
+export const RemoveCoverTutorBody = zod.object({
+  "reason": zod.string().min(1),
+  "confirmWithAttendance": zod.boolean().default(removeCoverTutorBodyConfirmWithAttendanceDefault),
+  "registerVersion": zod.number()
+})
+
+export const RemoveCoverTutorResponse = zod.object({
+  "id": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "tutorId": zod.number(),
+  "tutorName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "plannedStartTime": zod.string(),
+  "plannedEndTime": zod.string(),
+  "plannedDurationHours": zod.number(),
+  "title": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "status": zod.enum(['scheduled', 'cancelled']),
+  "cancelledAt": zod.coerce.date().nullable(),
+  "cancellationReason": zod.string().nullable(),
+  "overrideReason": zod.string().nullable(),
+  "recordedCount": zod.number(),
+  "expectedCount": zod.number(),
+  "registerStatus": zod.enum(['not_started', 'in_progress', 'completed', 'cancelled', 'locked']),
+  "registerVersion": zod.number(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedBy": zod.number().nullable(),
+  "registerLockedAt": zod.coerce.date().nullable(),
+  "registerLockedBy": zod.number().nullable(),
+  "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -2389,6 +2607,16 @@ export const MarkAllPresentResponse = zod.object({
   "registerLockedAt": zod.coerce.date().nullable(),
   "registerLockedBy": zod.number().nullable(),
   "lockReason": zod.string().nullable(),
+  "coverTutorId": zod.number().nullable(),
+  "coverTutorName": zod.string().nullable(),
+  "coverOriginalTutorId": zod.number().nullable(),
+  "coverOriginalTutorName": zod.string().nullable(),
+  "coverReason": zod.string().nullable(),
+  "coverNotes": zod.string().nullable(),
+  "coverAssignedAt": zod.coerce.date().nullable(),
+  "coverAssignedByName": zod.string().nullable(),
+  "effectiveTutorId": zod.number(),
+  "effectiveTutorName": zod.string(),
   "createdBy": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()

@@ -16,6 +16,11 @@ function makeSession(overrides: Record<string, any> = {}) {
     recordedCount: 1, expectedCount: 2, registerStatus: 'in_progress',
     registerVersion: 1, completedAt: null, completedBy: null,
     registerLockedAt: null, registerLockedBy: null, lockReason: null,
+    // No cover tutor by default -- effective tutor is just the cohort's own.
+    coverTutorId: null, coverTutorName: null, coverOriginalTutorId: null,
+    coverOriginalTutorName: null, coverReason: null, coverNotes: null,
+    coverAssignedAt: null, coverAssignedByName: null,
+    effectiveTutorId: 10, effectiveTutorName: 'Tam Tutor',
     ...overrides,
   };
 }
@@ -34,6 +39,7 @@ const entries = makeEntries();
 
 let mockRegister: { data: any; isLoading: boolean };
 let mockCurrentUser: { data: any };
+let mockTutors: { data: any };
 const mockUpdateMutate = vi.fn();
 const mockCancelMutate = vi.fn();
 const mockDeleteMutate = vi.fn();
@@ -42,12 +48,15 @@ const mockSaveMutate = vi.fn();
 const mockCompleteMutate = vi.fn();
 const mockLockMutate = vi.fn();
 const mockUnlockMutate = vi.fn();
+const mockAssignCoverMutate = vi.fn();
+const mockRemoveCoverMutate = vi.fn();
 let mockSavePending = false;
 let mockCompletePending = false;
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetCurrentUser: () => mockCurrentUser,
   useGetAttendanceSession: () => mockRegister,
+  useListTutors: () => mockTutors,
   useSaveAttendanceRegister: () => ({ mutate: mockSaveMutate, isPending: mockSavePending }),
   useCompleteRegister: () => ({ mutate: mockCompleteMutate, isPending: mockCompletePending }),
   useLockAttendanceRegister: () => ({ mutate: mockLockMutate, isPending: false }),
@@ -56,6 +65,8 @@ vi.mock('@workspace/api-client-react', () => ({
   useCancelAttendanceSession: () => ({ mutate: mockCancelMutate, isPending: false }),
   useDeleteAttendanceSession: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useRefreshSessionRegister: () => ({ mutate: mockRefreshMutate, isPending: false }),
+  useAssignCoverTutor: () => ({ mutate: mockAssignCoverMutate, isPending: false }),
+  useRemoveCoverTutor: () => ({ mutate: mockRemoveCoverMutate, isPending: false }),
   getGetAttendanceSessionQueryKey: (id: number) => ['getAttendanceSession', id],
 }));
 
@@ -76,6 +87,7 @@ function renderAtLocation() {
 describe('RegisterPage', () => {
   beforeEach(() => {
     mockCurrentUser = { data: { role: 'admin' } };
+    mockTutors = { data: [{ id: 10, firstName: 'Tam', lastName: 'Tutor' }, { id: 20, firstName: 'Cara', lastName: 'Cover' }] };
     mockSavePending = false;
     mockCompletePending = false;
     mockUpdateMutate.mockReset();
@@ -86,6 +98,8 @@ describe('RegisterPage', () => {
     mockCompleteMutate.mockReset();
     mockLockMutate.mockReset();
     mockUnlockMutate.mockReset();
+    mockAssignCoverMutate.mockReset();
+    mockRemoveCoverMutate.mockReset();
   });
 
   it('shows the register status badge and expected/recorded counts', () => {
@@ -607,5 +621,237 @@ describe('RegisterPage', () => {
     };
     renderAtLocation();
     expect(screen.queryByRole('button', { name: /lock register/i })).not.toBeInTheDocument();
+  });
+
+  // -----------------------------------------------------------------------
+  // Cover tutor (session-level reassignment)
+  // -----------------------------------------------------------------------
+
+  describe('Cover tutor', () => {
+    it('shows Assign Cover Tutor for admins on an uncovered session', () => {
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      renderAtLocation();
+      expect(screen.getByRole('button', { name: /assign cover tutor/i })).toBeInTheDocument();
+    });
+
+    it('hides the cover tutor action for ordinary tutors', () => {
+      mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      renderAtLocation();
+      expect(screen.queryByRole('button', { name: /assign cover tutor/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /change cover tutor/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /remove cover tutor/i })).not.toBeInTheDocument();
+    });
+
+    it('shows Change/Remove Cover Tutor instead of Assign once a cover is active', () => {
+      mockRegister = {
+        data: { session: makeSession({ coverTutorId: 20, coverTutorName: 'Cara Cover', coverOriginalTutorId: 10, coverOriginalTutorName: 'Tam Tutor', coverReason: 'tutor_sickness' }), entries },
+        isLoading: false,
+      };
+      renderAtLocation();
+      expect(screen.queryByRole('button', { name: /^assign cover tutor$/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /change cover tutor/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /remove cover tutor/i })).toBeInTheDocument();
+    });
+
+    it('shows the Cover session banner with the original and delivering tutor', () => {
+      mockRegister = {
+        data: {
+          session: makeSession({
+            coverTutorId: 20, coverTutorName: 'Cara Cover', coverOriginalTutorId: 10,
+            coverOriginalTutorName: 'Tam Tutor', coverReason: 'tutor_sickness',
+            effectiveTutorId: 20, effectiveTutorName: 'Cara Cover',
+          }),
+          entries,
+        },
+        isLoading: false,
+      };
+      renderAtLocation();
+      expect(screen.getByText('Cover session')).toBeInTheDocument();
+      expect(screen.getByText(/originally assigned to: tam tutor/i)).toBeInTheDocument();
+      expect(screen.getByText(/delivered by: cara cover/i)).toBeInTheDocument();
+      expect(screen.getByText(/tutor sickness/i)).toBeInTheDocument();
+    });
+
+    it('does not show a cover banner for a normal, uncovered session', () => {
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      renderAtLocation();
+      expect(screen.queryByText('Cover session')).not.toBeInTheDocument();
+    });
+
+    it('requires a replacement tutor and reason before confirming, and requires notes when the reason is Other', async () => {
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /assign cover tutor/i }));
+      const confirmButton = screen.getByRole('button', { name: /^assign cover tutor$/i });
+      expect(confirmButton).toBeDisabled();
+
+      await user.click(screen.getByRole('combobox', { name: /replacement tutor/i }));
+      await user.click(await screen.findByText('Cara Cover'));
+      expect(confirmButton).toBeDisabled();
+
+      await user.click(screen.getByRole('combobox', { name: /reason/i }));
+      await user.click(await screen.findByText('Other'));
+      expect(confirmButton).toBeDisabled();
+
+      await user.type(screen.getByLabelText(/notes/i), 'Agreed cover swap');
+      expect(confirmButton).toBeEnabled();
+    });
+
+    it('confirmation states that the cohort and allocations will not change', async () => {
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /assign cover tutor/i }));
+      expect(screen.getByText(/cohort owner, learner allocations and historical attendance will not change/i)).toBeInTheDocument();
+    });
+
+    it('assigns a cover tutor with the selected reason', async () => {
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      mockAssignCoverMutate.mockImplementation((_payload, { onSuccess }: any) =>
+        onSuccess(makeSession({ coverTutorId: 20, coverTutorName: 'Cara Cover' })));
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /assign cover tutor/i }));
+      await user.click(screen.getByRole('combobox', { name: /replacement tutor/i }));
+      await user.click(await screen.findByText('Cara Cover'));
+      await user.click(screen.getByRole('combobox', { name: /reason/i }));
+      await user.click(await screen.findByText('Tutor sickness'));
+      await user.click(screen.getByRole('button', { name: /^assign cover tutor$/i }));
+
+      expect(mockAssignCoverMutate).toHaveBeenCalledWith(
+        { id: 200, data: { coverTutorId: 20, reason: 'tutor_sickness', notes: undefined, registerVersion: 1 } },
+        expect.anything(),
+      );
+    });
+
+    it('changes an existing cover tutor to a different one', async () => {
+      mockRegister = {
+        data: { session: makeSession({ coverTutorId: 20, coverTutorName: 'Cara Cover', registerVersion: 2 }), entries },
+        isLoading: false,
+      };
+      mockTutors = { data: [{ id: 10, firstName: 'Tam', lastName: 'Tutor' }, { id: 20, firstName: 'Cara', lastName: 'Cover' }, { id: 30, firstName: 'Dev', lastName: 'Deputy' }] };
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /change cover tutor/i }));
+      await user.click(screen.getByRole('combobox', { name: /replacement tutor/i }));
+      await user.click(await screen.findByText('Dev Deputy'));
+      await user.click(screen.getByRole('combobox', { name: /reason/i }));
+      await user.click(await screen.findByText('Annual leave'));
+      await user.click(screen.getByRole('button', { name: /^change cover tutor$/i }));
+
+      expect(mockAssignCoverMutate).toHaveBeenCalledWith(
+        { id: 200, data: { coverTutorId: 30, reason: 'annual_leave', notes: undefined, registerVersion: 2 } },
+        expect.anything(),
+      );
+    });
+
+    it('removes a cover tutor with a reason', async () => {
+      mockRegister = {
+        data: { session: makeSession({ coverTutorId: 20, coverTutorName: 'Cara Cover' }), entries },
+        isLoading: false,
+      };
+      mockRemoveCoverMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess(makeSession()));
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /remove cover tutor/i }));
+      const confirmButton = screen.getByRole('button', { name: /^remove cover tutor$/i });
+      expect(confirmButton).toBeDisabled();
+
+      await user.type(screen.getByLabelText('Reason'), 'Cover no longer needed');
+      expect(confirmButton).toBeEnabled();
+      await user.click(confirmButton);
+
+      expect(mockRemoveCoverMutate).toHaveBeenCalledWith(
+        { id: 200, data: { reason: 'Cover no longer needed', confirmWithAttendance: false, registerVersion: 1 } },
+        expect.anything(),
+      );
+    });
+
+    it('shows a warning and re-confirms before removing cover when attendance is already recorded', async () => {
+      mockRegister = {
+        data: { session: makeSession({ coverTutorId: 20, coverTutorName: 'Cara Cover' }), entries },
+        isLoading: false,
+      };
+      mockRemoveCoverMutate.mockImplementation((_payload, { onError }: any) => {
+        onError({ status: 409, data: { reason: 'attendance_already_recorded' } });
+      });
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /remove cover tutor/i }));
+      await user.type(screen.getByLabelText('Reason'), 'Cover no longer needed');
+      await user.click(screen.getByRole('button', { name: /^remove cover tutor$/i }));
+
+      expect(await screen.findByText(/already been recorded while cover was active/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /remove anyway/i })).toBeInTheDocument();
+    });
+
+    it('warns that reassigning a completed register will be recorded as a correction', async () => {
+      mockRegister = {
+        data: { session: makeSession({ registerStatus: 'completed' }), entries },
+        isLoading: false,
+      };
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /assign cover tutor/i }));
+      expect(screen.getByText(/will be recorded as a correction/i)).toBeInTheDocument();
+    });
+
+    it('shows a Cover badge next to the tutor name when a cover is active', () => {
+      mockRegister = {
+        data: {
+          session: makeSession({
+            coverTutorId: 20, coverTutorName: 'Cara Cover',
+            effectiveTutorId: 20, effectiveTutorName: 'Cara Cover',
+          }),
+          entries,
+        },
+        isLoading: false,
+      };
+      renderAtLocation();
+      expect(screen.getByText('Cover')).toBeInTheDocument();
+      expect(screen.getByText('Cara Cover')).toBeInTheDocument();
+    });
+
+    it('makes the original tutor read-only while a cover tutor is active, but the cover tutor can still edit', () => {
+      mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+      mockRegister = {
+        data: {
+          session: makeSession({
+            coverTutorId: 20, coverTutorName: 'Cara Cover',
+            effectiveTutorId: 20, effectiveTutorName: 'Cara Cover',
+          }),
+          entries,
+        },
+        isLoading: false,
+      };
+      renderAtLocation();
+      expect(screen.queryByRole('button', { name: /save draft/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^edit$/i })).not.toBeInTheDocument();
+    });
+
+    it('lets the cover tutor edit the register normally', () => {
+      mockCurrentUser = { data: { role: 'tutor', tutorId: 20 } };
+      mockRegister = {
+        data: {
+          session: makeSession({
+            coverTutorId: 20, coverTutorName: 'Cara Cover',
+            effectiveTutorId: 20, effectiveTutorName: 'Cara Cover',
+          }),
+          entries,
+        },
+        isLoading: false,
+      };
+      renderAtLocation();
+      expect(screen.getByRole('button', { name: /save draft/i })).toBeInTheDocument();
+    });
   });
 });

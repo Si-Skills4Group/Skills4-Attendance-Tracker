@@ -321,7 +321,7 @@ def require_tutor_access(cur, tutor_id: int, session: dict[str, Any]) -> dict[st
 def require_attendance_access(cur, session_id: int, session: dict[str, Any]) -> dict[str, Any]:
     cur.execute(
         """
-        SELECT s.id, s.cohort_id AS "cohortId", c.tutor_id AS "tutorId"
+        SELECT s.id, s.cohort_id AS "cohortId", c.tutor_id AS "tutorId", s.cover_tutor_id AS "coverTutorId"
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
         WHERE s.id = %s AND s.deleted_at IS NULL AND c.deleted_at IS NULL
@@ -331,6 +331,11 @@ def require_attendance_access(cur, session_id: int, session: dict[str, Any]) -> 
     attendance_session = cur.fetchone()
     if not attendance_session:
         raise HTTPException(status_code=404, detail="Attendance session not found")
-    if session.get("role") == "tutor" and attendance_session["tutorId"] != session.get("tutorId"):
-        deny_object_access("attendance_session", session_id, "Not allowed to access this session")
+    if session.get("role") == "tutor":
+        tutor_id = session.get("tutorId")
+        # A tutor may access this session either as the cohort's own tutor,
+        # or as this one session's specific cover tutor -- cover access is
+        # deliberately per-session, never a route into the wider cohort.
+        if attendance_session["tutorId"] != tutor_id and attendance_session["coverTutorId"] != tutor_id:
+            deny_object_access("attendance_session", session_id, "Not allowed to access this session")
     return attendance_session

@@ -12,4 +12,5 @@ export interface SessionSummary {
   cohortName: string;
   sessionDate: Date;
   tutorName: string;
+  isCoverSession: boolean;
 }

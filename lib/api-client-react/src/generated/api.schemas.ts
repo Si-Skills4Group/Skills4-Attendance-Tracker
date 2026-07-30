@@ -732,6 +732,24 @@ export interface AttendanceSession {
   registerLockedBy: number | null;
   /** @nullable */
   lockReason: string | null;
+  /** @nullable */
+  coverTutorId: number | null;
+  /** @nullable */
+  coverTutorName: string | null;
+  /** @nullable */
+  coverOriginalTutorId: number | null;
+  /** @nullable */
+  coverOriginalTutorName: string | null;
+  /** @nullable */
+  coverReason: string | null;
+  /** @nullable */
+  coverNotes: string | null;
+  /** @nullable */
+  coverAssignedAt: string | null;
+  /** @nullable */
+  coverAssignedByName: string | null;
+  effectiveTutorId: number;
+  effectiveTutorName: string;
   createdBy: number;
   createdAt: string;
   updatedAt: string;
@@ -791,6 +809,32 @@ export interface CompleteRegisterInput {
 export interface LockRegisterInput {
   /** @minLength 1 */
   reason: string;
+  registerVersion: number;
+}
+
+export type CoverReason = typeof CoverReason[keyof typeof CoverReason];
+
+
+export const CoverReason = {
+  tutor_sickness: 'tutor_sickness',
+  annual_leave: 'annual_leave',
+  emergency_cover: 'emergency_cover',
+  tutor_unavailable: 'tutor_unavailable',
+  operational_reassignment: 'operational_reassignment',
+  other: 'other',
+} as const;
+
+export interface CoverTutorInput {
+  coverTutorId: number;
+  reason: CoverReason;
+  notes?: string;
+  registerVersion: number;
+}
+
+export interface RemoveCoverTutorInput {
+  /** @minLength 1 */
+  reason: string;
+  confirmWithAttendance?: boolean;
   registerVersion: number;
 }
 
@@ -1207,6 +1251,7 @@ export interface SessionSummary {
   cohortName: string;
   sessionDate: string;
   tutorName: string;
+  isCoverSession: boolean;
 }
 
 export interface RecentEdit {

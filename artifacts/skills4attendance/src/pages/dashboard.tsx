@@ -259,7 +259,14 @@ function TutorDashboardView({ data, threshold, filter, onFilterChange }: {
             {data.nextSession ? (
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-primary/5 border border-primary/10 rounded-lg p-5">
                 <div>
-                  <h3 className="text-2xl font-bold text-foreground">{data.nextSession.cohortName}</h3>
+                  <h3 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                    {data.nextSession.cohortName}
+                    {data.nextSession.isCoverSession && (
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400">
+                        Cover
+                      </span>
+                    )}
+                  </h3>
                   <div className="flex items-center gap-2 text-muted-foreground mt-2 text-sm font-medium">
                     <CalendarDays className="w-4 h-4" />
                     {format(parseISO(data.nextSession.sessionDate), "EEEE, MMMM d, yyyy")}
@@ -296,7 +303,14 @@ function TutorDashboardView({ data, threshold, filter, onFilterChange }: {
                 {data.sessionsAwaitingCompletion.map(session => (
                   <Link key={session.id} href={`/attendance/${session.id}`}>
                     <div className="p-3 border rounded-md hover:border-primary/50 hover:bg-primary/5 transition-colors cursor-pointer group">
-                      <p className="font-semibold text-sm group-hover:text-primary transition-colors">{session.cohortName}</p>
+                      <p className="font-semibold text-sm group-hover:text-primary transition-colors flex items-center gap-1.5">
+                        {session.cohortName}
+                        {session.isCoverSession && (
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400">
+                            Cover
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-muted-foreground mt-1 flex justify-between">
                         {format(parseISO(session.sessionDate), "MMM d")}
                         <span className="text-destructive font-medium">Draft</span>

@@ -61,6 +61,7 @@ import type {
   CohortReportResponse,
   CohortUpdate,
   CompleteRegisterInput,
+  CoverTutorInput,
   CsvContent,
   DeactivateTutorParams,
   ErrorResponse,
@@ -130,6 +131,7 @@ import type {
   RegisterCompletionReportResponse,
   RegisterRefreshDiff,
   RegisterRefreshResult,
+  RemoveCoverTutorInput,
   SessionCancelInput,
   SessionDeleteInput,
   SettingsUpdate,
@@ -5356,6 +5358,144 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUnlockAttendanceRegisterMutationOptions(options));
+    }
+
+export const getAssignCoverTutorUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/cover`
+}
+
+/**
+ * Upsert semantics: assigns a cover tutor when none is active, or changes the existing one. Administrator-only. Applies to this one session only -- the cohort's own tutor, learner allocations, and historical attendance authorship are never changed.
+ */
+export const assignCoverTutor = async (id: number,
+    coverTutorInput: CoverTutorInput, options?: RequestInit): Promise<AttendanceSession> => {
+
+  return customFetch<AttendanceSession>(getAssignCoverTutorUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(coverTutorInput)
+  }
+);}
+
+
+
+
+
+export const getAssignCoverTutorMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignCoverTutor>>, TError,{id: number;data: BodyType<CoverTutorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignCoverTutor>>, TError,{id: number;data: BodyType<CoverTutorInput>}, TContext> => {
+
+const mutationKey = ['assignCoverTutor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignCoverTutor>>, {id: number;data: BodyType<CoverTutorInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  assignCoverTutor(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignCoverTutorMutationResult = NonNullable<Awaited<ReturnType<typeof assignCoverTutor>>>
+    export type AssignCoverTutorMutationBody = BodyType<CoverTutorInput>
+    export type AssignCoverTutorMutationError = ErrorType<ErrorResponse>
+
+    export const useAssignCoverTutor = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignCoverTutor>>, TError,{id: number;data: BodyType<CoverTutorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignCoverTutor>>,
+        TError,
+        {id: number;data: BodyType<CoverTutorInput>},
+        TContext
+      > => {
+      return useMutation(getAssignCoverTutorMutationOptions(options));
+    }
+
+export const getRemoveCoverTutorUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${id}/cover/remove`
+}
+
+/**
+ * Removes an active cover tutor. Administrator-only. Never deletes attendance already recorded while cover was active -- if any exists, requires confirmWithAttendance to proceed.
+ */
+export const removeCoverTutor = async (id: number,
+    removeCoverTutorInput: RemoveCoverTutorInput, options?: RequestInit): Promise<AttendanceSession> => {
+
+  return customFetch<AttendanceSession>(getRemoveCoverTutorUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(removeCoverTutorInput)
+  }
+);}
+
+
+
+
+
+export const getRemoveCoverTutorMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeCoverTutor>>, TError,{id: number;data: BodyType<RemoveCoverTutorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeCoverTutor>>, TError,{id: number;data: BodyType<RemoveCoverTutorInput>}, TContext> => {
+
+const mutationKey = ['removeCoverTutor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeCoverTutor>>, {id: number;data: BodyType<RemoveCoverTutorInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  removeCoverTutor(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveCoverTutorMutationResult = NonNullable<Awaited<ReturnType<typeof removeCoverTutor>>>
+    export type RemoveCoverTutorMutationBody = BodyType<RemoveCoverTutorInput>
+    export type RemoveCoverTutorMutationError = ErrorType<ErrorResponse>
+
+    export const useRemoveCoverTutor = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeCoverTutor>>, TError,{id: number;data: BodyType<RemoveCoverTutorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeCoverTutor>>,
+        TError,
+        {id: number;data: BodyType<RemoveCoverTutorInput>},
+        TContext
+      > => {
+      return useMutation(getRemoveCoverTutorMutationOptions(options));
     }
 
 export const getMarkAllPresentUrl = (id: number,) => {

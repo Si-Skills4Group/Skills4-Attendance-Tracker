@@ -641,6 +641,23 @@ ALTER TYPE attendance_status ADD VALUE IF NOT EXISTS 'bil';
 -- Phase 11 refinement: real Bud status-change detection/application,
 -- alongside the existing per-job counters.
 ALTER TABLE bud_sync_job ADD COLUMN IF NOT EXISTS status_changes_detected integer NOT NULL DEFAULT 0;
+
+-- Session-level cover tutor reassignment: lets an Administrator hand ONE
+-- session's register to a different tutor (sickness/leave cover) without
+-- touching the cohort's own tutor_id, learner allocations, or historical
+-- attendance authorship. cover_tutor_id is the sole "is this session
+-- covered" signal (NULL = no cover); cover_original_tutor_id snapshots the
+-- cohort's tutor at the moment cover was first assigned so "who was
+-- originally scheduled" survives even if the cohort's tutor is later
+-- permanently reassigned. No dedicated history table -- every assign/
+-- change/remove event is written to the existing audit_logs table instead.
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_tutor_id integer;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_original_tutor_id integer;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_reason text;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_notes text;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_assigned_at timestamptz;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_assigned_by integer;
+CREATE INDEX IF NOT EXISTS idx_attendance_sessions_cover_tutor_id ON attendance_sessions (cover_tutor_id) WHERE cover_tutor_id IS NOT NULL;
 """
 
 

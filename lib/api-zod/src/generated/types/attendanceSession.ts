@@ -43,6 +43,24 @@ export interface AttendanceSession {
   registerLockedBy: number | null;
   /** @nullable */
   lockReason: string | null;
+  /** @nullable */
+  coverTutorId: number | null;
+  /** @nullable */
+  coverTutorName: string | null;
+  /** @nullable */
+  coverOriginalTutorId: number | null;
+  /** @nullable */
+  coverOriginalTutorName: string | null;
+  /** @nullable */
+  coverReason: string | null;
+  /** @nullable */
+  coverNotes: string | null;
+  /** @nullable */
+  coverAssignedAt: Date | null;
+  /** @nullable */
+  coverAssignedByName: string | null;
+  effectiveTutorId: number;
+  effectiveTutorName: string;
   createdBy: number;
   createdAt: Date;
   updatedAt: Date;

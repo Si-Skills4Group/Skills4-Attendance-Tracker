@@ -57,11 +57,20 @@ def _low_attendance_rows(cur, learners: list[dict], threshold: float, period_sta
     return rows
 
 
-def _sessions_awaiting_completion(cur, cohort_ids: list[int] | None) -> list[dict]:
+def _sessions_awaiting_completion(
+    cur, cohort_ids: list[int] | None, extra_tutor_id: int | None = None
+) -> list[dict]:
     today = date.today()
     clauses = ["s.session_date <= %s", "s.status != 'cancelled'", "s.deleted_at IS NULL", "c.deleted_at IS NULL"]
     params: list = [today]
-    if cohort_ids is not None:
+    if cohort_ids is not None and extra_tutor_id is not None:
+        # extra_tutor_id surfaces sessions this tutor is covering as a
+        # per-session cover tutor, without pulling in the rest of that
+        # session's cohort the way cohort_ids alone would.
+        clauses.append("(s.cohort_id = ANY(%s) OR s.cover_tutor_id = %s)")
+        params.append(cohort_ids)
+        params.append(extra_tutor_id)
+    elif cohort_ids is not None:
         clauses.append("s.cohort_id = ANY(%s)")
         params.append(cohort_ids)
 
@@ -75,10 +84,14 @@ def _sessions_awaiting_completion(cur, cohort_ids: list[int] | None) -> list[dic
     cur.execute(
         f"""
         SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName", s.session_date AS "sessionDate",
-               CASE WHEN t.id IS NULL THEN 'Unassigned' ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName"
+               CASE WHEN ct.id IS NULL THEN
+                   CASE WHEN t.id IS NULL THEN 'Unassigned' ELSE concat(t.first_name, ' ', t.last_name) END
+               ELSE concat(ct.first_name, ' ', ct.last_name) END AS "tutorName",
+               s.cover_tutor_id IS NOT NULL AS "isCoverSession"
         FROM attendance_sessions s
         JOIN cohorts c ON s.cohort_id = c.id
         LEFT JOIN tutors t ON c.tutor_id = t.id
+        LEFT JOIN tutors ct ON s.cover_tutor_id = ct.id
         WHERE {where}
           AND {expected_sql} > 0
           AND (
@@ -211,24 +224,29 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
             )
 
         next_session = None
-        if cohort_ids:
-            cur.execute(
-                """
-                SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName", s.session_date AS "sessionDate",
-                       concat(t.first_name, ' ', t.last_name) AS "tutorName"
-                FROM attendance_sessions s
-                JOIN cohorts c ON s.cohort_id = c.id
-                LEFT JOIN tutors t ON c.tutor_id = t.id
-                WHERE s.cohort_id = ANY(%s) AND s.session_date >= CURRENT_DATE AND s.status != 'cancelled'
-                  AND s.deleted_at IS NULL AND c.deleted_at IS NULL
-                ORDER BY s.session_date ASC
-                LIMIT 1
-                """,
-                (cohort_ids,),
-            )
-            next_session = cur.fetchone()
+        cur.execute(
+            """
+            SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName", s.session_date AS "sessionDate",
+                   CASE WHEN ct.id IS NULL THEN concat(t.first_name, ' ', t.last_name)
+                        ELSE concat(ct.first_name, ' ', ct.last_name) END AS "tutorName",
+                   s.cover_tutor_id IS NOT NULL AS "isCoverSession"
+            FROM attendance_sessions s
+            JOIN cohorts c ON s.cohort_id = c.id
+            LEFT JOIN tutors t ON c.tutor_id = t.id
+            LEFT JOIN tutors ct ON s.cover_tutor_id = ct.id
+            WHERE (s.cohort_id = ANY(%s) OR s.cover_tutor_id = %s)
+              AND s.session_date >= CURRENT_DATE AND s.status != 'cancelled'
+              AND s.deleted_at IS NULL AND c.deleted_at IS NULL
+            ORDER BY s.session_date ASC
+            LIMIT 1
+            """,
+            (cohort_ids, tutor_id),
+        )
+        next_session = cur.fetchone()
 
-        sessions_awaiting = _sessions_awaiting_completion(cur, cohort_ids) if cohort_ids else []
+        # Called even with an empty cohort list -- a tutor with no cohorts
+        # of their own can still be covering someone else's session.
+        sessions_awaiting = _sessions_awaiting_completion(cur, cohort_ids or [], extra_tutor_id=tutor_id)
 
         threshold = _get_threshold(cur)
 
@@ -327,7 +345,7 @@ def get_tutor_outstanding_registers(page: int = 1, pageSize: Annotated[int, Quer
     with get_cursor() as cur:
         cur.execute("SELECT id FROM cohorts WHERE tutor_id = %s AND deleted_at IS NULL", (tutor_id,))
         cohort_ids = [r["id"] for r in cur.fetchall()]
-        rows = _sessions_awaiting_completion(cur, cohort_ids) if cohort_ids else []
+        rows = _sessions_awaiting_completion(cur, cohort_ids, extra_tutor_id=tutor_id)
     return _paginate(rows, page, pageSize)
 
 

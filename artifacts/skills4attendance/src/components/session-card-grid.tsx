@@ -104,7 +104,12 @@ export function SessionCardGrid({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-muted-foreground/70" />
-                      <span>{session.tutorName}</span>
+                      <span>{session.effectiveTutorName}</span>
+                      {session.coverTutorId != null && (
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400">
+                          Cover
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

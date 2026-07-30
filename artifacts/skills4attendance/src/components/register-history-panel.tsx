@@ -14,6 +14,10 @@ const ACTION_LABELS: Record<string, string> = {
   complete_register: "Register completed",
   lock_register: "Register locked",
   unlock_register: "Register unlocked",
+  cover_tutor_assigned: "Cover Tutor assigned",
+  cover_tutor_changed: "Cover Tutor changed",
+  cover_tutor_correction: "Cover Tutor corrected (completed register)",
+  cover_tutor_removed: "Cover Tutor removed",
 };
 
 function describeEntry(action: string, newValue: string | null): string {

@@ -1786,6 +1786,95 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/cover:
+    put:
+      operationId: assignCoverTutor
+      tags: [attendance]
+      description: >
+        Upsert semantics: assigns a cover tutor when none is active, or
+        changes the existing one. Administrator-only. Applies to this one
+        session only -- the cohort's own tutor, learner allocations, and
+        historical attendance authorship are never changed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoverTutorInput"
+      responses:
+        "200":
+          description: Cover tutor assigned or changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Session is cancelled, register is locked, or the register version is stale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Replacement tutor is invalid, inactive, the same as the original tutor, or "other" reason is missing notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /attendance/sessions/{id}/cover/remove:
+    post:
+      operationId: removeCoverTutor
+      tags: [attendance]
+      description: >
+        Removes an active cover tutor. Administrator-only. Never deletes
+        attendance already recorded while cover was active -- if any
+        exists, requires confirmWithAttendance to proceed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveCoverTutorInput"
+      responses:
+        "200":
+          description: Cover tutor removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "400":
+          description: This session does not have a cover tutor assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Session is cancelled, register is locked, the register version is stale, or attendance is already recorded (confirm to proceed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /attendance/sessions/{id}/mark-all-present:
     post:
       operationId: markAllPresent
@@ -3755,6 +3844,16 @@ components:
           registerLockedAt,
           registerLockedBy,
           lockReason,
+          coverTutorId,
+          coverTutorName,
+          coverOriginalTutorId,
+          coverOriginalTutorName,
+          coverReason,
+          coverNotes,
+          coverAssignedAt,
+          coverAssignedByName,
+          effectiveTutorId,
+          effectiveTutorName,
           createdBy,
           createdAt,
           updatedAt,
@@ -3784,6 +3883,22 @@ components:
         registerLockedAt: { type: ["string", "null"], format: date-time }
         registerLockedBy: { type: ["integer", "null"] }
         lockReason: { type: ["string", "null"] }
+        # Session-level cover tutor reassignment: coverTutorId is the sole
+        # "is this session covered" signal (null = no cover). tutorId/
+        # tutorName keep their existing meaning (the cohort's own tutor)
+        # unchanged -- effectiveTutorId/effectiveTutorName are the ready-
+        # made "who is actually delivering this session" display values
+        # (cover tutor when active, otherwise the cohort's tutor).
+        coverTutorId: { type: ["integer", "null"] }
+        coverTutorName: { type: ["string", "null"] }
+        coverOriginalTutorId: { type: ["integer", "null"] }
+        coverOriginalTutorName: { type: ["string", "null"] }
+        coverReason: { type: ["string", "null"] }
+        coverNotes: { type: ["string", "null"] }
+        coverAssignedAt: { type: ["string", "null"], format: date-time }
+        coverAssignedByName: { type: ["string", "null"] }
+        effectiveTutorId: { type: integer }
+        effectiveTutorName: { type: string }
         createdBy: { type: integer }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -3851,6 +3966,35 @@ components:
       required: [reason, registerVersion]
       properties:
         reason: { type: string, minLength: 1 }
+        registerVersion: { type: integer }
+
+    CoverReason:
+      type: string
+      enum:
+        [
+          tutor_sickness,
+          annual_leave,
+          emergency_cover,
+          tutor_unavailable,
+          operational_reassignment,
+          other,
+        ]
+
+    CoverTutorInput:
+      type: object
+      required: [coverTutorId, reason, registerVersion]
+      properties:
+        coverTutorId: { type: integer }
+        reason: { $ref: "#/components/schemas/CoverReason" }
+        notes: { type: string }
+        registerVersion: { type: integer }
+
+    RemoveCoverTutorInput:
+      type: object
+      required: [reason, registerVersion]
+      properties:
+        reason: { type: string, minLength: 1 }
+        confirmWithAttendance: { type: boolean, default: false }
         registerVersion: { type: integer }
 
     UnlockRegisterInput:
@@ -4379,13 +4523,16 @@ components:
 
     SessionSummary:
       type: object
-      required: [id, cohortId, cohortName, sessionDate, tutorName]
+      required: [id, cohortId, cohortName, sessionDate, tutorName, isCoverSession]
       properties:
         id: { type: integer }
         cohortId: { type: integer }
         cohortName: { type: string }
         sessionDate: { type: string, format: date }
+        # Already the effective tutor (cover tutor when active, otherwise
+        # the cohort's own tutor) -- isCoverSession lets the UI label it.
         tutorName: { type: string }
+        isCoverSession: { type: boolean }
 
     RecentEdit:
       type: object

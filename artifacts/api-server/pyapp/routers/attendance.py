@@ -12,6 +12,17 @@ from ..attendance_row_rules import (
 )
 from ..auth import require_admin, require_attendance_access, require_auth, require_cohort_access
 from ..audit import write_audit_log
+from ..cover_tutor_lib import (
+    COVER_TUTOR_JOINS_SQL,
+    COVER_TUTOR_SELECT_FIELDS,
+    CoverReason,
+    assign_or_change_cover_tutor,
+    get_eligible_cover_tutor_or_400,
+    remove_cover_tutor,
+    require_attendance_write_access,
+    require_session_open_for_cover_change,
+    validate_cover_reason,
+)
 from ..db import get_cursor
 from ..rate_limit import check_and_record_rate_limit
 from ..session_register_lib import (
@@ -29,7 +40,7 @@ from ..session_register_lib import (
 
 router = APIRouter(tags=["attendance"])
 
-SESSION_SELECT = """
+SESSION_SELECT = f"""
     SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName",
            c.tutor_id AS "tutorId",
            CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName",
@@ -42,10 +53,12 @@ SESSION_SELECT = """
            s.completed_at AS "completedAt", s.completed_by AS "completedBy",
            s.register_locked_at AS "registerLockedAt", s.register_locked_by AS "registerLockedBy",
            s.lock_reason AS "lockReason",
+           {COVER_TUTOR_SELECT_FIELDS},
            s.created_at AS "createdAt", s.updated_at AS "updatedAt"
     FROM attendance_sessions s
     JOIN cohorts c ON s.cohort_id = c.id
     LEFT JOIN tutors t ON c.tutor_id = t.id
+    {COVER_TUTOR_JOINS_SQL}
 """
 
 # Same base select as SESSION_SELECT, but with recordedCount/expectedCount
@@ -57,7 +70,7 @@ SESSION_SELECT = """
 # what its own register page shows -- callers must have already ensured the
 # snapshot exists for every session_id in this result set (list_attendance_sessions
 # does this via ensure_expected_learners_snapshots_bulk before running this query).
-SESSION_SELECT_WITH_COUNTS = """
+SESSION_SELECT_WITH_COUNTS = f"""
     SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName",
            c.tutor_id AS "tutorId",
            CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName",
@@ -70,12 +83,14 @@ SESSION_SELECT_WITH_COUNTS = """
            s.completed_at AS "completedAt", s.completed_by AS "completedBy",
            s.register_locked_at AS "registerLockedAt", s.register_locked_by AS "registerLockedBy",
            s.lock_reason AS "lockReason",
+           {COVER_TUTOR_SELECT_FIELDS},
            s.created_at AS "createdAt", s.updated_at AS "updatedAt",
            (SELECT count(*)::int FROM attendance_records ar WHERE ar.session_id = s.id) AS "recordedCount",
            (SELECT count(*)::int FROM session_expected_learners sel WHERE sel.session_id = s.id) AS "expectedCount"
     FROM attendance_sessions s
     JOIN cohorts c ON s.cohort_id = c.id
     LEFT JOIN tutors t ON c.tutor_id = t.id
+    {COVER_TUTOR_JOINS_SQL}
 """
 
 
@@ -126,6 +141,19 @@ class LockRegisterInput(BaseModel):
 
 class UnlockRegisterInput(BaseModel):
     reason: str = Field(min_length=1)
+    registerVersion: int
+
+
+class CoverTutorInput(BaseModel):
+    coverTutorId: int
+    reason: CoverReason
+    notes: str | None = None
+    registerVersion: int
+
+
+class RemoveCoverTutorInput(BaseModel):
+    reason: str = Field(min_length=1)
+    confirmWithAttendance: bool = False
     registerVersion: int
 
 
@@ -195,7 +223,11 @@ def list_attendance_sessions(
     clauses = []
     params: list = []
     if session.get("role") == "tutor" and session.get("tutorId"):
-        clauses.append("c.tutor_id = %s")
+        # OR-ed with cover_tutor_id so a session covered by this tutor
+        # appears in their list too -- without pulling in the rest of that
+        # session's cohort, since the match is per-session, not per-cohort.
+        clauses.append("(c.tutor_id = %s OR s.cover_tutor_id = %s)")
+        params.append(session["tutorId"])
         params.append(session["tutorId"])
     elif tutorId is not None:
         clauses.append("c.tutor_id = %s")
@@ -382,7 +414,8 @@ def generate_session_register(session_id: int, request: Request, session: dict =
     register read already ensure the snapshot exists. Useful as an explicit
     "make sure this register is ready" action (e.g. support/debugging)."""
     with get_cursor() as cur:
-        require_attendance_access(cur, session_id, session)
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
 
@@ -400,7 +433,8 @@ def update_attendance_session(
     session_id: int, payload: AttendanceSessionUpdate, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
-        require_attendance_access(cur, session_id, session)
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         existing = cur.fetchone()
         if existing["status"] == "cancelled":
@@ -463,7 +497,8 @@ def cancel_attendance_session(
     session_id: int, payload: SessionCancelInput, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
-        require_attendance_access(cur, session_id, session)
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
         if not existing:
@@ -585,7 +620,8 @@ def save_attendance_register(
     is_admin = session.get("role") == "admin"
 
     with get_cursor() as cur:
-        require_attendance_access(cur, session_id, session)
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
         if session_row["status"] == "cancelled":
@@ -742,7 +778,8 @@ def complete_register(
     session_id: int, payload: CompleteRegisterInput, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
-        require_attendance_access(cur, session_id, session)
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
         if session_row["status"] == "cancelled":
@@ -896,7 +933,8 @@ def unlock_attendance_register(
 @router.post("/attendance/sessions/{session_id}/mark-all-present")
 def mark_all_present(session_id: int, request: Request, session: dict = Depends(require_auth)):
     with get_cursor() as cur:
-        require_attendance_access(cur, session_id, session)
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
         session_row = cur.fetchone()
         if session_row["status"] == "cancelled":
@@ -932,3 +970,129 @@ def mark_all_present(session_id: int, request: Request, session: dict = Depends(
     )
 
     return get_attendance_session(session_id, session)
+
+
+@router.put("/attendance/sessions/{session_id}/cover")
+def assign_cover_tutor(
+    session_id: int, payload: CoverTutorInput, request: Request, session: dict = Depends(require_admin)
+):
+    """Upsert: assigns a cover tutor when none is active, or changes the
+    existing one -- the only difference is which audit action name is
+    written, so one endpoint (matching this router's own PUT .../register
+    upsert precedent) handles both rather than two nearly-identical ones."""
+    with get_cursor() as cur:
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Attendance session not found")
+
+        ensure_expected_learners_snapshot(
+            cur, existing["id"], existing["cohortId"], existing["sessionDate"], session.get("userId")
+        )
+        before = _with_counts(cur, existing)
+        require_session_open_for_cover_change(existing, before["registerStatus"])
+        if payload.registerVersion != before["registerVersion"]:
+            raise HTTPException(
+                status_code=409,
+                detail={"reason": "stale_register_version", "currentVersion": before["registerVersion"]},
+            )
+        validate_cover_reason(payload.reason, payload.notes)
+        get_eligible_cover_tutor_or_400(cur, payload.coverTutorId, existing["tutorId"])
+
+        # A completed register's delivery tutor is never silently changed --
+        # still Administrator-only and reason-required like any other
+        # assignment, but always audited distinctly as a correction.
+        is_correction = before["registerStatus"] == "completed"
+
+        with cur.connection.transaction():
+            result = assign_or_change_cover_tutor(
+                cur, existing, payload.coverTutorId, payload.reason, payload.notes, session["userId"]
+            )
+            bump_register_version(cur, session_id, expected_version=payload.registerVersion)
+            if is_correction:
+                action = "cover_tutor_correction"
+            elif result["wasChange"]:
+                action = "cover_tutor_changed"
+            else:
+                action = "cover_tutor_assigned"
+            write_audit_log(
+                request,
+                action=action,
+                entity_type="attendance_session",
+                entity_id=session_id,
+                previous_value={
+                    "coverTutorId": result["previousCoverTutorId"],
+                    "coverReason": result["previousCoverReason"],
+                },
+                new_value={
+                    "coverTutorId": payload.coverTutorId,
+                    "reason": payload.reason,
+                    "notes": payload.notes,
+                    "registerStatusAtChange": before["registerStatus"],
+                },
+                cur=cur,
+            )
+
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        full = _with_counts(cur, cur.fetchone())
+    return full
+
+
+@router.post("/attendance/sessions/{session_id}/cover/remove")
+def remove_cover_tutor_endpoint(
+    session_id: int, payload: RemoveCoverTutorInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Attendance session not found")
+        if existing["coverTutorId"] is None:
+            raise HTTPException(status_code=400, detail="This session does not have a cover tutor assigned")
+
+        ensure_expected_learners_snapshot(
+            cur, existing["id"], existing["cohortId"], existing["sessionDate"], session.get("userId")
+        )
+        before = _with_counts(cur, existing)
+        require_session_open_for_cover_change(existing, before["registerStatus"])
+        if payload.registerVersion != before["registerVersion"]:
+            raise HTTPException(
+                status_code=409,
+                detail={"reason": "stale_register_version", "currentVersion": before["registerVersion"]},
+            )
+
+        # Mirrors cancel_session's/delete's own two-step confirm exactly --
+        # never remove cover out from under recorded attendance without an
+        # explicit "yes, anyway"; the data is preserved either way.
+        cur.execute("SELECT count(*)::int AS count FROM attendance_records WHERE session_id = %s", (session_id,))
+        recorded_count = cur.fetchone()["count"]
+        if recorded_count > 0 and not payload.confirmWithAttendance:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason": "attendance_already_recorded",
+                    "message": "This session already has recorded attendance, entered while cover was active. "
+                    "Confirm to remove cover anyway -- the recorded attendance will be preserved, not deleted.",
+                    "recordedCount": recorded_count,
+                },
+            )
+
+        with cur.connection.transaction():
+            remove_cover_tutor(cur, session_id)
+            bump_register_version(cur, session_id, expected_version=payload.registerVersion)
+            write_audit_log(
+                request,
+                action="cover_tutor_removed",
+                entity_type="attendance_session",
+                entity_id=session_id,
+                previous_value={
+                    "coverTutorId": existing["coverTutorId"],
+                    "coverReason": existing["coverReason"],
+                },
+                new_value={"reason": payload.reason, "recordedCountAtRemoval": recorded_count},
+                cur=cur,
+            )
+
+        cur.execute(f"{SESSION_SELECT} WHERE s.id = %s", (session_id,))
+        full = _with_counts(cur, cur.fetchone())
+    return full

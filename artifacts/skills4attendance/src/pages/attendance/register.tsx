@@ -9,10 +9,14 @@ import {
   useCancelAttendanceSession,
   useDeleteAttendanceSession,
   useRefreshSessionRegister,
+  useAssignCoverTutor,
+  useRemoveCoverTutor,
+  useListTutors,
   useGetCurrentUser,
   AttendanceStatus,
   RegisterEntryInput,
   AttendanceRegister,
+  CoverReason,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -23,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
@@ -36,7 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
 import {
   Loader2, Save, ArrowLeft, CheckCircle2, Clock, CalendarDays, Users, Pencil, Ban, RefreshCw,
-  ChevronDown, Lock, Unlock, ShieldCheck, AlertTriangle, Trash2,
+  ChevronDown, Lock, Unlock, ShieldCheck, AlertTriangle, Trash2, UserCog, UserX,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { RegisterStatusBadge } from "@/components/status-badges";
@@ -65,6 +70,15 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
   not_expected: "Not Expected",
   withdrawn: "Withdrawn",
   bil: "BIL",
+};
+
+const COVER_REASON_LABELS: Record<CoverReason, string> = {
+  tutor_sickness: "Tutor sickness",
+  annual_leave: "Annual leave",
+  emergency_cover: "Emergency cover",
+  tutor_unavailable: "Tutor unavailable",
+  operational_reassignment: "Operational reassignment",
+  other: "Other",
 };
 
 function buildDraft(entry: {
@@ -107,6 +121,8 @@ export default function RegisterPage() {
   const cancelMutation = useCancelAttendanceSession();
   const deleteMutation = useDeleteAttendanceSession();
   const refreshMutation = useRefreshSessionRegister();
+  const assignCoverMutation = useAssignCoverTutor();
+  const removeCoverMutation = useRemoveCoverTutor();
 
   // ---------------------------------------------------------------------
   // Local draft state -- purely local until an explicit Save Draft /
@@ -603,6 +619,90 @@ export default function RegisterPage() {
     });
   };
 
+  // ---------------------------------------------------------------------
+  // Cover tutor (admin-only): reassigns just this session's register to a
+  // different Tutor -- cohort ownership, learner allocations, and
+  // historical attendance authorship are never touched. One dialog handles
+  // both first assignment and changing an existing cover tutor, mirroring
+  // the backend's own PUT .../cover upsert endpoint.
+  // ---------------------------------------------------------------------
+  const { data: tutors = [] } = useListTutors({ active: true });
+  const [coverOpen, setCoverOpen] = React.useState(false);
+  const [coverTutorId, setCoverTutorId] = React.useState("");
+  const [coverReason, setCoverReason] = React.useState<CoverReason | "">("");
+  const [coverNotes, setCoverNotes] = React.useState("");
+  const [removeCoverOpen, setRemoveCoverOpen] = React.useState(false);
+  const [removeCoverReason, setRemoveCoverReason] = React.useState("");
+  const [removeCoverNeedsConfirm, setRemoveCoverNeedsConfirm] = React.useState(false);
+
+  const openCoverDialog = () => {
+    setCoverTutorId("");
+    setCoverReason("");
+    setCoverNotes("");
+    setCoverOpen(true);
+  };
+
+  const submitCover = () => {
+    if (!register || !coverTutorId || !coverReason) return;
+    assignCoverMutation.mutate({
+      id: sessionId,
+      data: {
+        coverTutorId: Number(coverTutorId),
+        reason: coverReason,
+        notes: coverNotes.trim() ? coverNotes.trim() : undefined,
+        registerVersion: register.session.registerVersion,
+      },
+    }, {
+      onSuccess: (result) => {
+        toast({ title: register.session.coverTutorId != null ? "Cover tutor changed" : "Cover tutor assigned" });
+        setCoverOpen(false);
+        queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), (old: any) =>
+          old ? { ...old, session: result } : old);
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+        if (status === 409 && detail?.reason === "stale_register_version") {
+          setCoverOpen(false);
+          setConflictVersion(detail.currentVersion ?? null);
+          return;
+        }
+        toast({ title: "Could not assign cover tutor", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
+  const submitRemoveCover = (confirmWithAttendance = false) => {
+    if (!register) return;
+    removeCoverMutation.mutate({
+      id: sessionId,
+      data: { reason: removeCoverReason.trim(), confirmWithAttendance, registerVersion: register.session.registerVersion },
+    }, {
+      onSuccess: (result) => {
+        toast({ title: "Cover tutor removed" });
+        setRemoveCoverOpen(false);
+        setRemoveCoverReason("");
+        setRemoveCoverNeedsConfirm(false);
+        queryClient.setQueryData(getGetAttendanceSessionQueryKey(sessionId), (old: any) =>
+          old ? { ...old, session: result } : old);
+      },
+      onError: (err) => {
+        const status = (err as { status?: number } | undefined)?.status;
+        const detail = (err as { data?: any } | undefined)?.data;
+        if (status === 409 && detail?.reason === "stale_register_version") {
+          setRemoveCoverOpen(false);
+          setConflictVersion(detail.currentVersion ?? null);
+          return;
+        }
+        if (status === 409 && detail?.reason === "attendance_already_recorded") {
+          setRemoveCoverNeedsConfirm(true);
+          return;
+        }
+        toast({ title: "Could not remove cover tutor", description: getErrorMessage(err), variant: "destructive" });
+      },
+    });
+  };
+
   if (isLoading || !register) {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
@@ -614,10 +714,23 @@ export default function RegisterPage() {
   const isCompleted = session.registerStatus === "completed";
   const isHistorical = session.registerStatus === "completed" || session.registerStatus === "locked"
     || session.sessionDate.slice(0, 10) < todayIso;
-  const isReadOnly = isCancelled || isLocked;
+  const hasCover = session.coverTutorId != null;
+  // The original Tutor's access degrades to read-only (not blocked
+  // entirely) while an active cover Tutor is assigned -- only the cover
+  // Tutor or an Administrator may edit. Folded into isReadOnly rather than
+  // threaded through every button separately.
+  const isOriginalTutorWhileCoverActive = !isAdmin && hasCover
+    && currentUser?.tutorId != null
+    && currentUser.tutorId === session.tutorId
+    && currentUser.tutorId !== session.coverTutorId;
+  const isReadOnly = isCancelled || isLocked || isOriginalTutorWhileCoverActive;
   const canRefresh = isAdmin && !isCancelled && !isCompleted && !isLocked && session.sessionDate.slice(0, 10) >= todayIso;
   const canLock = isAdmin && isCompleted && !isLocked;
   const canUnlock = isAdmin && isLocked;
+  const canManageCover = isAdmin && !isCancelled && !isLocked;
+  const coverTutorOptions = tutors
+    .filter(t => t.id !== session.tutorId)
+    .map(t => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` }));
   const isSaving = saveMutation.isPending || completeMutation.isPending;
 
   return (
@@ -645,7 +758,15 @@ export default function RegisterPage() {
                 <span>•</span>
                 <span className="flex items-center"><Clock className="w-3.5 h-3.5 mr-1.5" />{session.plannedStartTime.substring(0,5)} - {session.plannedEndTime.substring(0,5)} ({session.plannedDurationHours}h)</span>
                 <span>•</span>
-                <span className="flex items-center"><Users className="w-3.5 h-3.5 mr-1.5" />{session.tutorName}</span>
+                <span className="flex items-center">
+                  <Users className="w-3.5 h-3.5 mr-1.5" />
+                  {session.effectiveTutorName}
+                  {hasCover && (
+                    <span className="ml-1.5 text-xs font-medium px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400">
+                      Cover
+                    </span>
+                  )}
+                </span>
                 <span>•</span>
                 <span>{session.recordedCount} of {session.expectedCount} learner{session.expectedCount === 1 ? "" : "s"} recorded</span>
                 {session.completedAt && (
@@ -730,6 +851,21 @@ export default function RegisterPage() {
                 <Trash2 className="w-4 h-4 mr-2" /> Delete Session
               </Button>
             )}
+            {canManageCover && !hasCover && (
+              <Button variant="outline" onClick={openCoverDialog} className="shadow-sm">
+                <UserCog className="w-4 h-4 mr-2" /> Assign Cover Tutor
+              </Button>
+            )}
+            {canManageCover && hasCover && (
+              <>
+                <Button variant="outline" onClick={openCoverDialog} className="shadow-sm">
+                  <UserCog className="w-4 h-4 mr-2" /> Change Cover Tutor
+                </Button>
+                <Button variant="outline" onClick={() => setRemoveCoverOpen(true)} className="shadow-sm">
+                  <UserX className="w-4 h-4 mr-2" /> Remove Cover Tutor
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -752,6 +888,22 @@ export default function RegisterPage() {
             <p className="text-sm text-violet-700 dark:text-violet-400 mt-1">
               {isAdmin ? "An Administrator must unlock the register before it can be edited." : "Attendance cannot be edited while this register is locked. Contact an Administrator to unlock it."}
             </p>
+          </div>
+        )}
+
+        {hasCover && (
+          <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 p-4 rounded-md mb-6">
+            <h4 className="font-semibold text-sky-800 dark:text-sky-400 mb-1 flex items-center"><UserCog className="w-4 h-4 mr-2" /> Cover session</h4>
+            <p className="text-sm text-sky-700 dark:text-sky-400">
+              Originally assigned to: {session.coverOriginalTutorName ?? session.tutorName}
+            </p>
+            <p className="text-sm text-sky-700 dark:text-sky-400">Delivered by: {session.coverTutorName}</p>
+            {session.coverReason && (
+              <p className="text-sm text-sky-700 dark:text-sky-400">
+                Reason: {COVER_REASON_LABELS[session.coverReason as CoverReason] ?? session.coverReason}
+                {session.coverNotes ? ` -- ${session.coverNotes}` : ""}
+              </p>
+            )}
           </div>
         )}
 
@@ -1159,6 +1311,112 @@ export default function RegisterPage() {
             >
               {refreshMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Apply Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign / change cover tutor */}
+      <Dialog open={coverOpen} onOpenChange={(o) => { setCoverOpen(o); if (!o) { setCoverTutorId(""); setCoverReason(""); setCoverNotes(""); } }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>{hasCover ? "Change Cover Tutor" : "Assign Cover Tutor"}</DialogTitle>
+            <DialogDescription>
+              This assigns only this session to the selected Tutor. The cohort owner, learner allocations and historical attendance will not change.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="text-sm text-muted-foreground space-y-1 bg-muted/30 p-3 rounded-md">
+              <div><span className="font-medium text-foreground">Session:</span> {format(parseISO(session.sessionDate), "EEEE, MMM d, yyyy")}, {session.plannedStartTime.substring(0, 5)}-{session.plannedEndTime.substring(0, 5)}</div>
+              <div><span className="font-medium text-foreground">Cohort:</span> {session.cohortName}</div>
+              <div><span className="font-medium text-foreground">Original Tutor:</span> {session.tutorName}</div>
+              <div><span className="font-medium text-foreground">Expected learners:</span> {session.expectedCount}</div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cover-tutor">Replacement Tutor</Label>
+              <Combobox
+                id="cover-tutor"
+                options={coverTutorOptions}
+                value={coverTutorId}
+                onValueChange={setCoverTutorId}
+                placeholder="Select a tutor..."
+                searchPlaceholder="Search tutors..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cover-reason">Reason</Label>
+              <Select value={coverReason} onValueChange={(v) => setCoverReason(v as CoverReason)}>
+                <SelectTrigger id="cover-reason"><SelectValue placeholder="Select a reason..." /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(COVER_REASON_LABELS) as CoverReason[]).map(r => (
+                    <SelectItem key={r} value={r}>{COVER_REASON_LABELS[r]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cover-notes">Notes {coverReason === "other" ? "(Required)" : "(Optional)"}</Label>
+              <Textarea
+                id="cover-notes"
+                value={coverNotes}
+                onChange={e => setCoverNotes(e.target.value)}
+                rows={3}
+                className={coverReason === "other" && !coverNotes.trim() ? "border-amber-400" : ""}
+              />
+            </div>
+            {isCompleted && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-md">
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  This register is already completed. Reassigning the delivery Tutor now will be recorded as a correction.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCoverOpen(false)}>Cancel</Button>
+            <Button
+              onClick={submitCover}
+              disabled={
+                assignCoverMutation.isPending || !coverTutorId || !coverReason ||
+                (coverReason === "other" && !coverNotes.trim())
+              }
+            >
+              {assignCoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              <UserCog className="w-4 h-4 mr-2" /> {hasCover ? "Change Cover Tutor" : "Assign Cover Tutor"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove cover tutor */}
+      <Dialog open={removeCoverOpen} onOpenChange={(o) => { setRemoveCoverOpen(o); if (!o) { setRemoveCoverReason(""); setRemoveCoverNeedsConfirm(false); } }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Remove Cover Tutor</DialogTitle>
+            <DialogDescription>The session returns to {session.tutorName}. Any attendance already recorded is preserved, never deleted.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {removeCoverNeedsConfirm && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-md">
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  Attendance has already been recorded while cover was active. Confirm to remove cover anyway -- the recorded attendance will be preserved, not deleted.
+                </p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="remove-cover-reason">Reason</Label>
+              <Textarea id="remove-cover-reason" value={removeCoverReason} onChange={e => setRemoveCoverReason(e.target.value)} rows={3} placeholder="Why is cover being removed?" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveCoverOpen(false)}>Go Back</Button>
+            <Button
+              variant="destructive"
+              onClick={() => submitRemoveCover(removeCoverNeedsConfirm)}
+              disabled={removeCoverMutation.isPending || !removeCoverReason.trim()}
+            >
+              {removeCoverMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {removeCoverNeedsConfirm ? "Remove Anyway" : "Remove Cover Tutor"}
             </Button>
           </DialogFooter>
         </DialogContent>
