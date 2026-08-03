@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag for this deploy (e.g. a short description of the change)"
+        description: "Image tag for this deploy (short, e.g. cover-tutor-fix -- auto-sanitized if it has spaces/punctuation)"
         required: true
         type: string
 
@@ -94,6 +94,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Sanitize image tag
+        id: tag
+        env:
+          RAW_IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          # image_tag is free-text ("a short description of the change") --
+          # Docker tags can't contain spaces or most punctuation, so turn
+          # whatever was typed into a valid tag instead of failing the build
+          # deep in docker/buildx's own argument parsing (as happened here:
+          # a tag with spaces first broke unquoted arg parsing entirely,
+          # then -- even quoted -- still failed docker's own tag validation).
+          SANITIZED=$(echo "$RAW_IMAGE_TAG" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')
+          if [ -z "$SANITIZED" ]; then
+            echo "::error::image_tag ('$RAW_IMAGE_TAG') has no letters or digits once sanitized -- please use something like 'cover-tutor-fix'"
+            exit 1
+          fi
+          echo "tag=$SANITIZED" >> "$GITHUB_OUTPUT"
+
       - name: Azure login (OIDC)
         uses: azure/login@v3
         with:
@@ -112,7 +130,7 @@ jobs:
           BUILD_VITE_ENTRA_REDIRECT_URI: ${{ vars.VITE_ENTRA_REDIRECT_URI }}
           BUILD_VITE_ENTRA_POST_LOGOUT_REDIRECT_URI: ${{ vars.VITE_ENTRA_POST_LOGOUT_REDIRECT_URI }}
           BUILD_VITE_API_SCOPE: ${{ vars.VITE_API_SCOPE }}
-          BUILD_IMAGE_TAG: ${{ inputs.image_tag }}
+          BUILD_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           # Values are passed via env: and referenced quoted below rather than
           # interpolated directly as a GitHub Actions expression -- an
@@ -136,14 +154,14 @@ jobs:
 
       - name: Push image
         env:
-          BUILD_IMAGE_TAG: ${{ inputs.image_tag }}
+          BUILD_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           docker push "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:$BUILD_IMAGE_TAG"
           docker push "${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest"
 
       - name: Deploy to Container App
         env:
-          BUILD_IMAGE_TAG: ${{ inputs.image_tag }}
+          BUILD_IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           az containerapp update \
             --name "${{ env.CONTAINER_APP }}" \
