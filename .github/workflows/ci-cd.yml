@@ -115,13 +115,14 @@ jobs:
           BUILD_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           # Values are passed via env: and referenced quoted below rather than
-          # interpolated directly with ${{ }} -- an unquoted, directly-
-          # interpolated value containing embedded whitespace/a newline gets
-          # word-split by the shell, which can shift or swallow the trailing
-          # "." context-path argument (this is exactly what broke a prior
-          # deploy: docker/buildx failed with "requires 1 argument" because
-          # the positional path never reached argv). Quoting here makes the
-          # build robust regardless of what any individual variable contains.
+          # interpolated directly as a GitHub Actions expression -- an
+          # unquoted, directly-interpolated value containing embedded
+          # whitespace/a newline gets word-split by the shell, which can
+          # shift or swallow the trailing "." context-path argument (this is
+          # exactly what broke a prior deploy: docker/buildx failed with
+          # "requires 1 argument" because the positional path never reached
+          # argv). Quoting here makes the build robust regardless of what
+          # any individual variable contains.
           docker build \
             --build-arg VITE_ENTRA_CLIENT_ID="$BUILD_VITE_ENTRA_CLIENT_ID" \
             --build-arg VITE_ENTRA_TENANT_ID="$BUILD_VITE_ENTRA_TENANT_ID" \
