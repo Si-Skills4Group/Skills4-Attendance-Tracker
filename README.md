@@ -10,17 +10,20 @@ Attendance and allocation management for Skills4Group's pharmacy apprenticeship 
 - **API contract**: [lib/api-spec/openapi.yaml](lib/api-spec/openapi.yaml) is the source of truth. [lib/api-zod](lib/api-zod) and [lib/api-client-react](lib/api-client-react) are generated from it via Orval — never hand-edit files under their `generated/` folders
 - **Auth**: Microsoft Entra ID (Azure AD) via MSAL on the frontend, validated by the FastAPI backend against tenant JWKS. See [docs/entra-phase2.md](docs/entra-phase2.md) for the full architecture, app registration setup, and required environment variables
 - **Deployment**: Docker multi-stage build (frontend build → Python runtime) pushed to Azure Container Registry and run on Azure Container Apps — see [Dockerfile](Dockerfile)
+- **CI/CD**: [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) — every push/PR to `main` runs the full backend `pytest` and frontend `tsc`/`vitest`/`vite build` suites; production deploy is a separate, manually-triggered `workflow_dispatch` run (Actions tab → CI/CD → Run workflow) that only proceeds if both test jobs pass, then builds/pushes the image and updates the Container App via Azure OIDC login (no stored cloud credentials). See [docs/deployment-checklist.md](docs/deployment-checklist.md) for the full deploy procedure.
 
 ## Repo layout
 
 - `artifacts/skills4attendance` — the React SPA
-- `artifacts/api-server/pyapp` — the FastAPI backend (routers, auth, DB access)
+- `artifacts/api-server/pyapp` — the FastAPI backend (routers, auth, DB access, and `bud_sync_lib.py`/`bud_progress.py` for the read-only Bud LMS integration — delta-sync of learner progress/status into `learner_progress`, never written back)
 - `artifacts/mockup-sandbox` — standalone design/prototype sandbox, not part of the deployed app
 - `lib/db` — Drizzle schema (Postgres source of truth)
 - `lib/api-spec` — OpenAPI spec (API contract source of truth)
 - `lib/api-zod`, `lib/api-client-react` — generated API types/hooks, do not edit by hand
 - `scripts` — misc workspace tooling
+- `.github/workflows/ci-cd.yml` — test-on-every-push CI and manually-triggered production deploy
 - `docs/entra-phase2.md` — Entra ID authentication architecture and rollout notes
+- `docs/deployment-checklist.md` — step-by-step production deploy procedure (current CI/CD-based flow)
 
 ## Local development
 

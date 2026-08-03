@@ -10,9 +10,10 @@ For deploying `main` to the live Container App (`s4-attendance-app-gzn5bh`, reso
 
 ## 2. Test status
 
-- [ ] Backend: `pytest` full suite green (525+ tests as of Phase 10; run from `artifacts/api-server` with `TEST_DATABASE_URL` set — see README.md).
-- [ ] Frontend: `tsc --noEmit`, `vitest run`, `vite build` all green (via the win32 workaround cycle in `pnpm-workspace.yaml` if building on Windows — see README.md's Gotchas section; revert the workaround afterwards).
+- [ ] Backend: `pytest` full suite green (672+ tests as of the cover-tutor phase; run from `artifacts/api-server` with `TEST_DATABASE_URL` set — see README.md).
+- [ ] Frontend: `tsc --noEmit`, `vitest run` (197+ tests), `vite build` all green (via the win32 workaround cycle in `pnpm-workspace.yaml` if building on Windows — see README.md's Gotchas section; revert the workaround afterwards).
 - [ ] No test was skipped or marked `xfail` to make this pass.
+- [ ] Since the CI/CD pipeline (`.github/workflows/ci-cd.yml`) now runs both suites automatically on every push/PR to `main`, this item is normally already satisfied by a green run on the commit you're about to deploy — check the Actions tab rather than re-running everything locally, unless you have local changes CI hasn't seen yet.
 
 ## 3. Migration review
 
@@ -50,8 +51,8 @@ Compare the Container App's current env/secrets against `docs/entra-phase2.md`'s
 
 ## 8. Container image tag
 
-- [ ] Build and tag with a descriptive, immutable tag (e.g. `phase-10-security-hardening`), **not** only `:latest` — `:latest` is fine as a convenience alias pushed alongside, but the Container App update itself should reference the specific tag so a later `az containerapp revision list` shows exactly what's running, and so a rollback (item 13) can target a known-good tag precisely.
-- [ ] Confirm the build used the exact same `VITE_ENTRA_*`/`VITE_API_*` build-args as the previous production build (see `docs/entra-phase2.md`) — extract them from the currently-running bundle if unsure (`grep` the built JS for `VITE_ENTRA_` — see this phase's own deploy history for the exact command).
+- [ ] Pick a descriptive, immutable tag (e.g. `cover-tutor-reassignment`) for the workflow's `image_tag` input, **not** something generic — the Container App update references this specific tag (the workflow also pushes a `:latest` alias alongside), so a later `az containerapp revision list` shows exactly what's running, and a rollback (item 13) can target a known-good tag precisely.
+- [ ] The `VITE_ENTRA_*`/`VITE_API_*` build-args are supplied automatically by the `deploy` job from GitHub Actions repository **variables** (Settings → Secrets and variables → Actions → Variables), not typed by hand each time — confirm they're current there if Entra config ever changes (see `docs/entra-phase2.md`), rather than re-deriving them per deploy.
 
 ## 9. Infrastructure what-if
 
@@ -65,20 +66,23 @@ Bootstrap runs automatically as part of application startup (`bootstrap_database
 
 ## 11. Backend deployment
 
-```
-az acr build --registry s4attgzn5bhacr --image skills4attendance:<tag> --image skills4attendance:latest \
-  --build-arg VITE_ENTRA_CLIENT_ID=... [... see item 8] \
-  https://<token>@github.com/Si-Skills4Group/Skills4-Attendance-Tracker.git#main
-az containerapp update -n s4-attendance-app-gzn5bh -g Skills-4-Attendance-Tracker \
-  --image s4attgzn5bhacr.azurecr.io/skills4attendance:<tag>
-```
-(The frontend is built as part of the same multi-stage Docker image — see `Dockerfile` — there is no separate frontend deployment step.)
+Deployment is a GitHub Actions workflow (`.github/workflows/ci-cd.yml`), triggered manually — **not** the `az acr build` CLI flow used in earlier phases, which was retired after repeatedly failing on ACR Tasks' context-upload step (an Azure-side issue, not this repo's fault, but persistent enough that the pipeline now avoids that code path entirely by building on GitHub-hosted runners and pushing straight to the registry):
 
-- [ ] On Windows, building from a local source directory hits a path-length limit walking `node_modules`'s pnpm store; use the remote GitHub-context form above instead of a local path.
+1. GitHub → **Actions** tab → **CI/CD** workflow → **Run workflow**.
+2. Fill in `image_tag` (see item 8) and confirm the branch is `main`.
+3. Click **Run workflow**. This runs `test-frontend`/`test-backend` first; `deploy` only proceeds if both pass, then:
+   - Logs into Azure via OIDC (federated credential, no stored secret) using the `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` repository variables.
+   - `docker build`s the same multi-stage image (`Dockerfile`, frontend + backend together, no separate frontend deploy step) with the `VITE_*` build-args from repository variables, tagged both `image_tag` and `latest`.
+   - `docker push`es both tags to `s4attgzn5bhacr.azurecr.io`.
+   - Runs `az containerapp update` to point `s4-attendance-app-gzn5bh` at the new `image_tag`.
+   - Runs the smoke test itself (item 12's first two checks) as its last step — a red X on the workflow run means don't proceed past this checklist's remaining items until you've investigated.
+
+- [ ] If `deploy` doesn't run at all: check the run's trigger was `workflow_dispatch`, not `push`/`pull_request` — those two only run the test jobs, by design (`if: github.event_name == 'workflow_dispatch'` gates the deploy job), matching this checklist's "deploy only on separate explicit instruction" rule at the top.
+- [ ] Azure login failing with `AADSTS700213` means the federated credential's trusted subject doesn't match what GitHub presented — check the `deploy` job still uses the `production` environment name it was set up with, and that no branch-protection/environment rename has drifted since.
 
 ## 12. Smoke tests
 
-Immediately after the new revision goes live:
+Immediately after the new revision goes live (the first two of these already ran as the workflow's own last step — re-check them here anyway, since a transient pass during deploy doesn't guarantee the app stays healthy a minute later):
 
 - [ ] `GET /api/health/live` → `{"status": "ok"}`.
 - [ ] `GET /api/health/ready` → `{"status": "ok", "checks": {"database": "ok", ...}}`.
