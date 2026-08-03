@@ -28,6 +28,16 @@ const CONFLICT_MESSAGES: Record<string, string> = {
   outside_cohort_date_range: "This date falls outside the cohort's start/end dates.",
 };
 
+// Rounds to the nearest whole hour rather than truncating, so e.g. 09:00-13:40
+// (4h40m) comes out as 5, not 4 -- closer to what the tutor actually planned.
+function calculateDurationHours(start: string, end: string): number {
+  if (!start || !end) return 0;
+  const [startHours, startMinutes] = start.split(":").map(Number);
+  const [endHours, endMinutes] = end.split(":").map(Number);
+  const totalMinutes = (endHours * 60 + endMinutes) - (startHours * 60 + startMinutes);
+  return Math.max(0, Math.round(totalMinutes / 60));
+}
+
 export default function CohortSessionsPage() {
   const params = useParams();
   const cohortId = Number(params.id);
@@ -81,13 +91,23 @@ export default function CohortSessionsPage() {
 
   React.useEffect(() => {
     if (cohort) {
-      setPlannedStartTime(cohort.sessionStartTime.substring(0, 5));
-      setPlannedEndTime(cohort.sessionEndTime.substring(0, 5));
-      const sH = parseInt(cohort.sessionStartTime.split(':')[0]);
-      const eH = parseInt(cohort.sessionEndTime.split(':')[0]);
-      setPlannedDurationHours(Math.max(1, eH - sH));
+      const start = cohort.sessionStartTime.substring(0, 5);
+      const end = cohort.sessionEndTime.substring(0, 5);
+      setPlannedStartTime(start);
+      setPlannedEndTime(end);
+      setPlannedDurationHours(calculateDurationHours(start, end));
     }
   }, [cohort]);
+
+  const handleStartTimeChange = (value: string) => {
+    setPlannedStartTime(value);
+    setPlannedDurationHours(calculateDurationHours(value, plannedEndTime));
+  };
+
+  const handleEndTimeChange = (value: string) => {
+    setPlannedEndTime(value);
+    setPlannedDurationHours(calculateDurationHours(plannedStartTime, value));
+  };
 
   const handleCreate = (force = false) => {
     if (!sessionDate || !plannedStartTime || !plannedEndTime || !title.trim()) return;
@@ -274,11 +294,11 @@ export default function CohortSessionsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="new-session-start-time">Start Time</Label>
-                    <Input id="new-session-start-time" type="time" value={plannedStartTime} onChange={e => setPlannedStartTime(e.target.value)} />
+                    <Input id="new-session-start-time" type="time" value={plannedStartTime} onChange={e => handleStartTimeChange(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="new-session-end-time">End Time</Label>
-                    <Input id="new-session-end-time" type="time" value={plannedEndTime} onChange={e => setPlannedEndTime(e.target.value)} />
+                    <Input id="new-session-end-time" type="time" value={plannedEndTime} onChange={e => handleEndTimeChange(e.target.value)} />
                   </div>
                 </div>
                 <div className="space-y-2">

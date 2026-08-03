@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Router, Route } from 'wouter';
 import { memoryLocation } from 'wouter/memory-location';
@@ -159,6 +159,43 @@ describe('CohortSessionsPage', () => {
     await user.type(dateInput, '2026-08-15');
 
     expect(screen.getByText(/falls outside the cohort's start\/end dates/i)).toBeInTheDocument();
+  });
+
+  it('auto-calculates the duration from start/end time, rounded to the nearest hour', async () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /new session/i }));
+    const durationInput = screen.getByLabelText('Duration (Hours)');
+    // Cohort defaults (09:00-16:00) start the dialog at exactly 7 hours.
+    expect(durationInput).toHaveValue(7);
+
+    const endTimeInput = screen.getByLabelText('End Time');
+    await user.clear(endTimeInput);
+    await user.type(endTimeInput, '13:40');
+    // 09:00-13:40 is 4h40m -- rounds up to 5, not truncated to 4.
+    expect(durationInput).toHaveValue(5);
+
+    const startTimeInput = screen.getByLabelText('Start Time');
+    await user.clear(startTimeInput);
+    await user.type(startTimeInput, '10:20');
+    // 10:20-13:40 is 3h20m -- rounds down to 3.
+    expect(durationInput).toHaveValue(3);
+  });
+
+  it('still lets an admin manually override the auto-calculated duration', async () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /new session/i }));
+    const durationInput = screen.getByLabelText('Duration (Hours)');
+    fireEvent.change(durationInput, { target: { value: '2.5' } });
+
+    expect(durationInput).toHaveValue(2.5);
   });
 
   it('shows a conflict dialog on 409 and lets an admin override with a reason', async () => {
