@@ -93,7 +93,7 @@ function buildDraft(entry: {
     notes: entry.notes || "",
     overrideReason: entry.overrideReason || "",
     _originalHours: originalHours,
-    _requireOverrideReason: entry.status === "present" && entry.hoursAttended !== originalHours,
+    _requireOverrideReason: entry.status === "present" && entry.hoursAttended > originalHours,
   };
 }
 
@@ -203,7 +203,7 @@ export default function RegisterPage() {
         }
       }
 
-      next._requireOverrideReason = next.status === "present" && next.hoursAttended !== next._originalHours;
+      next._requireOverrideReason = next.status === "present" && next.hoursAttended > next._originalHours;
       if (!next._requireOverrideReason && field !== "overrideReason") next.overrideReason = "";
 
       return { ...prev, [learnerId]: next };
@@ -239,7 +239,7 @@ export default function RegisterPage() {
         targetIds.forEach(id => {
           if (next[id]) {
             const merged = { ...next[id], ...apply(next[id]) };
-            merged._requireOverrideReason = merged.status === "present" && merged.hoursAttended !== merged._originalHours;
+            merged._requireOverrideReason = merged.status === "present" && merged.hoursAttended > merged._originalHours;
             next[id] = merged;
           }
         });
@@ -984,6 +984,7 @@ export default function RegisterPage() {
                         step="0.5"
                         min="0"
                         className={`h-9 w-20 ${draft._requireOverrideReason ? 'border-amber-400' : ''}`}
+                        aria-label={`Hours attended for ${entry.learnerName}`}
                         value={draft.hoursAttended}
                         onChange={(e) => updateDraft(entry.learnerId, "hoursAttended", parseFloat(e.target.value) || 0)}
                         disabled={isReadOnly || draft.status !== "present" && draft.status !== "late"}

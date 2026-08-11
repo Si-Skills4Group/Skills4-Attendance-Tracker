@@ -368,6 +368,47 @@ describe('RegisterPage', () => {
     );
   });
 
+  it('entering hours below the planned duration does not require an override reason', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    const hoursInput = screen.getByRole('spinbutton', { name: /hours attended for ada lovelace/i });
+    await user.clear(hoursInput);
+    await user.type(hoursInput, '1');
+
+    expect(screen.queryByText(/exceeds planned hours/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/reason for altered hours/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    expect(mockSaveMutate).toHaveBeenCalledWith(
+      {
+        id: 200,
+        data: expect.objectContaining({
+          entries: expect.arrayContaining([
+            expect.objectContaining({ learnerId: 1, hoursAttended: 1 }),
+          ]),
+        }),
+      },
+      expect.anything(),
+    );
+  });
+
+  it('entering hours above the planned duration still requires an override reason', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    const hoursInput = screen.getByRole('spinbutton', { name: /hours attended for ada lovelace/i });
+    await user.clear(hoursInput);
+    await user.type(hoursInput, '8');
+
+    expect(screen.getByText(/exceeds planned hours -- an administrator must approve this/i)).toBeInTheDocument();
+  });
+
   it('offers a BIL status option that zeroes hours and minutes late like the other zero-hours statuses', async () => {
     mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
     const user = userEvent.setup();
