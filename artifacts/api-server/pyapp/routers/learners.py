@@ -55,6 +55,12 @@ class LearnerInput(BaseModel):
 
 
 class LearnerUpdate(BaseModel):
+    """Deliberately has no tutorId/cohortId -- apply_transfer (allocation_lib.py),
+    called from POST /allocation/allocate, is the only place allowed to move a
+    learner between tutors/cohorts, since that's the one path that also writes
+    learner_allocation_history and checks the new tutor/cohort is active. A
+    generic PATCH here must not be able to silently bypass both."""
+
     learnerRef: str | None = Field(default=None, min_length=1)
     uln: str | None = None
     firstName: str | None = Field(default=None, min_length=1)
@@ -69,8 +75,6 @@ class LearnerUpdate(BaseModel):
     actualEndDate: date | None = None
     withdrawalDate: date | None = None
     status: LearnerStatus | None = None
-    tutorId: int | None = None
-    cohortId: int | None = None
     externalSystemId: str | None = None
 
 
@@ -212,11 +216,10 @@ def get_learner(learner_id: int, session: dict = Depends(require_auth)):
 
 def _update_learner(cur, learner_id: int, payload: LearnerUpdate, request: Request, session: dict) -> dict:
     """Cursor-accepting internal shared with the CSV import confirm step --
-    see _create_learner's docstring. Note: the import path never puts
-    tutorId/cohortId into the LearnerUpdate it builds for an existing
-    learner, so this function's own generic column handling doesn't need
-    any import-specific carve-out to keep allocation changes out of CSV
-    updates -- that guarantee lives entirely in the caller."""
+    see _create_learner's docstring. LearnerUpdate has no tutorId/cohortId
+    field at all (see its docstring), so this function's generic column
+    handling can't move a learner between tutors/cohorts even if a caller
+    tried -- that stays exclusively apply_transfer's job."""
     cur.execute("SELECT * FROM learners WHERE id = %s AND deleted_at IS NULL", (learner_id,))
     existing = cur.fetchone()
     if not existing:
@@ -255,8 +258,6 @@ def _update_learner(cur, learner_id: int, payload: LearnerUpdate, request: Reque
         "actualEndDate": "actual_end_date",
         "withdrawalDate": "withdrawal_date",
         "status": "status",
-        "tutorId": "tutor_id",
-        "cohortId": "cohort_id",
         "externalSystemId": "external_system_id",
     }
     set_clauses = [f"{column_map[k]} = %s" for k in updates]

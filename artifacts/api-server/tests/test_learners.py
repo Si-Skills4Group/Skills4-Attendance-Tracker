@@ -5,8 +5,10 @@ from fastapi import HTTPException
 from pyapp.routers.learners import (
     LearnerInput,
     LearnerStatusChangeInput,
+    LearnerUpdate,
     change_learner_status,
     create_learner,
+    update_learner,
 )
 
 
@@ -109,6 +111,31 @@ def test_change_status_is_audited(db, request_factory, admin_user, learner_facto
     row = db.fetchone()
     assert row is not None
     assert "withdrawn" in row["new_value"]
+
+
+def test_patch_learner_ignores_a_tutorid_or_cohortid_in_the_request_body(db, request_factory, admin_user, learner_factory, tutor_factory):
+    """LearnerUpdate has no tutorId/cohortId field at all -- apply_transfer
+    (via POST /allocation/allocate) is the only path allowed to move a
+    learner between tutors/cohorts, since it's the only one that also
+    writes learner_allocation_history and checks the new tutor is active.
+    A raw request body containing tutorId/cohortId must be silently ignored
+    by pydantic (the default for an unrecognised field), not applied."""
+    original_tutor = tutor_factory()
+    other_tutor = tutor_factory()
+    learner = learner_factory(tutor_id=original_tutor["tutorId"])
+
+    payload = LearnerUpdate.model_validate({"firstName": "Changed", "tutorId": other_tutor["tutorId"], "cohortId": 999999})
+    assert not hasattr(payload, "tutorId")
+    assert not hasattr(payload, "cohortId")
+
+    result = update_learner(learner["id"], payload, request_factory(), admin_user)
+    assert result["firstName"] == "Changed"
+    assert result["tutorId"] == original_tutor["tutorId"]
+
+    db.execute("SELECT tutor_id AS \"tutorId\", cohort_id AS \"cohortId\" FROM learners WHERE id = %s", (learner["id"],))
+    row = db.fetchone()
+    assert row["tutorId"] == original_tutor["tutorId"]
+    assert row["cohortId"] is None
 
 
 def test_completing_a_learner_without_actual_end_date_is_rejected_by_endpoint(db, request_factory, admin_user, learner_factory):

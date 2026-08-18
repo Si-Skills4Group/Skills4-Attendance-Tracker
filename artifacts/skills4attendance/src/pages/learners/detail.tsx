@@ -1,5 +1,10 @@
 import * as React from "react";
-import { useGetLearner, useCreateLearner, useUpdateLearner, useChangeLearnerStatus, useDeleteLearner, useGetLearnerAllocationHistory, useGetCurrentUser, LearnerStatus, getGetLearnerQueryKey, getGetLearnerAllocationHistoryQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useGetLearner, useCreateLearner, useUpdateLearner, useChangeLearnerStatus, useDeleteLearner,
+  useGetLearnerAllocationHistory, useGetCurrentUser, useListTutors, useAllocateLearners, LearnerStatus,
+  getGetLearnerQueryKey, getGetLearnerAllocationHistoryQueryKey, getListTutorsQueryKey,
+} from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2, Users } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -65,9 +71,13 @@ export default function LearnerDetailPage() {
 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [deleteReason, setDeleteReason] = React.useState("");
+  const [reassignDialogOpen, setReassignDialogOpen] = React.useState(false);
+  const [reassignTutorId, setReassignTutorId] = React.useState("");
+  const [reassignReason, setReassignReason] = React.useState("");
 
   const { data: currentUser } = useGetCurrentUser();
   const isAdmin = currentUser?.role === "admin";
@@ -80,10 +90,15 @@ export default function LearnerDetailPage() {
     query: { enabled: !isNew, queryKey: getGetLearnerAllocationHistoryQueryKey(learnerId) }
   });
 
+  const { data: tutors = [] } = useListTutors({ active: true }, {
+    query: { enabled: isAdmin && !isNew, queryKey: getListTutorsQueryKey({ active: true }) } // Only admins need the full list to reassign
+  });
+
   const createMutation = useCreateLearner();
   const updateMutation = useUpdateLearner();
   const changeStatusMutation = useChangeLearnerStatus();
   const deleteMutation = useDeleteLearner();
+  const allocateMutation = useAllocateLearners();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const form = useForm<z.infer<typeof learnerSchema>>({
@@ -187,6 +202,32 @@ export default function LearnerDetailPage() {
     });
   };
 
+  const onReassignTutor = () => {
+    if (!learner || !reassignTutorId) return;
+    allocateMutation.mutate({
+      data: {
+        learnerIds: [learnerId],
+        // cohortId is passed through unchanged -- apply_transfer overwrites
+        // both tutor_id and cohort_id on every call, so omitting it would
+        // silently unassign this learner's cohort.
+        cohortId: learner.cohortId ?? undefined,
+        tutorId: Number(reassignTutorId),
+        effectiveDate: format(new Date(), "yyyy-MM-dd"),
+        transferReason: reassignReason.trim(),
+      },
+    }, {
+      onSuccess: () => {
+        toast({ title: "Tutor reassigned" });
+        setReassignDialogOpen(false);
+        setReassignTutorId("");
+        setReassignReason("");
+        queryClient.invalidateQueries({ queryKey: getGetLearnerQueryKey(learnerId) });
+        queryClient.invalidateQueries({ queryKey: getGetLearnerAllocationHistoryQueryKey(learnerId) });
+      },
+      onError: (err) => toast({ title: "Could not reassign tutor", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
   const onDeleteLearner = () => {
     deleteMutation.mutate({ id: learnerId, data: { reason: deleteReason.trim() } }, {
       onSuccess: () => {
@@ -230,6 +271,11 @@ export default function LearnerDetailPage() {
           {!isNew && (
             <Button variant="outline" onClick={() => setStatusDialogOpen(true)}>
               <RefreshCw className="w-4 h-4 mr-2" /> Change Status
+            </Button>
+          )}
+          {!isNew && isAdmin && (
+            <Button variant="outline" onClick={() => setReassignDialogOpen(true)}>
+              <Users className="w-4 h-4 mr-2" /> Reassign Tutor
             </Button>
           )}
           {!isNew && isAdmin && (
@@ -416,6 +462,63 @@ export default function LearnerDetailPage() {
           )}
         </Tabs>
       </div>
+
+      <Dialog
+        open={reassignDialogOpen}
+        onOpenChange={(o) => { setReassignDialogOpen(o); if (!o) { setReassignTutorId(""); setReassignReason(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reassign Tutor</DialogTitle>
+            <DialogDescription>
+              This changes only who this learner's tutor is. Their cohort assignment and past attendance are not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="text-sm space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground w-24">Current Tutor:</span>
+                <span className="font-medium">{learner?.tutorName || "Unassigned"}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground w-24">Cohort:</span>
+                <span className="font-medium">{learner?.cohortName || "Unassigned"}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reassign-tutor-combobox">New Tutor</Label>
+              <Combobox
+                id="reassign-tutor-combobox"
+                aria-label="New Tutor"
+                options={tutors
+                  .filter((t) => t.id !== learner?.tutorId)
+                  .map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` }))}
+                value={reassignTutorId}
+                onValueChange={setReassignTutorId}
+                placeholder="Select a tutor..."
+                searchPlaceholder="Search tutors..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reassign-tutor-reason">Reason</Label>
+              <Textarea
+                id="reassign-tutor-reason"
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                rows={3}
+                placeholder="Why is this learner moving to a different tutor?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>Cancel</Button>
+            <Button onClick={onReassignTutor} disabled={allocateMutation.isPending || !reassignTutorId || !reassignReason.trim()}>
+              {allocateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Reassign Tutor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent>
