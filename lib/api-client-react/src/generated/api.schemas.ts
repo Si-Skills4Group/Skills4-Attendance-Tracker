@@ -667,18 +667,6 @@ export interface AllocationHistoryEntry {
   changedDate: string;
 }
 
-export interface CohortAllocationGroup {
-  cohortId: number;
-  cohortName: string;
-  learners: Learner[];
-}
-
-export interface TutorAllocationGroup {
-  tutorId: number;
-  tutorName: string;
-  cohorts: CohortAllocationGroup[];
-}
-
 export interface AllocationInput {
   /** @minItems 1 */
   learnerIds: number[];
@@ -1755,6 +1743,10 @@ level?: string;
 employer?: string;
 tutorId?: number;
 cohortId?: number;
+/**
+ * When true, returns only learners with no tutor assigned. Takes precedence over tutorId.
+ */
+unallocated?: boolean;
 page?: number;
 pageSize?: number;
 };

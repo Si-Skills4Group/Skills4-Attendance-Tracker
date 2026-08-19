@@ -669,6 +669,10 @@ paths:
         - name: cohortId
           in: query
           schema: { type: integer }
+        - name: unallocated
+          in: query
+          description: When true, returns only learners with no tutor assigned. Takes precedence over tutorId.
+          schema: { type: boolean }
         - name: page
           in: query
           schema: { type: integer, default: 1 }
@@ -1244,30 +1248,9 @@ paths:
                 items: { $ref: "#/components/schemas/Learner" }
 
   # ---------- Allocation ----------
-  /allocation/unallocated-learners:
-    get:
-      operationId: listUnallocatedLearners
-      tags: [allocation]
-      responses:
-        "200":
-          description: Learners without a tutor or cohort
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/Learner" }
-  /allocation/by-tutor:
-    get:
-      operationId: getAllocationByTutor
-      tags: [allocation]
-      responses:
-        "200":
-          description: Learners grouped by tutor and cohort
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/TutorAllocationGroup" }
+  # listUnallocatedLearners/getAllocationByTutor were removed in favour of
+  # GET /learners (search/pagination + the unallocated filter above) -- the
+  # allocation screen now uses one endpoint instead of three.
   /allocation/allocate:
     post:
       operationId: allocateLearners
@@ -3769,26 +3752,6 @@ components:
         changedBy: { type: integer }
         changedByName: { type: string }
         changedDate: { type: string, format: date-time }
-
-    TutorAllocationGroup:
-      type: object
-      required: [tutorId, tutorName, cohorts]
-      properties:
-        tutorId: { type: integer }
-        tutorName: { type: string }
-        cohorts:
-          type: array
-          items: { $ref: "#/components/schemas/CohortAllocationGroup" }
-
-    CohortAllocationGroup:
-      type: object
-      required: [cohortId, cohortName, learners]
-      properties:
-        cohortId: { type: integer }
-        cohortName: { type: string }
-        learners:
-          type: array
-          items: { $ref: "#/components/schemas/Learner" }
 
     AllocationInput:
       type: object

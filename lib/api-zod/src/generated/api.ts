@@ -973,6 +973,7 @@ export const ListLearnersQueryParams = zod.object({
   "employer": zod.coerce.string().optional(),
   "tutorId": zod.coerce.number().optional(),
   "cohortId": zod.coerce.number().optional(),
+  "unallocated": zod.coerce.boolean().optional().describe('When true, returns only learners with no tutor assigned. Takes precedence over tutorId.'),
   "page": zod.coerce.number().default(listLearnersQueryPageDefault),
   "pageSize": zod.coerce.number().default(listLearnersQueryPageSizeDefault)
 })
@@ -1669,66 +1670,6 @@ export const GetCohortLearnersResponseItem = zod.object({
   "updatedAt": zod.coerce.date()
 })
 export const GetCohortLearnersResponse = zod.array(GetCohortLearnersResponseItem)
-
-
-export const ListUnallocatedLearnersResponseItem = zod.object({
-  "id": zod.number(),
-  "learnerRef": zod.string(),
-  "uln": zod.string().nullable(),
-  "firstName": zod.string(),
-  "lastName": zod.string(),
-  "email": zod.string().nullable(),
-  "employer": zod.string().nullable(),
-  "programme": zod.string(),
-  "level": zod.string(),
-  "startDate": zod.coerce.date(),
-  "plannedEndDate": zod.coerce.date().nullable(),
-  "actualEndDate": zod.coerce.date().nullable(),
-  "withdrawalDate": zod.coerce.date().nullable(),
-  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
-  "tutorId": zod.number().nullable(),
-  "cohortId": zod.number().nullable(),
-  "tutorName": zod.string().nullable(),
-  "cohortName": zod.string().nullable(),
-  "externalSystemId": zod.string().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
-})
-export const ListUnallocatedLearnersResponse = zod.array(ListUnallocatedLearnersResponseItem)
-
-
-export const GetAllocationByTutorResponseItem = zod.object({
-  "tutorId": zod.number(),
-  "tutorName": zod.string(),
-  "cohorts": zod.array(zod.object({
-  "cohortId": zod.number(),
-  "cohortName": zod.string(),
-  "learners": zod.array(zod.object({
-  "id": zod.number(),
-  "learnerRef": zod.string(),
-  "uln": zod.string().nullable(),
-  "firstName": zod.string(),
-  "lastName": zod.string(),
-  "email": zod.string().nullable(),
-  "employer": zod.string().nullable(),
-  "programme": zod.string(),
-  "level": zod.string(),
-  "startDate": zod.coerce.date(),
-  "plannedEndDate": zod.coerce.date().nullable(),
-  "actualEndDate": zod.coerce.date().nullable(),
-  "withdrawalDate": zod.coerce.date().nullable(),
-  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
-  "tutorId": zod.number().nullable(),
-  "cohortId": zod.number().nullable(),
-  "tutorName": zod.string().nullable(),
-  "cohortName": zod.string().nullable(),
-  "externalSystemId": zod.string().nullable(),
-  "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
-}))
-}))
-})
-export const GetAllocationByTutorResponse = zod.array(GetAllocationByTutorResponseItem)
 
 
 

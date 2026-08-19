@@ -138,6 +138,37 @@ def test_patch_learner_ignores_a_tutorid_or_cohortid_in_the_request_body(db, req
     assert row["cohortId"] is None
 
 
+def test_list_learners_unallocated_filter_returns_only_learners_with_no_tutor(db, admin_user, learner_factory, tutor_factory):
+    from pyapp.routers.learners import list_learners
+
+    tutor = tutor_factory()
+    unallocated_learner = learner_factory(tutor_id=None)
+    allocated_learner = learner_factory(tutor_id=tutor["tutorId"])
+
+    result = list_learners(unallocated=True, session=admin_user)
+    ids = {row["id"] for row in result["items"]}
+    assert unallocated_learner["id"] in ids
+    assert allocated_learner["id"] not in ids
+
+
+def test_list_learners_unallocated_takes_precedence_over_tutorid(db, admin_user, learner_factory, tutor_factory):
+    """unallocated=true and tutorId are mutually exclusive in the frontend's
+    own filter UI (one Tutor combobox offering "All tutors" / "Unallocated" /
+    a specific tutor as alternatives, never combined) -- if a caller somehow
+    sends both, unallocated must win rather than the two silently cancelling
+    each other out into an unfiltered list."""
+    from pyapp.routers.learners import list_learners
+
+    tutor = tutor_factory()
+    unallocated_learner = learner_factory(tutor_id=None)
+    allocated_learner = learner_factory(tutor_id=tutor["tutorId"])
+
+    result = list_learners(unallocated=True, tutorId=tutor["tutorId"], session=admin_user)
+    ids = {row["id"] for row in result["items"]}
+    assert unallocated_learner["id"] in ids
+    assert allocated_learner["id"] not in ids
+
+
 def test_completing_a_learner_without_actual_end_date_is_rejected_by_endpoint(db, request_factory, admin_user, learner_factory):
     learner = learner_factory(status="active")
     # Bypass the pydantic-level guard to prove the endpoint's own check also holds

@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 from ..auth import require_admin
 from ..audit import write_audit_log
 from ..db import get_cursor
-from ..learners_query import LEARNERS_WITH_NAMES_SELECT
 from ..allocation_lib import apply_transfer, enrich_allocation_history
 from ..scheduled_allocations_lib import apply_due_scheduled_allocations
 
@@ -41,51 +40,6 @@ def _ensure_cohort_active(cur, cohort_id: int | None) -> None:
         raise HTTPException(status_code=400, detail="Cohort not found")
     if not cohort["active"]:
         raise HTTPException(status_code=400, detail="Cannot allocate a learner to an inactive cohort")
-
-
-@router.get("/allocation/unallocated-learners")
-def unallocated_learners(_session: dict = Depends(require_admin)):
-    with get_cursor() as cur:
-        apply_due_scheduled_allocations(cur)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.tutor_id IS NULL AND l.deleted_at IS NULL")
-        return cur.fetchall()
-
-
-@router.get("/allocation/by-tutor")
-def allocation_by_tutor(_session: dict = Depends(require_admin)):
-    with get_cursor() as cur:
-        apply_due_scheduled_allocations(cur)
-        cur.execute('SELECT id, first_name AS "firstName", last_name AS "lastName" FROM tutors')
-        tutors = cur.fetchall()
-        cur.execute('SELECT id, name, tutor_id AS "tutorId" FROM cohorts WHERE deleted_at IS NULL')
-        cohorts = cur.fetchall()
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.deleted_at IS NULL")
-        learners = cur.fetchall()
-
-    result = []
-    for tutor in tutors:
-        tutor_cohorts = [c for c in cohorts if c["tutorId"] == tutor["id"]]
-        cohort_groups = [
-            {
-                "cohortId": c["id"],
-                "cohortName": c["name"],
-                "learners": [l for l in learners if l["cohortId"] == c["id"]],
-            }
-            for c in tutor_cohorts
-        ]
-        direct_learners = [
-            l for l in learners if l["tutorId"] == tutor["id"] and l["cohortId"] is None
-        ]
-        result.append(
-            {
-                "tutorId": tutor["id"],
-                "tutorName": f"{tutor['firstName']} {tutor['lastName']}",
-                "cohorts": cohort_groups,
-                "unassignedCohortLearners": direct_learners,
-            }
-        )
-
-    return result
 
 
 @router.post("/allocation/allocate")

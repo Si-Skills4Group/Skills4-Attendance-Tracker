@@ -15,6 +15,10 @@ level?: string;
 employer?: string;
 tutorId?: number;
 cohortId?: number;
+/**
+ * When true, returns only learners with no tutor assigned. Takes precedence over tutorId.
+ */
+unallocated?: boolean;
 page?: number;
 pageSize?: number;
 };

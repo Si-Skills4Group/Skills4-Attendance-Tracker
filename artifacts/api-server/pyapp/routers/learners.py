@@ -98,6 +98,7 @@ def list_learners(
     employer: str | None = None,
     tutorId: int | None = None,
     cohortId: int | None = None,
+    unallocated: bool | None = None,
     page: int = 1,
     pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
@@ -123,7 +124,12 @@ def list_learners(
     if employer:
         clauses.append("l.employer ILIKE %s")
         params.append(f"%{employer}%")
-    if tutorId is not None:
+    # unallocated takes precedence over tutorId -- the frontend's Tutor
+    # filter offers them as mutually exclusive options ("All tutors" /
+    # "Unallocated" / a specific tutor), never both at once.
+    if unallocated:
+        clauses.append("l.tutor_id IS NULL")
+    elif tutorId is not None:
         clauses.append("l.tutor_id = %s")
         params.append(tutorId)
     if cohortId is not None:
