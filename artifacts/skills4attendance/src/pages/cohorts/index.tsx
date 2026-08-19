@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
-import { Search, Plus, BookOpen, Clock, CalendarDays, User, ArrowRight, Users, ClipboardList } from "lucide-react";
+import { Search, Plus, BookOpen, CalendarDays, User, ArrowRight, Users, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
 
@@ -202,14 +202,6 @@ export default function CohortsPage() {
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4 text-muted-foreground/70" />
                     <span className="truncate">{cohort.tutorName || <span className="italic text-xs">No Tutor Assigned</span>}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-muted-foreground/70" />
-                    <span className="capitalize">{cohort.deliveryDay}s</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-muted-foreground/70" />
-                    <span>{cohort.sessionStartTime.substring(0,5)} - {cohort.sessionEndTime.substring(0,5)}</span>
                   </div>
                 </div>
 
