@@ -56,11 +56,12 @@ class TestFieldUpdateDetection:
     def test_a_matched_learner_is_processed_even_if_the_bud_row_predates_the_baseline(
         self, db, bud_row_factory, baseline_factory, learner_factory,
     ):
-        """Corrected rule: the baseline/no-historical-backfill gate applies
-        only to brand-new, UNMATCHED learners -- an already-matched
-        learner must remain eligible for status/field-change detection
-        regardless of when their Bud record first appeared, otherwise a
-        pre-baseline learner's status could never be tracked at all."""
+        """An already-matched learner must remain eligible for
+        status/field-change detection regardless of when their Bud record
+        first appeared -- baseline timing was never a factor for matched
+        learners (only unmatched-learner new-learner detection used to gate
+        on it, and that gate has since been retired too, see
+        test_bud_sync_new_learners.py)."""
         learner = learner_factory(email="old@example.com", uln="ULN-DELTA-3")
         row = bud_row_factory(unique_learner_number="ULN-DELTA-3", learner_email="new@example.com", synced_at="2000-01-01T00:00:00Z")
         baseline = baseline_factory()

@@ -92,6 +92,10 @@ let currentSummary: any = defaultSummary;
 let statusChangeItems: any[] = [statusChangeItem];
 let newLearnerItems: any[] = [newItem];
 let conflictItems: any[] = [conflictItem];
+// Overrides new learners' reported total independently of newLearnerItems'
+// own length, so tests can simulate "more pages exist beyond this one"
+// without needing the mock to actually slice a large array per page.
+let newLearnersTotalOverride: number | null = null;
 const mutateSpies = {
   establish: vi.fn(),
   reset: vi.fn(),
@@ -113,12 +117,13 @@ vi.mock('@workspace/api-client-react', () => ({
   useGetBudSyncJob: () => ({ data: currentJob }),
   useGetBudSyncJobSummary: () => ({ data: currentSummary }),
   useListLearners: () => ({ data: { items: [], total: 0, page: 1, pageSize: 10 } }),
-  useListBudSyncJobItems: (_jobId: number, params: { matchStatus?: string }) => {
+  useListBudSyncJobItems: (_jobId: number, params: { matchStatus?: string; page?: number; pageSize?: number }) => {
     const items = params?.matchStatus === 'status_change' ? statusChangeItems
       : params?.matchStatus === 'new' ? newLearnerItems
       : params?.matchStatus === 'conflict' ? conflictItems
       : [];
-    return { data: { items, total: items.length, page: 1, pageSize: 200 }, isLoading: false };
+    const total = params?.matchStatus === 'new' && newLearnersTotalOverride !== null ? newLearnersTotalOverride : items.length;
+    return { data: { items, total, page: params?.page ?? 1, pageSize: params?.pageSize ?? 200 }, isLoading: false };
   },
   getGetBudSyncStatusQueryKey: () => ['bud-sync-status'],
   getGetBudSyncJobQueryKey: (id: number) => ['bud-sync-job', id],
@@ -135,12 +140,13 @@ describe('BudSyncTrialPage', () => {
     statusChangeItems = [statusChangeItem];
     newLearnerItems = [newItem];
     conflictItems = [conflictItem];
+    newLearnersTotalOverride = null;
     Object.values(mutateSpies).forEach((spy) => spy.mockReset());
   });
 
   it('shows the trial banner', () => {
     renderWithQueryClient(<BudSyncTrialPage />);
-    expect(screen.getByText(/Existing unmatched Bud learners from before the trial are excluded/i)).toBeInTheDocument();
+    expect(screen.getByText(/regardless of when their Bud record first appeared/i)).toBeInTheDocument();
   });
 
   it('offers Establish Trial Baseline when no baseline is active, and disables Check Bud for Changes', () => {
@@ -212,6 +218,22 @@ describe('BudSyncTrialPage', () => {
     expect(screen.getByText('In Progress')).toBeInTheDocument();
     const checkboxes = screen.getAllByRole('checkbox');
     checkboxes.forEach((cb) => expect(cb).not.toBeChecked());
+  });
+
+  it('New Learners tab paginates once there are more results than fit on one page', async () => {
+    activateJob();
+    newLearnersTotalOverride = 30; // more than one page at pageSize 25
+    const user = userEvent.setup();
+    renderWithQueryClient(<BudSyncTrialPage />);
+    await user.click(screen.getByRole('tab', { name: /new learners/i }));
+
+    expect(screen.getByTestId('new-learners-pager-summary').textContent).toMatch(/showing 1 to 25 of 30 new learners/i);
+    expect(screen.getByRole('button', { name: /previous page of new learners/i })).toBeDisabled();
+    const next = screen.getByRole('button', { name: /next page of new learners/i });
+    expect(next).not.toBeDisabled();
+
+    await user.click(next);
+    expect(screen.getByTestId('new-learners-pager-summary').textContent).toMatch(/showing 26 to 30 of 30 new learners/i);
   });
 
   it('Conflicts tab displays unsafe records with no selection checkboxes', async () => {

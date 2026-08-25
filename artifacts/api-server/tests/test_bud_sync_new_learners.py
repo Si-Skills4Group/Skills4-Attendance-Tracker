@@ -1,7 +1,10 @@
-"""New-learner detection and creation: eligible only after the baseline,
-never matched by name/email/tutor_name, blocked on missing required fields
-(learnerRef/level have no Bud equivalent), and creates the learner/cohort/
-allocation exactly once via the existing services."""
+"""New-learner detection and creation: eligible regardless of whether the
+Bud record predates the trial's baseline (the historical-backfill gate was
+retired -- the operational goal is ingesting every learner Bud has that
+Attendance doesn't), never matched by name/email/tutor_name, blocked on
+missing required fields (learnerRef/level have no Bud equivalent), and
+creates the learner/cohort/allocation exactly once via the existing
+services."""
 from datetime import date, timedelta
 
 import pytest
@@ -29,17 +32,19 @@ class TestNewLearnerClassification:
         assert item["match_status"] == "new"
         assert item["action_type"] == "create_learner"
 
-    def test_a_learner_present_before_baseline_is_not_proposed_as_new(self, db, bud_row_factory, baseline_factory):
-        # The row must exist in the source *before* the baseline is
-        # established -- otherwise the baseline's own "no rows yet" marker
-        # would make anything added afterward look post-baseline by
-        # definition, regardless of its own synced_at value.
-        row = bud_row_factory(synced_at="2000-01-01T00:00:00Z")
+    def test_a_learner_present_before_baseline_is_still_proposed_as_new(self, db, bud_row_factory, baseline_factory, tutor_factory):
+        # The historical-backfill gate was retired: an unmatched, otherwise-
+        # eligible Bud row that already existed when the baseline was
+        # established must still be proposed as new, not silently withheld
+        # -- ingesting Bud's existing backlog is the whole point now.
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-PRE-BASELINE' WHERE id = %s", (tutor["tutorId"],))
+        row = bud_row_factory(synced_at="2000-01-01T00:00:00Z", tutor_id="BUD-T-PRE-BASELINE", start_date=_tomorrow())
         baseline = baseline_factory()
 
         item = classify_row(db, row, baseline)
-        assert item["match_status"] == "existing_before_trial"
-        assert item["action_type"] == "none"
+        assert item["match_status"] == "new"
+        assert item["action_type"] == "create_learner"
 
     def test_matching_by_name_alone_is_rejected(self, db, bud_row_factory, baseline_factory, learner_factory):
         """A Bud row sharing a learner's name but no ULN must never match --
@@ -249,8 +254,9 @@ class TestStatusEligibility:
 class TestMatchedLearnerEligibilityAtAnyStatus:
     """Corrected rule: a MATCHED learner must remain eligible for
     status-change detection at any status_desc -- the 'In Progress only'
-    filter exists solely to stop historical backfill of brand-new,
-    unmatched learners. Applying it to already-matched learners too was
+    filter exists solely to keep unmatched-learner creation restricted to
+    people actually actively enrolled, not withdrawn/completed/pending
+    ones. Applying it to already-matched learners too was
     the defect that made status-change detection (e.g. In Progress -> BIL)
     impossible."""
 

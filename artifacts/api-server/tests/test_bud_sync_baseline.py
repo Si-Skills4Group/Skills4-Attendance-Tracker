@@ -1,5 +1,7 @@
 """Trial baseline lifecycle: establishment performs zero business writes,
-pre-baseline rows are excluded, reset requires a reason and is audited, and
+a bulk Bud resync (which bumps synced_at across the whole source table
+regardless of whether a row's data changed) doesn't cause duplicate or
+inconsistent classification, reset requires a reason and is audited, and
 baseline history is preserved (never deleted, only superseded)."""
 import pytest
 
@@ -92,23 +94,28 @@ class TestBaselineSurvivesABulkResync:
     """Regression coverage for the real production behaviour that broke the
     original synced_at-only eligibility check: Bud bulk-touches synced_at
     across the *entire* source table on every sync, regardless of whether a
-    given row's data actually changed. A pre-existing row must stay
-    existing_before_trial forever, even after Bud re-stamps it, because its
-    learning_plan_id was already captured in the baseline's own snapshot."""
+    given row's data actually changed. classify_row no longer gates
+    unmatched-learner eligibility on baseline timing at all (that
+    historical-backfill rule was retired -- see test_bud_sync_new_learners.py),
+    so these tests now confirm the more basic thing that actually matters:
+    a bulk resync's synced_at bump doesn't change or duplicate an unmatched
+    row's classification, and a genuinely new row is still detected
+    correctly alongside one."""
 
-    def test_a_pre_existing_row_stays_excluded_after_a_bulk_resync_touches_its_synced_at(
-        self, db, bud_row_factory, baseline_factory,
+    def test_a_bulk_resync_touching_synced_at_does_not_change_classification(
+        self, db, bud_row_factory, baseline_factory, tutor_factory,
     ):
-        row = bud_row_factory(synced_at="2026-01-01T00:00:00Z")
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-RESYNC-STABLE' WHERE id = %s", (tutor["tutorId"],))
+        row = bud_row_factory(synced_at="2026-01-01T00:00:00Z", tutor_id="BUD-T-RESYNC-STABLE", start_date="2099-01-01")
         baseline = baseline_factory()
 
-        # Confirm it starts out correctly excluded.
         item_before = classify_row(db, row, baseline)
-        assert item_before["match_status"] == "existing_before_trial"
+        assert item_before["match_status"] == "new"
 
-        # Bud does a full resync: every row (including this pre-existing,
-        # unchanged one) gets a fresh, later synced_at -- nothing about the
-        # learner's actual data changed.
+        # Bud does a full resync: every row (including this unchanged one)
+        # gets a fresh, later synced_at -- nothing about the learner's
+        # actual data changed.
         db.execute(
             "UPDATE public.learner_progress SET synced_at = '2099-01-01T00:00:00Z' WHERE learning_plan_id = %s",
             (row["learningPlanId"],),
@@ -127,12 +134,12 @@ class TestBaselineSurvivesABulkResync:
         resynced_row = db.fetchone()
 
         item_after = classify_row(db, resynced_row, baseline)
-        assert item_after["match_status"] == "existing_before_trial"
+        assert item_after["match_status"] == "new"
 
     def test_a_genuinely_new_row_is_still_detected_alongside_a_bulk_resync(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
     ):
-        pre_existing = bud_row_factory(synced_at="2026-01-01T00:00:00Z")
+        pre_existing = bud_row_factory(synced_at="2026-01-01T00:00:00Z")  # no tutor mapping -> conflict, not new
         baseline_factory()
 
         tutor = tutor_factory()
@@ -150,6 +157,6 @@ class TestBaselineSurvivesABulkResync:
             "SELECT source_identifier, match_status FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s",
             (job["id"], pre_existing["learningPlanId"]),
         )
-        assert db.fetchone()["match_status"] == "existing_before_trial"
+        assert db.fetchone()["match_status"] == "conflict"
 
         assert job["newLearnersDetected"] == 1

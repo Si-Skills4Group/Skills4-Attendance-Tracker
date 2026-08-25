@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { RefreshCw, Loader2, AlertTriangle, ShieldAlert, Info, ArrowRight } from "lucide-react";
+import { RefreshCw, Loader2, AlertTriangle, ShieldAlert, Info, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
@@ -141,7 +141,13 @@ export default function BudSyncTrialPage() {
   });
 
   const statusChangeParams = { matchStatus: "status_change" as const, pageSize: 200 };
-  const newLearnerParams = { matchStatus: "new" as const, pageSize: 200 };
+  // Unlike Status Changes/Conflicts, New Learners can now realistically run
+  // into the thousands (the historical-backfill gate that used to keep this
+  // tab small was retired), so it needs real pagination rather than a
+  // single fixed-size fetch.
+  const [newLearnersPage, setNewLearnersPage] = React.useState(1);
+  const newLearnersPageSize = 25;
+  const newLearnerParams = { matchStatus: "new" as const, page: newLearnersPage, pageSize: newLearnersPageSize };
   const conflictParams = { matchStatus: "conflict" as const, pageSize: 200 };
 
   const { data: statusChangeItems, isLoading: statusChangesLoading } = useListBudSyncJobItems(activeJobId ?? 0, statusChangeParams, {
@@ -201,6 +207,7 @@ export default function BudSyncTrialPage() {
       onSuccess: (newJob) => {
         setActiveJobId(newJob.id);
         setActiveTab("status-changes");
+        setNewLearnersPage(1);
         toast({
           title: "Bud checked for changes",
           description: `${newJob.statusChangesDetected} status change(s), ${newJob.newLearnersDetected} new learner(s), ${newJob.conflictCount} conflict(s).`,
@@ -327,8 +334,10 @@ export default function BudSyncTrialPage() {
           <Info className="w-5 h-5 text-amber-700 dark:text-amber-500 shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800 dark:text-amber-400">
             Bud synchronisation trial: learners whose Bud status has changed are shown in Status Changes at any
-            status. Learners newly appearing after the trial baseline are shown in New Learners for your review.
-            Existing unmatched Bud learners from before the trial are excluded — see Sync History.
+            status. Any Bud learner not yet in Attendance — regardless of when their Bud record first appeared — is
+            shown in New Learners for your review, as long as they're actively enrolled (Bud status "In Progress").
+            Bud learners with a different status (e.g. Withdrawn, Completed, Pending) who were never matched are not
+            proposed for creation — see Sync History.
           </p>
         </CardContent>
       </Card>
@@ -525,6 +534,37 @@ export default function BudSyncTrialPage() {
                       </TableBody>
                     </Table>
                   </div>
+                  {newLearnerItems && newLearnerItems.total > 0 && (
+                    <div className="flex items-center justify-between border-t px-4 py-3 -mx-6 -mb-6 mt-2 bg-muted/10">
+                      <div className="text-sm text-muted-foreground" data-testid="new-learners-pager-summary">
+                        Showing{" "}
+                        <span className="font-medium text-foreground">{((newLearnersPage - 1) * newLearnersPageSize) + 1}</span> to{" "}
+                        <span className="font-medium text-foreground">{Math.min(newLearnersPage * newLearnersPageSize, newLearnerItems.total)}</span> of{" "}
+                        <span className="font-medium text-foreground">{newLearnerItems.total}</span> new learners
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label="Previous page of new learners"
+                          onClick={() => setNewLearnersPage((p) => Math.max(1, p - 1))}
+                          disabled={newLearnersPage === 1}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <div className="text-sm font-medium px-2">{newLearnersPage}</div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label="Next page of new learners"
+                          onClick={() => setNewLearnersPage((p) => p + 1)}
+                          disabled={newLearnersPage * newLearnersPageSize >= newLearnerItems.total}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

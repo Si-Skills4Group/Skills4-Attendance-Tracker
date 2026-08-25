@@ -230,11 +230,6 @@ def list_baseline_history(cur) -> list[dict]:
     return cur.fetchall()
 
 
-def _get_baseline_snapshot_ids(cur, baseline_id: int) -> set[str]:
-    cur.execute("SELECT source_identifier FROM bud_sync_baseline_snapshot WHERE baseline_id = %s", (baseline_id,))
-    return {row["source_identifier"] for row in cur.fetchall()}
-
-
 # ---------------------------------------------------------------------------
 # Source read + matching
 # ---------------------------------------------------------------------------
@@ -417,27 +412,32 @@ def _diff_simple_fields(bud_row: dict, accepted_or_current: dict, current_uln: s
 
 def classify_row(
     cur, bud_row: dict, baseline: dict,
-    baseline_snapshot_ids: set[str] | None = None, ambiguous_learner_references: set[str] | None = None,
+    ambiguous_learner_references: set[str] | None = None,
 ) -> dict:
     """Pure classification against current DB state -- never writes
     anything. Returns a dict shaped for insertion into bud_sync_item
     (minus id/sync_job_id, filled in by the caller).
 
-    baseline_snapshot_ids / ambiguous_learner_references are precomputed
-    once per run_preview call to avoid a query per row; if omitted, both
-    are fetched here for a single-row call (e.g. tests/one-off checks). A
-    row's *presence in that snapshot*, not its synced_at, is what answers
-    "did this Bud record exist before the trial started": real Bud data
-    bulk-touches synced_at across the whole table on every sync regardless
-    of whether a row's data changed, so a pure timestamp cutoff would treat
-    every pre-existing row as newly eligible again the very next time Bud
-    syncs (confirmed against production data)."""
+    ambiguous_learner_references is precomputed once per run_preview call
+    to avoid a query per row; if omitted, it's fetched here for a
+    single-row call (e.g. tests/one-off checks).
+
+    `baseline` is still required -- it's the anchor for
+    _classify_existing_learner_update's "did this already-matched
+    learner's Bud data change since we last accepted it" comparison --
+    but unmatched-learner eligibility is no longer gated on whether the
+    Bud record predates the baseline. It originally was (a deliberate
+    "no historical backfill" rule from this trial's first, most cautious
+    phase), but the actual operational need is the opposite: ingesting
+    every learner Bud already has that Attendance doesn't, not just ones
+    that arrive after some arbitrary snapshot moment. The remaining
+    eligibility checks below (resolvable learner_reference, a matched
+    active tutor, status_desc == 'In Progress') still keep this a curated,
+    reviewed queue -- nothing is auto-created without an Administrator
+    approving each item."""
     plan_id = bud_row["learningPlanId"]
-    if baseline_snapshot_ids is None:
-        baseline_snapshot_ids = _get_baseline_snapshot_ids(cur, baseline["id"])
     if ambiguous_learner_references is None:
         ambiguous_learner_references = _get_ambiguous_learner_references(cur)
-    is_post_baseline = plan_id not in baseline_snapshot_ids
 
     base_item = {
         "source_identifier": plan_id,
@@ -505,16 +505,15 @@ def classify_row(
         base_item["internal_learner_id"] = link["internalLearnerId"]
         return _classify_existing_learner_update(cur, bud_row, base_item, link)
 
-    # No match at all -- unmatched eligibility keeps the historical-backfill
-    # guard (never import what already existed before the trial started)
-    # and is only ever proposed as a new learner at the one confirmed
-    # "actively enrolling" status; anything else unmatched simply isn't
-    # actionable and must never flood an operational queue.
+    # No match at all -- proposed as new regardless of whether this Bud
+    # record predates the trial's baseline (the historical-backfill guard
+    # this used to apply here was retired: the operational goal is
+    # ingesting every learner Bud has that Attendance doesn't, not just
+    # ones arriving after some snapshot moment). Still only ever proposed
+    # at the one confirmed "actively enrolling" status -- anything else
+    # unmatched simply isn't actionable and must never flood the queue.
     if not bud_row.get("learnerReference"):
         return {**base_item, "match_status": "conflict", "action_type": "none", "reason": "missing_learner_reference"}
-    if not is_post_baseline:
-        return {**base_item, "match_status": "existing_before_trial", "action_type": "none",
-                "reason": "unmatched_but_observed_at_or_before_baseline"}
     if bud_row.get("statusDesc") != _ELIGIBLE_STATUS_DESC:
         return {**base_item, "match_status": "existing_before_trial", "action_type": "none",
                 "reason": "unmatched_non_actionable_status"}
@@ -727,7 +726,6 @@ def run_preview(cur, request: Request, session: dict) -> dict:
         raise HTTPException(status_code=409, detail="No active trial baseline. Establish one before previewing.")
 
     bud_rows = _fetch_bud_rows(cur)
-    baseline_snapshot_ids = _get_baseline_snapshot_ids(cur, baseline["id"])
     ambiguous_learner_references = _get_ambiguous_learner_references(cur)
 
     cur.execute(
@@ -743,7 +741,7 @@ def run_preview(cur, request: Request, session: dict) -> dict:
               "existing_before_trial": 0, "status_change": 0}
     action_counts = {"cohorts_proposed": 0, "allocations_proposed": 0, "transfers_proposed": 0}
     for bud_row in bud_rows:
-        item = classify_row(cur, bud_row, baseline, baseline_snapshot_ids, ambiguous_learner_references)
+        item = classify_row(cur, bud_row, baseline, ambiguous_learner_references)
         counts[item["match_status"]] += 1
         if item["action_type"] == "create_learner":
             action_counts["cohorts_proposed"] += 1 if item["proposed_values"].get("cohort", {}).get("action") == "create" else 0
@@ -850,8 +848,14 @@ def list_items(cur, job_id: int, match_status: str | None, action_type: str | No
 
 
 def get_unmatched_pre_baseline(cur, page: int, page_size: int) -> dict:
-    """Read-only Administrator-awareness list -- never processed, per the
-    trial's core rule against historical backfill."""
+    """Read-only Administrator-awareness list of unmatched Bud rows with a
+    non-actionable status_desc (not 'In Progress') -- never processed.
+    Historical-backfill timing is no longer a factor here (that gate was
+    retired from classify_row); this now surfaces only the
+    status-ineligible case, e.g. someone who withdrew before this trial
+    ever tracked them. The name/route (unmatched-pre-baseline) predates
+    that change and is a bit stale, but left as-is to avoid an
+    unnecessary API/frontend rename."""
     cur.execute(
         """
         SELECT count(*)::int AS count FROM bud_sync_item
