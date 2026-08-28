@@ -344,7 +344,7 @@ export default function TutorImportPage() {
                 <Button variant="outline" onClick={handleStartOver} disabled={cancelMutation.isPending}>
                   <RotateCcw className="w-4 h-4 mr-2" /> Start Over
                 </Button>
-                <Button onClick={() => setConfirmOpen(true)} className="hover-elevate shadow-sm">
+                <Button onClick={() => setConfirmOpen(true)} disabled={resolveMutation.isPending} className="hover-elevate shadow-sm">
                   Confirm Import
                 </Button>
               </div>
@@ -541,11 +541,16 @@ export default function TutorImportPage() {
               this page.
             </DialogDescription>
           </DialogHeader>
+          {resolveMutation.isPending && (
+            <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving your Skip/Update choice for a row -- please wait before confirming.
+            </p>
+          )}
           <DialogFooter className="mt-2">
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={confirmMutation.isPending}>
               Go Back
             </Button>
-            <Button onClick={handleConfirm} disabled={confirmMutation.isPending} className="hover-elevate shadow-sm">
+            <Button onClick={handleConfirm} disabled={confirmMutation.isPending || resolveMutation.isPending} className="hover-elevate shadow-sm">
               {confirmMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Confirm Import
             </Button>

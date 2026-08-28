@@ -44,6 +44,7 @@ let mockJob: { data: any; isError: boolean; refetch: ReturnType<typeof vi.fn> };
 let mockRows: { data: any; isLoading: boolean };
 let uploadMutate: ReturnType<typeof vi.fn>;
 let resolveMutate: ReturnType<typeof vi.fn>;
+let resolvePending = false;
 let confirmMutate: ReturnType<typeof vi.fn>;
 let cancelMutate: ReturnType<typeof vi.fn>;
 let templateRefetch: ReturnType<typeof vi.fn>;
@@ -59,7 +60,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useUploadTutorImport: () => ({ mutate: uploadMutate, isPending: false }),
   useGetTutorImportJob: () => mockJob,
   useListTutorImportJobRows: () => mockRows,
-  useResolveTutorImportJobRow: () => ({ mutate: resolveMutate, isPending: false }),
+  useResolveTutorImportJobRow: () => ({ mutate: resolveMutate, isPending: resolvePending }),
   useConfirmTutorImportJob: () => ({ mutate: confirmMutate, isPending: false }),
   useCancelTutorImportJob: () => ({ mutate: cancelMutate, isPending: false }),
   useDownloadTutorImportErrors: () => ({ isFetching: false, refetch: errorsRefetch }),
@@ -84,6 +85,7 @@ beforeEach(() => {
   mockRows = { data: undefined, isLoading: false };
   uploadMutate = vi.fn();
   resolveMutate = vi.fn();
+  resolvePending = false;
   confirmMutate = vi.fn();
   cancelMutate = vi.fn();
   templateRefetch = vi.fn().mockResolvedValue({ data: { csv: 'a,b\n', filename: 'template.csv' } });
@@ -169,6 +171,20 @@ describe('TutorImportPage', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: /confirm import/i }));
     expect(confirmMutate).toHaveBeenCalledWith({ jobId: 7 }, expect.anything());
+  });
+
+  it('disables Confirm Import while a row Skip/Update resolution is still saving, to avoid confirming before it lands', () => {
+    // Regression test: confirming while a resolve PATCH is still in flight
+    // let the confirm read stale (unresolved) row data server-side, silently
+    // treating a just-chosen "Update" as "Skip". Both the button that opens
+    // the dialog and the dialog's own Confirm button must stay disabled
+    // until the resolve mutation settles.
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
+    mockRows = { data: { items: [duplicateRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    resolvePending = true;
+    renderAtLocation('job=7');
+
+    expect(screen.getByRole('button', { name: /confirm import/i })).toBeDisabled();
   });
 
   it('shows an Import complete toast and refetches the job after a successful confirm', () => {
