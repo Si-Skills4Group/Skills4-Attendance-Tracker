@@ -77,6 +77,13 @@ class TestTutorCannotAccessAnyBudSyncRoute:
         _as_tutor(monkeypatch)
         assert client.get("/api/bud-sync/unmatched-pre-baseline").status_code == 403
 
+    def test_bulk_approve(self, client, monkeypatch):
+        _as_tutor(monkeypatch)
+        assert client.post(
+            "/api/bud-sync/jobs/1/items/bulk-approve",
+            json={"items": [{"itemId": 1, "learnerRef": "X", "level": "3"}]},
+        ).status_code == 403
+
 
 class TestUnauthenticatedCannotAccessAnyBudSyncRoute:
     def test_status_without_auth(self, client):

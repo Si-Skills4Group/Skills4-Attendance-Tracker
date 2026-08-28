@@ -8,6 +8,7 @@ import {
   useGetBudSyncJobSummary,
   useListBudSyncJobItems,
   useUpdateBudSyncJobItem,
+  useBulkApproveBudSyncJobItems,
   useCommitBudSyncJob,
   useLinkBudSyncJobItemToExistingLearner,
   useListLearners,
@@ -83,12 +84,6 @@ function missingFieldPaths(item: BudSyncItem): string[] {
   const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
   if (!learner.level) missing.push("learner.level");
   if (!learner.learnerRef) missing.push("learner.learnerRef");
-  const cohort = (item.proposedValues?.cohort as Record<string, unknown>) ?? {};
-  if (cohort.action === "create") {
-    if (!cohort.deliveryDay) missing.push("cohort.deliveryDay");
-    if (!cohort.sessionStartTime) missing.push("cohort.sessionStartTime");
-    if (!cohort.sessionEndTime) missing.push("cohort.sessionEndTime");
-  }
   return missing;
 }
 
@@ -122,6 +117,14 @@ export default function BudSyncTrialPage() {
   const [linkItem, setLinkItem] = React.useState<BudSyncItem | null>(null);
   const [linkSearch, setLinkSearch] = React.useState("");
 
+  // New Learners bulk-ingest: per-row learnerRef/level drafts (Bud has no
+  // equivalent for either, so they always need typing) and which rows are
+  // selected for the bulk "Approve & Create Selected" action -- separate
+  // from item.approved, since selection here is just "include this row in
+  // the next bulk call," not the item's actual approved state.
+  const [newLearnerDrafts, setNewLearnerDrafts] = React.useState<Record<number, { learnerRef: string; level: string }>>({});
+  const [selectedNewLearnerIds, setSelectedNewLearnerIds] = React.useState<Set<number>>(new Set());
+
   const { data: status, isLoading: statusLoading } = useGetBudSyncStatus();
   const { data: settings } = useGetSettings();
 
@@ -129,6 +132,7 @@ export default function BudSyncTrialPage() {
   const resetMutation = useResetBudSyncBaseline();
   const previewMutation = useCreateBudSyncPreview();
   const updateItemMutation = useUpdateBudSyncJobItem();
+  const bulkApproveMutation = useBulkApproveBudSyncJobItems();
   const commitMutation = useCommitBudSyncJob();
   const linkExistingMutation = useLinkBudSyncJobItemToExistingLearner();
 
@@ -208,6 +212,8 @@ export default function BudSyncTrialPage() {
         setActiveJobId(newJob.id);
         setActiveTab("status-changes");
         setNewLearnersPage(1);
+        setNewLearnerDrafts({});
+        setSelectedNewLearnerIds(new Set());
         toast({
           title: "Bud checked for changes",
           description: `${newJob.statusChangesDetected} status change(s), ${newJob.newLearnersDetected} new learner(s), ${newJob.conflictCount} conflict(s).`,
@@ -217,17 +223,63 @@ export default function BudSyncTrialPage() {
     });
   };
 
-  const toggleApproval = (item: BudSyncItem) => {
-    if (item.matchStatus === "conflict") return;
-    if (!item.approved && missingFieldPaths(item).length > 0) {
-      openReview(item);
-      return;
-    }
-    updateItemMutation.mutate(
-      { jobId: item.syncJobId, itemId: item.id, data: { approved: !item.approved } },
+  const newLearnerDraftFor = (item: BudSyncItem) => {
+    const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
+    return newLearnerDrafts[item.id] ?? { learnerRef: (learner.learnerRef as string) ?? "", level: (learner.level as string) ?? "" };
+  };
+
+  const updateNewLearnerDraft = (itemId: number, field: "learnerRef" | "level", value: string) => {
+    setNewLearnerDrafts((prev) => ({
+      ...prev,
+      [itemId]: { learnerRef: prev[itemId]?.learnerRef ?? "", level: prev[itemId]?.level ?? "", [field]: value },
+    }));
+  };
+
+  const toggleNewLearnerSelected = (itemId: number) => {
+    setSelectedNewLearnerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
+      return next;
+    });
+  };
+
+  const toggleAllNewLearnersSelected = (checked: boolean, ids: number[]) => {
+    setSelectedNewLearnerIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => { if (checked) next.add(id); else next.delete(id); });
+      return next;
+    });
+  };
+
+  const submitBulkApproveNewLearners = () => {
+    if (selectedNewLearnerIds.size === 0) return;
+    // Derived from the selected items' own syncJobId (same convention as
+    // toggleApproval/submitReview elsewhere in this file), not activeJobId
+    // -- they're the same value in the real app, but the item is what's
+    // actually in scope here.
+    const jobId = newLearnerItems?.items.find((i) => selectedNewLearnerIds.has(i.id))?.syncJobId;
+    if (jobId === undefined) return;
+    const items = Array.from(selectedNewLearnerIds).map((itemId) => {
+      const draft = newLearnerDrafts[itemId] ?? { learnerRef: "", level: "" };
+      return { itemId, learnerRef: draft.learnerRef, level: draft.level };
+    });
+    bulkApproveMutation.mutate(
+      { jobId, data: { items } },
       {
-        onSuccess: invalidateJob,
-        onError: (err) => toast({ title: "Could not update item", description: getErrorMessage(err), variant: "destructive" }),
+        onSuccess: (result) => {
+          invalidateJob();
+          setSelectedNewLearnerIds(new Set());
+          if (result.errors.length === 0) {
+            toast({ title: "Approved", description: `${result.approvedCount} learner(s) ready to commit.` });
+          } else {
+            toast({
+              title: `Approved ${result.approvedCount}, ${result.errors.length} need attention`,
+              description: result.errors.map((e) => `#${e.itemId}: ${e.message}`).join("; "),
+              variant: "destructive",
+            });
+          }
+        },
+        onError: (err) => toast({ title: "Could not approve selected learners", description: getErrorMessage(err), variant: "destructive" }),
       },
     );
   };
@@ -484,36 +536,61 @@ export default function BudSyncTrialPage() {
             <TabsContent value="new-learners">
               <Card className="shadow-sm">
                 <CardContent className="pt-6">
+                  <div className="flex items-center justify-between gap-4 mb-4 px-1">
+                    <p className="text-sm text-muted-foreground">
+                      Fill in Ref and Level for the learners you want to create, select them, then approve as a batch.
+                      Cohort assignment is handled afterward from the Allocation screen.
+                    </p>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm text-muted-foreground">{selectedNewLearnerIds.size} selected</span>
+                      <Button
+                        size="sm"
+                        disabled={selectedNewLearnerIds.size === 0 || bulkApproveMutation.isPending}
+                        onClick={submitBulkApproveNewLearners}
+                      >
+                        {bulkApproveMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Approve &amp; Create Selected
+                      </Button>
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-10"></TableHead>
+                          <TableHead className="w-10">
+                            <Checkbox
+                              checked={(newLearnerItems?.items.length ?? 0) > 0 && (newLearnerItems?.items ?? []).every((i) => selectedNewLearnerIds.has(i.id))}
+                              onCheckedChange={(c) => toggleAllNewLearnersSelected(!!c, (newLearnerItems?.items ?? []).map((i) => i.id))}
+                              aria-label="Select all new learners on this page"
+                            />
+                          </TableHead>
                           <TableHead>ID</TableHead>
                           <TableHead>First name</TableHead>
                           <TableHead>Last name</TableHead>
                           <TableHead>Bud status</TableHead>
                           <TableHead>Programme</TableHead>
                           <TableHead>Start date</TableHead>
-                          <TableHead>Match result</TableHead>
+                          <TableHead>Ref</TableHead>
+                          <TableHead>Level</TableHead>
                           <TableHead className="text-right">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {newLearnersLoading ? (
-                          <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading…</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={10} className="h-24 text-center">Loading…</TableCell></TableRow>
                         ) : (newLearnerItems?.items.length ?? 0) === 0 ? (
-                          <TableRow><TableCell colSpan={9} className="h-24 text-center text-muted-foreground">No eligible new learners detected.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">No eligible new learners detected.</TableCell></TableRow>
                         ) : (
                           newLearnerItems?.items.map((item) => {
+                            const draft = newLearnerDraftFor(item);
                             const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
                             return (
                               <TableRow key={item.id}>
                                 <TableCell>
                                   <Checkbox
-                                    checked={item.approved}
-                                    onCheckedChange={() => toggleApproval(item)}
-                                    aria-label={`Approve item ${item.id}`}
+                                    checked={selectedNewLearnerIds.has(item.id)}
+                                    onCheckedChange={() => toggleNewLearnerSelected(item.id)}
+                                    aria-label={`Select item ${item.id}`}
                                   />
                                 </TableCell>
                                 <TableCell className="font-mono text-xs">{item.sourceLearnerReference ?? "—"}</TableCell>
@@ -522,9 +599,25 @@ export default function BudSyncTrialPage() {
                                 <TableCell className="text-sm">{(item.proposedValues?.budStatus as string) ?? "—"}</TableCell>
                                 <TableCell className="text-sm">{(learner.programme as string) ?? "—"}</TableCell>
                                 <TableCell className="text-sm">{(learner.startDate as string) ?? "—"}</TableCell>
-                                <TableCell className="text-sm text-muted-foreground">New — no Attendance match</TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={draft.learnerRef}
+                                    onChange={(e) => updateNewLearnerDraft(item.id, "learnerRef", e.target.value)}
+                                    placeholder="Required"
+                                    className="h-8 w-32"
+                                    aria-label={`Learner reference for item ${item.id}`}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={draft.level}
+                                    onChange={(e) => updateNewLearnerDraft(item.id, "level", e.target.value)}
+                                    placeholder="Required"
+                                    className="h-8 w-20"
+                                    aria-label={`Level for item ${item.id}`}
+                                  />
+                                </TableCell>
                                 <TableCell className="text-right space-x-1">
-                                  <Button variant="ghost" size="sm" onClick={() => openReview(item)}>Review and create</Button>
                                   <Button variant="ghost" size="sm" onClick={() => setLinkItem(item)}>Already represented</Button>
                                 </TableCell>
                               </TableRow>

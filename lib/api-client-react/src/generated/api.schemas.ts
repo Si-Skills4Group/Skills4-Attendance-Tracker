@@ -1537,6 +1537,29 @@ export interface BudSyncLinkExistingInput {
   learnerId: number;
 }
 
+export interface BudSyncBulkApproveItem {
+  itemId: number;
+  /** @minLength 1 */
+  learnerRef: string;
+  /** @minLength 1 */
+  level: string;
+}
+
+export interface BudSyncBulkApproveInput {
+  /** @minItems 1 */
+  items: BudSyncBulkApproveItem[];
+}
+
+export type BudSyncBulkApproveResultErrorsItem = {
+  itemId: number;
+  message: string;
+};
+
+export interface BudSyncBulkApproveResult {
+  approvedCount: number;
+  errors: BudSyncBulkApproveResultErrorsItem[];
+}
+
 export type BudSyncItemProposedValues = { [key: string]: unknown };
 
 export type BudSyncItemPreviousValues = { [key: string]: unknown };

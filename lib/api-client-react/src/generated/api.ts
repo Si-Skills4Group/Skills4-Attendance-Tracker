@@ -42,6 +42,8 @@ import type {
   BudSyncBaseline,
   BudSyncBaselineInput,
   BudSyncBaselineResetInput,
+  BudSyncBulkApproveInput,
+  BudSyncBulkApproveResult,
   BudSyncCommitInput,
   BudSyncItem,
   BudSyncItemListResponse,
@@ -8320,6 +8322,72 @@ export function useListBudSyncJobItems<TData = Awaited<ReturnType<typeof listBud
 
 
 
+
+export const getBulkApproveBudSyncJobItemsUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/bud-sync/jobs/${jobId}/items/bulk-approve`
+}
+
+export const bulkApproveBudSyncJobItems = async (jobId: number,
+    budSyncBulkApproveInput: BudSyncBulkApproveInput, options?: RequestInit): Promise<BudSyncBulkApproveResult> => {
+
+  return customFetch<BudSyncBulkApproveResult>(getBulkApproveBudSyncJobItemsUrl(jobId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(budSyncBulkApproveInput)
+  }
+);}
+
+
+
+
+
+export const getBulkApproveBudSyncJobItemsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkApproveBudSyncJobItems>>, TError,{jobId: number;data: BodyType<BudSyncBulkApproveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkApproveBudSyncJobItems>>, TError,{jobId: number;data: BodyType<BudSyncBulkApproveInput>}, TContext> => {
+
+const mutationKey = ['bulkApproveBudSyncJobItems'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkApproveBudSyncJobItems>>, {jobId: number;data: BodyType<BudSyncBulkApproveInput>}> = (props) => {
+          const {jobId,data} = props ?? {};
+
+          return  bulkApproveBudSyncJobItems(jobId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkApproveBudSyncJobItemsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkApproveBudSyncJobItems>>>
+    export type BulkApproveBudSyncJobItemsMutationBody = BodyType<BudSyncBulkApproveInput>
+    export type BulkApproveBudSyncJobItemsMutationError = ErrorType<ErrorResponse>
+
+    export const useBulkApproveBudSyncJobItems = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkApproveBudSyncJobItems>>, TError,{jobId: number;data: BodyType<BudSyncBulkApproveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkApproveBudSyncJobItems>>,
+        TError,
+        {jobId: number;data: BodyType<BudSyncBulkApproveInput>},
+        TContext
+      > => {
+      return useMutation(getBulkApproveBudSyncJobItemsMutationOptions(options));
+    }
 
 export const getUpdateBudSyncJobItemUrl = (jobId: number,
     itemId: number,) => {

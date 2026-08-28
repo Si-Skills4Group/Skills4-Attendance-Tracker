@@ -46,8 +46,7 @@ class TestTrialLimits:
         for item_id in item_ids:
             update_item(
                 db, job["id"], item_id,
-                {"learner.level": "3", "learner.learnerRef": f"BUD-LIM-{item_id}",
-                 "cohort.deliveryDay": "monday", "cohort.sessionStartTime": "09:00", "cohort.sessionEndTime": "16:00"},
+                {"learner.level": "3", "learner.learnerRef": f"BUD-LIM-{item_id}"},
                 True,
             )
 
@@ -70,8 +69,7 @@ class TestTrialLimits:
         for item_id in item_ids:
             update_item(
                 db, job["id"], item_id,
-                {"learner.level": "3", "learner.learnerRef": f"BUD-LIM-B-{item_id}",
-                 "cohort.deliveryDay": "monday", "cohort.sessionStartTime": "09:00", "cohort.sessionEndTime": "16:00"},
+                {"learner.level": "3", "learner.learnerRef": f"BUD-LIM-B-{item_id}"},
                 True,
             )
 
@@ -84,19 +82,12 @@ class TestTrialLimits:
         )
         assert db.fetchone()["c"] == 1
 
-        db.execute("SELECT id, cohort_id FROM learners WHERE learner_ref LIKE 'BUD-LIM-B-%'")
+        db.execute("SELECT id FROM learners WHERE learner_ref LIKE 'BUD-LIM-B-%'")
         created = db.fetchall()
         assert len(created) == 2
         for row in created:
-            db.execute("SELECT new_cohort_id FROM scheduled_allocations WHERE learner_id = %s", (row["id"],))
-            sched = db.fetchone()
-            cohort_id = sched["new_cohort_id"] if sched else row["cohort_id"]
-            db.execute("DELETE FROM scheduled_allocations WHERE learner_id = %s", (row["id"],))
             db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (row["id"],))
             db.execute("DELETE FROM learners WHERE id = %s", (row["id"],))
-            if cohort_id:
-                db.execute("DELETE FROM bud_cohort_mapping WHERE cohort_id = %s", (cohort_id,))
-                db.execute("DELETE FROM cohorts WHERE id = %s", (cohort_id,))
 
 
 class TestCommitIdempotencyAndStaleness:

@@ -3997,6 +3997,32 @@ export const ListBudSyncJobItemsResponse = zod.object({
 })
 
 
+export const BulkApproveBudSyncJobItemsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+
+
+
+
+
+export const BulkApproveBudSyncJobItemsBody = zod.object({
+  "items": zod.array(zod.object({
+  "itemId": zod.number(),
+  "learnerRef": zod.string().min(1),
+  "level": zod.string().min(1)
+})).min(1)
+})
+
+export const BulkApproveBudSyncJobItemsResponse = zod.object({
+  "approvedCount": zod.number(),
+  "errors": zod.array(zod.object({
+  "itemId": zod.number(),
+  "message": zod.string()
+}))
+})
+
+
 export const UpdateBudSyncJobItemParams = zod.object({
   "jobId": zod.coerce.number(),
   "itemId": zod.coerce.number()

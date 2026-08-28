@@ -49,10 +49,8 @@ const newItem = {
   id: 2, syncJobId: 9, sourceIdentifier: 'PLAN-2', matchStatus: 'new', actionType: 'create_learner',
   internalLearnerId: null,
   proposedValues: {
-    learner: { learnerRef: 'BUD-1', level: '3', firstName: 'Grace', lastName: 'Hopper', startDate: '2026-08-01' },
+    learner: { learnerRef: 'BUD-1', level: '3', firstName: 'Grace', lastName: 'Hopper', startDate: '2026-08-01', programme: 'Pharmacy Technician' },
     tutor: { budTutorId: 'T1', internalTutorId: 5 },
-    cohort: { action: 'reuse', cohortId: 8, syncKey: 'bud:5:2026-08-01' },
-    allocation: { effectiveDate: '2026-08-01', immediate: false },
     budStatus: 'In Progress',
   },
   previousValues: {}, warnings: [], reason: 'new_bud_record_after_baseline',
@@ -101,6 +99,7 @@ const mutateSpies = {
   reset: vi.fn(),
   preview: vi.fn(),
   updateItem: vi.fn(),
+  bulkApprove: vi.fn(),
   commit: vi.fn(),
   linkExisting: vi.fn(),
 };
@@ -112,6 +111,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useResetBudSyncBaseline: () => ({ mutate: mutateSpies.reset, isPending: false }),
   useCreateBudSyncPreview: () => ({ mutate: mutateSpies.preview, isPending: false }),
   useUpdateBudSyncJobItem: () => ({ mutate: mutateSpies.updateItem, isPending: false }),
+  useBulkApproveBudSyncJobItems: () => ({ mutate: mutateSpies.bulkApprove, isPending: false }),
   useCommitBudSyncJob: () => ({ mutate: mutateSpies.commit, isPending: false }),
   useLinkBudSyncJobItemToExistingLearner: () => ({ mutate: mutateSpies.linkExisting, isPending: false }),
   useGetBudSyncJob: () => ({ data: currentJob }),
@@ -255,20 +255,33 @@ describe('BudSyncTrialPage', () => {
     expect(screen.getByText('corr-abc')).toBeInTheDocument();
   });
 
-  it('opens the review dialog instead of approving directly when required fields are missing', async () => {
+  it('New Learners tab lets an admin fill in Ref/Level inline and bulk-approve selected rows', async () => {
     const user = userEvent.setup();
     activateJob();
-    newLearnerItems = [{ ...newItem, proposedValues: { ...newItem.proposedValues, learner: { ...newItem.proposedValues.learner, learnerRef: null } } }];
+    newLearnerItems = [{ ...newItem, proposedValues: { ...newItem.proposedValues, learner: { ...newItem.proposedValues.learner, learnerRef: null, level: null } } }];
     renderWithQueryClient(<BudSyncTrialPage />);
     await user.click(screen.getByRole('tab', { name: /new learners/i }));
 
-    const rows = screen.getAllByRole('row');
-    const newRow = rows.find((r) => within(r).queryByText('BUD-REF-2'));
-    await user.click(within(newRow!).getByRole('checkbox'));
+    await user.type(screen.getByLabelText(/learner reference for item 2/i), 'BUD-NEW-1');
+    await user.type(screen.getByLabelText(/level for item 2/i), '3');
+    await user.click(screen.getByRole('checkbox', { name: /select item 2/i }));
 
-    expect(await screen.findByText(/Review Grace Hopper/i)).toBeInTheDocument();
-    expect(screen.getByLabelText('learner.learnerRef')).toBeInTheDocument();
-    expect(mutateSpies.updateItem).not.toHaveBeenCalled();
+    const approveButton = screen.getByRole('button', { name: /approve.*create selected/i });
+    expect(approveButton).not.toBeDisabled();
+    await user.click(approveButton);
+
+    expect(mutateSpies.bulkApprove).toHaveBeenCalledWith(
+      { jobId: 9, data: { items: [{ itemId: 2, learnerRef: 'BUD-NEW-1', level: '3' }] } },
+      expect.anything(),
+    );
+  });
+
+  it('Approve & Create Selected is disabled until at least one row is selected', async () => {
+    const user = userEvent.setup();
+    activateJob();
+    renderWithQueryClient(<BudSyncTrialPage />);
+    await user.click(screen.getByRole('tab', { name: /new learners/i }));
+    expect(screen.getByRole('button', { name: /approve.*create selected/i })).toBeDisabled();
   });
 
   it('the commit confirmation dialog always shows zero historical attendance changes', async () => {

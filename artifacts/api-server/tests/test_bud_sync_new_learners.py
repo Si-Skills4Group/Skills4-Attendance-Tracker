@@ -3,14 +3,18 @@ Bud record predates the trial's baseline (the historical-backfill gate was
 retired -- the operational goal is ingesting every learner Bud has that
 Attendance doesn't), never matched by name/email/tutor_name, blocked on
 missing required fields (learnerRef/level have no Bud equivalent), and
-creates the learner/cohort/allocation exactly once via the existing
-services."""
+creates the learner exactly once via the existing service, with a tutor
+assigned but no cohort -- cohort assignment is a deliberately separate,
+later step done through the Allocation screen, not part of Bud ingestion."""
 from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
 
-from pyapp.bud_sync_lib import classify_row, get_job_summary, link_existing_learner, list_items, run_commit, run_preview, update_item
+from pyapp.bud_sync_lib import (
+    bulk_approve_new_learners, classify_row, get_job_summary, link_existing_learner, list_items, run_commit,
+    run_preview, update_item,
+)
 
 
 def _tomorrow() -> str:
@@ -78,17 +82,6 @@ class TestNewLearnerClassification:
         assert item["match_status"] == "conflict"
         assert item["reason"] == "missing_start_date"
 
-    def test_possible_manual_cohort_match_is_a_conflict_not_auto_linked(self, db, bud_row_factory, baseline_factory, tutor_factory, cohort_factory):
-        baseline = baseline_factory()
-        tutor = tutor_factory()
-        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-2' WHERE id = %s", (tutor["tutorId"],))
-        manual_cohort = cohort_factory(tutor_id=tutor["tutorId"], start_date=_tomorrow())
-        row = bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-2", start_date=_tomorrow())
-
-        item = classify_row(db, row, baseline)
-        assert item["match_status"] == "conflict"
-        assert item["reason"] == "possible_manual_cohort_match"
-
     def test_new_learner_proposal_requires_level_and_learner_ref_before_approval(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
     ):
@@ -105,22 +98,8 @@ class TestNewLearnerClassification:
         with pytest.raises(HTTPException):
             update_item(db, job["id"], item_row["id"], None, True)
 
-        # Supplying only the learner-side gaps still leaves the cohort's
-        # required schedule fields missing (Bud has no delivery-day/time
-        # equivalent either) -- approval must keep rejecting until those
-        # are supplied too.
-        with pytest.raises(HTTPException):
-            update_item(
-                db, job["id"], item_row["id"], {"learner.level": "3", "learner.learnerRef": "BUD-NEW-001"}, True,
-            )
-
         updated = update_item(
-            db, job["id"], item_row["id"],
-            {
-                "learner.level": "3", "learner.learnerRef": "BUD-NEW-001",
-                "cohort.deliveryDay": "monday", "cohort.sessionStartTime": "09:00", "cohort.sessionEndTime": "16:00",
-            },
-            True,
+            db, job["id"], item_row["id"], {"learner.level": "3", "learner.learnerRef": "BUD-NEW-001"}, True,
         )
         assert updated["approved"] is True
 
@@ -299,7 +278,7 @@ class TestMatchedLearnerEligibilityAtAnyStatus:
 
 
 class TestNewLearnerCommit:
-    def test_commit_creates_learner_cohort_and_allocation_exactly_once(
+    def test_commit_creates_learner_without_a_cohort(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
     ):
         tutor = tutor_factory()
@@ -313,14 +292,7 @@ class TestNewLearnerCommit:
         job = run_preview(db, request_factory(admin_user), admin_user)
         db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
         item_id = db.fetchone()["id"]
-        update_item(
-            db, job["id"], item_id,
-            {
-                "learner.level": "3", "learner.learnerRef": "BUD-NEW-002",
-                "cohort.deliveryDay": "monday", "cohort.sessionStartTime": "09:00", "cohort.sessionEndTime": "16:00",
-            },
-            True,
-        )
+        update_item(db, job["id"], item_id, {"learner.level": "3", "learner.learnerRef": "BUD-NEW-002"}, True)
 
         result = run_commit(db, job["id"], [item_id], "First trial batch", None, request_factory(admin_user), admin_user)
         assert result["appliedCount"] == 1
@@ -329,25 +301,18 @@ class TestNewLearnerCommit:
         learner = db.fetchone()
         assert learner is not None
         assert learner["first_name"] == "Grace"
+        assert learner["tutor_id"] == tutor["tutorId"]
+        assert learner["cohort_id"] is None
 
-        db.execute("SELECT * FROM bud_cohort_mapping WHERE cohort_id = %s", (learner["cohort_id"] or -1,))
-        # Future start date -> scheduled, not immediately allocated -- cohort_id
-        # is expected to be null on the learner row itself until the effective date.
-        db.execute("SELECT * FROM scheduled_allocations WHERE learner_id = %s", (learner["id"],))
-        scheduled = db.fetchone()
-        assert scheduled is not None
-
-        db.execute("SELECT * FROM bud_cohort_mapping WHERE bud_sync_key LIKE %s", (f"bud:{tutor['tutorId']}:%",))
-        mapping = db.fetchone()
-        assert mapping is not None
+        db.execute("SELECT count(*)::int AS c FROM scheduled_allocations WHERE learner_id = %s", (learner["id"],))
+        assert db.fetchone()["c"] == 0
+        db.execute("SELECT count(*)::int AS c FROM bud_cohort_mapping WHERE bud_sync_key LIKE %s", (f"bud:{tutor['tutorId']}:%",))
+        assert db.fetchone()["c"] == 0
 
         # Cleanup (learner_factory-style teardown isn't available since this
         # learner was created by the commit itself, not the factory).
-        db.execute("DELETE FROM scheduled_allocations WHERE learner_id = %s", (learner["id"],))
         db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (learner["id"],))
         db.execute("DELETE FROM learners WHERE id = %s", (learner["id"],))
-        db.execute("DELETE FROM bud_cohort_mapping WHERE cohort_id = %s", (mapping["cohort_id"],))
-        db.execute("DELETE FROM cohorts WHERE id = %s", (mapping["cohort_id"],))
 
     def test_repeating_preview_and_commit_creates_no_duplicates(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
@@ -363,14 +328,7 @@ class TestNewLearnerCommit:
         job = run_preview(db, request_factory(admin_user), admin_user)
         db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
         item_id = db.fetchone()["id"]
-        update_item(
-            db, job["id"], item_id,
-            {
-                "learner.level": "3", "learner.learnerRef": "BUD-NEW-003",
-                "cohort.deliveryDay": "monday", "cohort.sessionStartTime": "09:00", "cohort.sessionEndTime": "16:00",
-            },
-            True,
-        )
+        update_item(db, job["id"], item_id, {"learner.level": "3", "learner.learnerRef": "BUD-NEW-003"}, True)
         first = run_commit(db, job["id"], [item_id], "reason", None, request_factory(admin_user), admin_user)
         second = run_commit(db, job["id"], [item_id], "reason", None, request_factory(admin_user), admin_user)
 
@@ -381,18 +339,10 @@ class TestNewLearnerCommit:
         db.execute("SELECT count(*)::int AS c FROM learners WHERE learner_ref = 'BUD-NEW-003'")
         assert db.fetchone()["c"] == 1
 
-        db.execute("SELECT id, cohort_id FROM learners WHERE learner_ref = 'BUD-NEW-003'")
+        db.execute("SELECT id FROM learners WHERE learner_ref = 'BUD-NEW-003'")
         learner = db.fetchone()
-        db.execute("SELECT new_cohort_id AS cohort_id FROM scheduled_allocations WHERE learner_id = %s", (learner["id"],))
-        scheduled = db.fetchone()
-        cohort_id = scheduled["cohort_id"] if scheduled else learner["cohort_id"]
-
-        db.execute("DELETE FROM scheduled_allocations WHERE learner_id = %s", (learner["id"],))
         db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (learner["id"],))
         db.execute("DELETE FROM learners WHERE id = %s", (learner["id"],))
-        if cohort_id:
-            db.execute("DELETE FROM bud_cohort_mapping WHERE cohort_id = %s", (cohort_id,))
-            db.execute("DELETE FROM cohorts WHERE id = %s", (cohort_id,))
 
 
 class TestManualLinkExisting:
@@ -487,3 +437,94 @@ class TestJobSummary:
         assert summary["statusChangesCount"] == 0
         assert summary["statusChangesAppliedToday"] == 0
         assert summary["learnersCreatedToday"] == 0
+
+
+class TestBulkApproveNewLearners:
+    """New Learners tab's bulk-ingest action: approves many items in one
+    call instead of the old per-item review dialog."""
+
+    def test_approves_multiple_items_in_one_call(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-BULK-1' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-1", start_date=_tomorrow())
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-1", start_date=_tomorrow())
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_ids = [row["id"] for row in db.fetchall()]
+        assert len(item_ids) == 2
+
+        result = bulk_approve_new_learners(
+            db, job["id"],
+            [
+                {"itemId": item_ids[0], "learnerRef": "BUD-BULK-001", "level": "3"},
+                {"itemId": item_ids[1], "learnerRef": "BUD-BULK-002", "level": "3"},
+            ],
+            request_factory(admin_user), admin_user,
+        )
+        assert result["approvedCount"] == 2
+        assert result["errors"] == []
+
+        db.execute("SELECT count(*)::int AS c FROM bud_sync_item WHERE id = ANY(%s) AND approved = true", (item_ids,))
+        assert db.fetchone()["c"] == 2
+
+        db.execute("SELECT count(*)::int AS c FROM audit_logs WHERE action = 'bud_sync_bulk_approved' AND entity_id = %s", (job["id"],))
+        assert db.fetchone()["c"] == 1
+
+    def test_a_blank_field_is_reported_without_blocking_the_rest_of_the_batch(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-BULK-2' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-2", start_date=_tomorrow())
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-2", start_date=_tomorrow())
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_ids = [row["id"] for row in db.fetchall()]
+
+        result = bulk_approve_new_learners(
+            db, job["id"],
+            [
+                {"itemId": item_ids[0], "learnerRef": "BUD-BULK-003", "level": "3"},
+                {"itemId": item_ids[1], "learnerRef": "  ", "level": "3"},
+            ],
+            request_factory(admin_user), admin_user,
+        )
+        assert result["approvedCount"] == 1
+        assert result["errors"] == [{"itemId": item_ids[1], "message": "learnerRef and level are both required"}]
+
+    def test_a_completed_job_rejects_further_bulk_approval(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
+    ):
+        # Once anything in a job is committed, run_commit marks the whole
+        # job 'completed' (regardless of how many items were included in
+        # that commit) -- so an "already applied item, job still ready"
+        # combination can't occur; the job-level gate is what's actually
+        # reachable here, matching update_item's identical existing rule.
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-BULK-3' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-3", start_date=_tomorrow())
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_id = db.fetchone()["id"]
+        update_item(db, job["id"], item_id, {"learner.level": "3", "learner.learnerRef": "BUD-BULK-004"}, True)
+        run_commit(db, job["id"], [item_id], "reason", None, request_factory(admin_user), admin_user)
+
+        with pytest.raises(HTTPException) as exc_info:
+            bulk_approve_new_learners(
+                db, job["id"], [{"itemId": item_id, "learnerRef": "BUD-BULK-004", "level": "3"}],
+                request_factory(admin_user), admin_user,
+            )
+        assert exc_info.value.status_code == 409
+
+        db.execute("SELECT id FROM learners WHERE learner_ref = 'BUD-BULK-004'")
+        learner = db.fetchone()
+        db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (learner["id"],))
+        db.execute("DELETE FROM learners WHERE id = %s", (learner["id"],))

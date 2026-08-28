@@ -61,10 +61,9 @@ _SIMPLE_FIELD_MAP = {
 }
 
 # Fields an Administrator must supply before a create_learner/create_cohort
-# proposal becomes approvable -- Bud has no equivalent for any of these, so
-# they are never invented (per the trial's explicit "do not guess" rule).
+# proposal becomes approvable -- Bud has no equivalent for either, so they
+# are never invented (per the trial's explicit "do not guess" rule).
 _REQUIRED_LEARNER_FIELDS = ("learnerRef", "level")
-_REQUIRED_COHORT_FIELDS = ("deliveryDay", "sessionStartTime", "sessionEndTime")
 
 # Confirmed against real production data: an exact, real status_desc value
 # (alongside Completed/Withdrawn/Pending/On Break/In End Point Assessment/
@@ -363,34 +362,6 @@ def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None) -> dict | None:
     return matches[0]
 
 
-def _cohort_sync_key(tutor_id: int, start_date_value: date) -> str:
-    return f"bud:{tutor_id}:{start_date_value.isoformat()}"
-
-
-def _find_cohort_mapping(cur, sync_key: str) -> dict | None:
-    cur.execute(
-        'SELECT id, cohort_id AS "cohortId", bud_sync_key AS "budSyncKey" FROM bud_cohort_mapping WHERE bud_sync_key = %s',
-        (sync_key,),
-    )
-    return cur.fetchone()
-
-
-def _find_possible_manual_cohort(cur, tutor_id: int, start_date_value: date) -> dict | None:
-    """A plausible-but-unconfirmed match to an existing, manually created
-    cohort. Per the approved trial scope, this is always surfaced as a
-    conflict requiring manual investigation outside this tool -- never an
-    in-tool mapping picker this pass."""
-    cur.execute(
-        """
-        SELECT c.id, c.name FROM cohorts c
-        WHERE c.tutor_id = %s AND c.start_date = %s AND c.deleted_at IS NULL
-          AND NOT EXISTS (SELECT 1 FROM bud_cohort_mapping m WHERE m.cohort_id = c.id)
-        """,
-        (tutor_id, start_date_value),
-    )
-    return cur.fetchone()
-
-
 # ---------------------------------------------------------------------------
 # Classification (preview)
 # ---------------------------------------------------------------------------
@@ -533,22 +504,6 @@ def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
     if not bud_row.get("programmeName"):
         return {**base_item, "match_status": "conflict", "action_type": "create_learner", "reason": "missing_programme"}
 
-    cohort_action: dict
-    sync_key = _cohort_sync_key(tutor["id"], start_date_value)
-    mapping = _find_cohort_mapping(cur, sync_key)
-    if mapping is not None:
-        cohort_action = {"action": "reuse", "cohortId": mapping["cohortId"], "syncKey": sync_key}
-    else:
-        possible = _find_possible_manual_cohort(cur, tutor["id"], start_date_value)
-        if possible is not None:
-            return {**base_item, "match_status": "conflict", "action_type": "create_learner",
-                    "reason": "possible_manual_cohort_match",
-                    "warnings": [f"An existing cohort '{possible['name']}' (id {possible['id']}) has the same "
-                                 "tutor and start date but is not mapped to Bud. Resolve manually before approving."]}
-        cohort_action = {"action": "create", "syncKey": sync_key,
-                         "deliveryDay": None, "sessionStartTime": None, "sessionEndTime": None}
-        warnings.append("New cohort requires deliveryDay/sessionStartTime/sessionEndTime before this can be approved.")
-
     proposed_learner = {
         "learnerRef": None,
         "uln": bud_row.get("uln"),
@@ -562,7 +517,6 @@ def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
     }
     warnings.append("learnerRef and level must be supplied before this can be approved.")
 
-    immediate = start_date_value <= date.today()
     return {
         **base_item,
         "match_status": "new",
@@ -570,8 +524,10 @@ def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
         "proposed_values": {
             "learner": proposed_learner,
             "tutor": {"budTutorId": bud_row.get("budTutorId"), "internalTutorId": tutor["id"]},
-            "cohort": cohort_action,
-            "allocation": {"effectiveDate": str(start_date_value), "immediate": immediate},
+            # No cohort/allocation here -- the learner is created with just
+            # a tutor (already reliably resolved above) and no cohort;
+            # cohort assignment is a deliberately separate, later step done
+            # through the Allocation screen, not part of Bud ingestion.
             # Display-only -- never passed to LearnerInput/_create_learner,
             # which only ever reads proposed_values["learner"].
             "budStatus": bud_row.get("statusDesc"),
@@ -739,13 +695,15 @@ def run_preview(cur, request: Request, session: dict) -> dict:
 
     counts = {"new": 0, "existing_update": 0, "unchanged": 0, "conflict": 0,
               "existing_before_trial": 0, "status_change": 0}
+    # cohorts_proposed/allocations_proposed are always 0 now -- new-learner
+    # creation no longer creates a cohort or an allocation (see
+    # _classify_new_learner/_apply_new_learner), only a tutor assignment.
+    # The columns/fields stay (not surfaced in the frontend, confirmed) so
+    # the job-summary shape doesn't need to change.
     action_counts = {"cohorts_proposed": 0, "allocations_proposed": 0, "transfers_proposed": 0}
     for bud_row in bud_rows:
         item = classify_row(cur, bud_row, baseline, ambiguous_learner_references)
         counts[item["match_status"]] += 1
-        if item["action_type"] == "create_learner":
-            action_counts["cohorts_proposed"] += 1 if item["proposed_values"].get("cohort", {}).get("action") == "create" else 0
-            action_counts["allocations_proposed"] += 1
         if item["action_type"] == "transfer_tutor":
             action_counts["transfers_proposed"] += 1
 
@@ -895,11 +853,6 @@ def _item_missing_fields(item: dict) -> list[str]:
     for field in _REQUIRED_LEARNER_FIELDS:
         if not learner_values.get(field):
             missing.append(f"learner.{field}")
-    cohort_values = item["proposedValues"].get("cohort", {})
-    if cohort_values.get("action") == "create":
-        for field in _REQUIRED_COHORT_FIELDS:
-            if not cohort_values.get(field):
-                missing.append(f"cohort.{field}")
     return missing
 
 
@@ -955,6 +908,71 @@ def update_item(cur, job_id: int, item_id: int, field_updates: dict | None, appr
         (item_id,),
     )
     return cur.fetchone()
+
+
+def bulk_approve_new_learners(cur, job_id: int, items: list[dict], request: Request, session: dict) -> dict:
+    """New Learners tab's bulk action: approves many 'new' items in one
+    call, each supplying its own learnerRef/level (still required manual
+    input -- Bud has no equivalent for either -- but no longer gated behind
+    a per-item dialog). `items` is a plain list of {"itemId", "learnerRef",
+    "level"} dicts (matching update_item's own dict-based field_updates
+    convention, not a Pydantic object). Partial success, not all-or-nothing:
+    one bad row (wrong job, already applied, blank field) is reported in
+    `errors` and skipped, it doesn't block the rest of a large batch. Each
+    accepted item gets the exact two writes update_item already does for a
+    single item (field update, then approve), just batched into one
+    transaction and one audit entry instead of N."""
+    cur.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job_id,))
+    job = cur.fetchone()
+    if not job:
+        raise HTTPException(status_code=404, detail="Sync job not found")
+    if job["status"] != "ready":
+        raise HTTPException(status_code=409, detail=f"Job is not in a reviewable state (status={job['status']})")
+
+    approved_ids: list[int] = []
+    errors: list[dict] = []
+    with cur.connection.transaction():
+        for entry in items:
+            item_id = entry["itemId"]
+            cur.execute(
+                """
+                SELECT id, match_status AS "matchStatus", proposed_values AS "proposedValues", applied
+                FROM bud_sync_item WHERE id = %s AND sync_job_id = %s
+                """,
+                (item_id, job_id),
+            )
+            item = cur.fetchone()
+            if not item:
+                errors.append({"itemId": item_id, "message": "Sync item not found"})
+                continue
+            if item["applied"]:
+                errors.append({"itemId": item_id, "message": "Already applied"})
+                continue
+            if item["matchStatus"] != "new":
+                errors.append({"itemId": item_id, "message": "Not a new-learner item"})
+                continue
+            learner_ref = entry["learnerRef"].strip()
+            level = entry["level"].strip()
+            if not learner_ref or not level:
+                errors.append({"itemId": item_id, "message": "learnerRef and level are both required"})
+                continue
+
+            proposed = item["proposedValues"]
+            proposed["learner"]["learnerRef"] = learner_ref
+            proposed["learner"]["level"] = level
+            cur.execute(
+                "UPDATE bud_sync_item SET proposed_values = %s, approved = true WHERE id = %s",
+                (json.dumps(proposed, default=str), item_id),
+            )
+            approved_ids.append(item_id)
+
+        if approved_ids:
+            write_audit_log(
+                request, action="bud_sync_bulk_approved", entity_type="bud_sync_job", entity_id=job_id,
+                new_value={"approvedCount": len(approved_ids), "itemIds": approved_ids}, cur=cur,
+            )
+
+    return {"approvedCount": len(approved_ids), "errors": errors}
 
 
 def link_existing_learner(cur, job_id: int, item_id: int, target_learner_id: int, request: Request, session: dict) -> dict:
@@ -1132,44 +1150,15 @@ def _upsert_learner_link(cur, learner_id: int, bud_row: dict, job_id: int) -> No
 
 
 def _apply_new_learner(cur, item: dict, request: Request, session: dict) -> int:
-    from .routers.cohorts import CohortInput, _create_cohort
+    """Creates the learner with their Bud-resolved tutor already assigned,
+    but no cohort -- cohort assignment is a deliberately separate, later
+    step done through the Allocation screen (which already supports bulk
+    transfers), not part of Bud ingestion."""
     from .routers.learners import LearnerInput, _create_learner
 
     proposed = item["proposedValues"]
     learner_values = proposed["learner"]
-    cohort_action = proposed["cohort"]
     tutor_internal_id = proposed["tutor"]["internalTutorId"]
-
-    # Re-check for a mapping right before creating -- two items in the same
-    # preview can share the same deterministic key when neither had a
-    # mapping yet at preview time; whichever is applied first in this batch
-    # creates it, and every later one must reuse it rather than attempt a
-    # second INSERT that would collide with bud_cohort_mapping's unique key.
-    existing_mapping = _find_cohort_mapping(cur, cohort_action["syncKey"])
-    if existing_mapping is not None:
-        cohort_id = existing_mapping["cohortId"]
-    elif cohort_action["action"] == "create":
-        cur.execute('SELECT first_name AS "firstName", last_name AS "lastName" FROM tutors WHERE id = %s', (tutor_internal_id,))
-        tutor = cur.fetchone()
-        cohort_payload = CohortInput(
-            name=f"{tutor['firstName']} {tutor['lastName']} — {learner_values['startDate']}",
-            programme=learner_values["programme"],
-            level=learner_values["level"],
-            tutorId=tutor_internal_id,
-            deliveryDay=cohort_action["deliveryDay"],
-            sessionStartTime=cohort_action["sessionStartTime"],
-            sessionEndTime=cohort_action["sessionEndTime"],
-            startDate=learner_values["startDate"],
-            externalSystemId=cohort_action["syncKey"],
-        )
-        cohort = _create_cohort(cur, cohort_payload, request, session)
-        cohort_id = cohort["id"]
-        cur.execute(
-            "INSERT INTO bud_cohort_mapping (cohort_id, bud_sync_key, created_by) VALUES (%s, %s, %s)",
-            (cohort_id, cohort_action["syncKey"], session["userId"]),
-        )
-    else:
-        cohort_id = cohort_action["cohortId"]
 
     learner_payload = LearnerInput(
         learnerRef=learner_values["learnerRef"],
@@ -1181,24 +1170,9 @@ def _apply_new_learner(cur, item: dict, request: Request, session: dict) -> int:
         programme=learner_values["programme"],
         level=learner_values["level"],
         startDate=learner_values["startDate"],
+        tutorId=tutor_internal_id,
     )
     created = _create_learner(cur, learner_payload, request, session)
-
-    effective_date = date.fromisoformat(learner_values["startDate"])
-    if proposed["allocation"]["immediate"]:
-        apply_transfer(
-            cur, {"id": created["id"], "tutorId": None, "cohortId": None},
-            tutor_internal_id, cohort_id, effective_date, "Bud sync trial - new learner", session["userId"],
-        )
-    else:
-        cur.execute(
-            """
-            INSERT INTO scheduled_allocations (learner_id, new_tutor_id, new_cohort_id, effective_date, transfer_reason, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (created["id"], tutor_internal_id, cohort_id, effective_date, "Bud sync trial - new learner", session["userId"]),
-        )
-
     return created["id"]
 
 

@@ -38,6 +38,16 @@ class LinkExistingInput(BaseModel):
     learnerId: int
 
 
+class BulkApproveItem(BaseModel):
+    itemId: int
+    learnerRef: str = Field(min_length=1)
+    level: str = Field(min_length=1)
+
+
+class BulkApproveInput(BaseModel):
+    items: list[BulkApproveItem] = Field(min_length=1)
+
+
 @router.get("/bud-sync/status")
 def get_status(_session: dict = Depends(require_admin)):
     with get_cursor() as cur:
@@ -122,6 +132,14 @@ def update_item(job_id: int, item_id: int, payload: ItemUpdateInput, request: Re
             new_value={"fieldUpdates": payload.fieldUpdates, "approved": payload.approved}, cur=cur,
         )
     return updated
+
+
+@router.post("/bud-sync/jobs/{job_id}/items/bulk-approve")
+def bulk_approve_items(job_id: int, payload: BulkApproveInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return bud_sync_lib.bulk_approve_new_learners(
+            cur, job_id, [item.model_dump() for item in payload.items], request, session,
+        )
 
 
 @router.post("/bud-sync/jobs/{job_id}/commit")
