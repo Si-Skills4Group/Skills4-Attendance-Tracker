@@ -11,4 +11,5 @@ export interface LearnerImportResult {
   created: number;
   updated: number;
   skipped: number;
+  transferred: number;
 }

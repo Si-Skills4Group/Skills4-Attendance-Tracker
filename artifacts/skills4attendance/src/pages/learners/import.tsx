@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -177,7 +178,20 @@ export default function LearnerImportPage() {
   const handleResolve = (row: LearnerImportJobRow, resolution: "skip" | "update") => {
     if (!jobId) return;
     resolveMutation.mutate(
-      { jobId, rowId: row.id, data: { resolution } },
+      { jobId, rowId: row.id, data: { resolution, transferRequested: row.transferRequested } },
+      {
+        onError: (err) => {
+          toast({ title: "Could not update row", description: getErrorMessage(err), variant: "destructive" });
+        },
+        onSuccess: () => rowsQuery.refetch(),
+      },
+    );
+  };
+
+  const handleTransferToggle = (row: LearnerImportJobRow, checked: boolean) => {
+    if (!jobId) return;
+    resolveMutation.mutate(
+      { jobId, rowId: row.id, data: { resolution: row.resolution ?? "skip", transferRequested: checked } },
       {
         onError: (err) => {
           toast({ title: "Could not update row", description: getErrorMessage(err), variant: "destructive" });
@@ -200,7 +214,7 @@ export default function LearnerImportPage() {
           setConfirmOpen(false);
           toast({
             title: "Import complete",
-            description: `${result.created} created, ${result.updated} updated, ${result.skipped} skipped.`,
+            description: `${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.transferred} transferred.`,
           });
           jobQuery.refetch();
         },
@@ -342,6 +356,7 @@ export default function LearnerImportPage() {
               <SummaryStat label="Possible dup." value={job.possibleDuplicateCount} className="text-orange-600 dark:text-orange-400" />
               <SummaryStat label="Conflicts" value={job.identifierConflictCount} className="text-rose-600 dark:text-rose-400" />
               <SummaryStat label="Invalid" value={job.invalidCount} className="text-rose-600 dark:text-rose-400" />
+              <SummaryStat label="Cohort change available" value={job.cohortMismatchCount} className="text-amber-600 dark:text-amber-400" />
               <div className="ml-auto flex items-center gap-2">
                 <Button variant="outline" onClick={handleStartOver} disabled={cancelMutation.isPending}>
                   <RotateCcw className="w-4 h-4 mr-2" /> Start Over
@@ -418,7 +433,25 @@ export default function LearnerImportPage() {
                             {row.matchedLearnerName ?? "-"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {row.rawData.cohort_name ? (
+                            {row.cohortMismatch ? (
+                              <div className="space-y-1.5">
+                                <div className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                                  {row.currentTutorName ?? "Unassigned"} · {row.currentCohortName ?? "No cohort"}
+                                  {" → "}
+                                  {row.matchedCohortName}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Checkbox
+                                    id={`transfer-${row.id}`}
+                                    checked={row.transferRequested}
+                                    onCheckedChange={(checked) => handleTransferToggle(row, checked === true)}
+                                  />
+                                  <Label htmlFor={`transfer-${row.id}`} className="text-xs font-normal cursor-pointer">
+                                    Transfer to this cohort
+                                  </Label>
+                                </div>
+                              </div>
+                            ) : row.rawData.cohort_name ? (
                               row.cohortMatchStatus === "matched" ? (
                                 <span className="text-foreground">{row.matchedCohortName}</span>
                               ) : (
@@ -503,7 +536,7 @@ export default function LearnerImportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 p-4 rounded-lg text-center">
                 <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{job.resultSummary?.created ?? 0}</div>
                 <div className="text-xs font-medium text-emerald-800 dark:text-emerald-500 uppercase mt-1">Created</div>
@@ -515,6 +548,10 @@ export default function LearnerImportPage() {
               <div className="bg-muted/40 border p-4 rounded-lg text-center">
                 <div className="text-2xl font-bold text-foreground">{job.resultSummary?.skipped ?? 0}</div>
                 <div className="text-xs font-medium text-muted-foreground uppercase mt-1">Skipped</div>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900 p-4 rounded-lg text-center">
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{job.resultSummary?.transferred ?? 0}</div>
+                <div className="text-xs font-medium text-amber-800 dark:text-amber-500 uppercase mt-1">Transferred</div>
               </div>
             </div>
 
@@ -551,7 +588,8 @@ export default function LearnerImportPage() {
             <DialogTitle>Confirm learner import</DialogTitle>
             <DialogDescription>
               {job?.newCount ?? 0} new learner{(job?.newCount ?? 0) === 1 ? "" : "s"} will be created. Duplicate rows are
-              skipped unless you explicitly chose "Update". This action is applied immediately and cannot be undone from
+              skipped unless you explicitly chose "Update". A learner's tutor or cohort only changes for rows where you
+              explicitly checked "Transfer to this cohort". This action is applied immediately and cannot be undone from
               this page.
             </DialogDescription>
           </DialogHeader>

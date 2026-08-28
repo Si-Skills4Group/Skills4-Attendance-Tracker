@@ -155,6 +155,79 @@ def test_resolve_import_row_rejects_invalid_resolution_value(db, admin_user, lea
     assert exc.value.status_code == 400
 
 
+def test_resolve_import_row_rejects_transfer_request_without_a_cohort_mismatch(
+    db, admin_user, learner_factory, import_job_cleanup
+):
+    learner_factory(learner_ref="RESOLVE-NOMISMATCH")
+    job = create_import_job(db, "learners.csv", admin_user["userId"], [_row(learner_reference="RESOLVE-NOMISMATCH")])
+    import_job_cleanup.append(job["id"])
+    row = list_import_job_rows(db, job["id"])["items"][0]
+    assert row["cohortMismatch"] is False
+
+    with pytest.raises(HTTPException) as exc:
+        resolve_import_row(db, job["id"], row["id"], "skip", admin_user["userId"], transfer_requested=True)
+    assert exc.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Classification: cohort mismatch detection for existing learners
+# ---------------------------------------------------------------------------
+
+def test_create_import_job_detects_cohort_mismatch_for_existing_learner(
+    db, admin_user, tutor_factory, cohort_factory, learner_factory, import_job_cleanup
+):
+    tutor_b = tutor_factory()
+    cohort_c = cohort_factory(tutor_id=tutor_b["tutorId"])
+    tutor_e = tutor_factory()
+    cohort_f = cohort_factory(tutor_id=tutor_e["tutorId"])
+    learner_factory(learner_ref="MISMATCH-1", tutor_id=tutor_b["tutorId"], cohort_id=cohort_c["id"])
+
+    job = create_import_job(
+        db, "learners.csv", admin_user["userId"], [_row(learner_reference="MISMATCH-1", cohort_name=cohort_f["name"])]
+    )
+    import_job_cleanup.append(job["id"])
+
+    assert job["cohortMismatchCount"] == 1
+    row = list_import_job_rows(db, job["id"])["items"][0]
+    assert row["cohortMismatch"] is True
+    assert row["currentTutorId"] == tutor_b["tutorId"]
+    assert row["currentCohortId"] == cohort_c["id"]
+    assert row["currentCohortName"] == cohort_c["name"]
+    assert row["matchedCohortId"] == cohort_f["id"]
+
+
+def test_create_import_job_no_mismatch_when_cohort_name_matches_current_cohort(
+    db, admin_user, tutor_factory, cohort_factory, learner_factory, import_job_cleanup
+):
+    tutor_b = tutor_factory()
+    cohort_c = cohort_factory(tutor_id=tutor_b["tutorId"])
+    learner_factory(learner_ref="MISMATCH-2", tutor_id=tutor_b["tutorId"], cohort_id=cohort_c["id"])
+
+    job = create_import_job(
+        db, "learners.csv", admin_user["userId"], [_row(learner_reference="MISMATCH-2", cohort_name=cohort_c["name"])]
+    )
+    import_job_cleanup.append(job["id"])
+
+    assert job["cohortMismatchCount"] == 0
+    row = list_import_job_rows(db, job["id"])["items"][0]
+    assert row["cohortMismatch"] is False
+
+
+def test_create_import_job_no_mismatch_when_no_cohort_name_given(
+    db, admin_user, tutor_factory, cohort_factory, learner_factory, import_job_cleanup
+):
+    tutor_b = tutor_factory()
+    cohort_c = cohort_factory(tutor_id=tutor_b["tutorId"])
+    learner_factory(learner_ref="MISMATCH-3", tutor_id=tutor_b["tutorId"], cohort_id=cohort_c["id"])
+
+    job = create_import_job(db, "learners.csv", admin_user["userId"], [_row(learner_reference="MISMATCH-3")])
+    import_job_cleanup.append(job["id"])
+
+    assert job["cohortMismatchCount"] == 0
+    row = list_import_job_rows(db, job["id"])["items"][0]
+    assert row["cohortMismatch"] is False
+
+
 def test_cancel_import_job_marks_cancelled(db, admin_user, import_job_cleanup):
     job = create_import_job(db, "learners.csv", admin_user["userId"], [_row()])
     import_job_cleanup.append(job["id"])
@@ -378,6 +451,77 @@ def test_confirm_never_transfers_an_already_allocated_learner_on_update(
 
     db.execute("SELECT count(*)::int AS count FROM learner_allocation_history WHERE learner_id = %s", (existing["id"],))
     assert db.fetchone()["count"] == 0
+
+
+def test_confirm_applies_a_requested_transfer_and_logs_it(
+    db, admin_user, request_factory, learner_factory, tutor_factory, cohort_factory, import_job_cleanup
+):
+    tutor_b = tutor_factory()
+    cohort_c = cohort_factory(tutor_id=tutor_b["tutorId"])
+    tutor_e = tutor_factory()
+    cohort_f = cohort_factory(tutor_id=tutor_e["tutorId"])
+    existing = learner_factory(learner_ref="TRANSFER-1", tutor_id=tutor_b["tutorId"], cohort_id=cohort_c["id"])
+
+    job = create_import_job(
+        db, "learners.csv", admin_user["userId"], [_row(learner_reference="TRANSFER-1", cohort_name=cohort_f["name"])]
+    )
+    import_job_cleanup.append(job["id"])
+    row = list_import_job_rows(db, job["id"])["items"][0]
+    assert row["cohortMismatch"] is True
+    resolve_import_row(db, job["id"], row["id"], "skip", admin_user["userId"], transfer_requested=True)
+
+    result = confirm_import_job(db, job["id"], request_factory(), admin_user)
+    assert result["transferred"] == 1
+
+    db.execute("SELECT tutor_id, cohort_id FROM learners WHERE id = %s", (existing["id"],))
+    moved = db.fetchone()
+    assert moved["tutor_id"] == tutor_e["tutorId"]
+    assert moved["cohort_id"] == cohort_f["id"]
+
+    db.execute("SELECT count(*)::int AS count FROM learner_allocation_history WHERE learner_id = %s", (existing["id"],))
+    assert db.fetchone()["count"] == 1
+
+    db.execute(
+        "SELECT count(*)::int AS count FROM audit_logs WHERE entity_type = 'learner' AND entity_id = %s "
+        "AND action = 'learner_import_transfer_applied'",
+        (existing["id"],),
+    )
+    assert db.fetchone()["count"] == 1
+
+
+def test_confirm_leaves_transfer_unapplied_when_target_cohort_deactivated_before_confirm(
+    db, admin_user, request_factory, learner_factory, tutor_factory, cohort_factory, import_job_cleanup
+):
+    tutor_b = tutor_factory()
+    cohort_c = cohort_factory(tutor_id=tutor_b["tutorId"])
+    tutor_e = tutor_factory()
+    cohort_f = cohort_factory(tutor_id=tutor_e["tutorId"])
+    existing = learner_factory(learner_ref="TRANSFER-2", tutor_id=tutor_b["tutorId"], cohort_id=cohort_c["id"])
+
+    job = create_import_job(
+        db, "learners.csv", admin_user["userId"], [_row(learner_reference="TRANSFER-2", cohort_name=cohort_f["name"])]
+    )
+    import_job_cleanup.append(job["id"])
+    row = list_import_job_rows(db, job["id"])["items"][0]
+    resolve_import_row(db, job["id"], row["id"], "skip", admin_user["userId"], transfer_requested=True)
+
+    # Target cohort becomes inactive after preview, before confirm -- the
+    # transfer must be skipped non-fatally rather than failing the job.
+    db.execute("UPDATE cohorts SET active = false WHERE id = %s", (cohort_f["id"],))
+
+    result = confirm_import_job(db, job["id"], request_factory(), admin_user)
+    assert result["transferred"] == 0
+
+    db.execute("SELECT tutor_id, cohort_id FROM learners WHERE id = %s", (existing["id"],))
+    unchanged = db.fetchone()
+    assert unchanged["tutor_id"] == tutor_b["tutorId"]
+    assert unchanged["cohort_id"] == cohort_c["id"]
+
+    db.execute("SELECT count(*)::int AS count FROM learner_allocation_history WHERE learner_id = %s", (existing["id"],))
+    assert db.fetchone()["count"] == 0
+
+    updated_row = list_import_job_rows(db, job["id"])["items"][0]
+    assert any("no longer active" in w for w in updated_row["warnings"])
 
 
 # ---------------------------------------------------------------------------

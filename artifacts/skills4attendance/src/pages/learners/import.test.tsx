@@ -40,6 +40,19 @@ const duplicateRow = {
   classification: 'exact_existing', proposedAction: 'skip', resolution: null, resolvedBy: null, resolvedAt: null,
   matchDetails: { matchedOn: 'learner_reference' }, matchedLearnerId: 42, matchedLearnerName: 'Ada Lovelace',
   cohortMatchStatus: null, matchedCohortId: null, matchedCohortName: null,
+  currentTutorId: null, currentTutorName: null, currentCohortId: null, currentCohortName: null,
+  cohortMismatch: false, transferRequested: false, transferApplied: false,
+  errors: [], warnings: [], importResult: null, importError: null, createdAt: '2026-01-01T00:00:00Z',
+};
+
+const mismatchRow = {
+  id: 103, jobId: 7, rowNumber: 3,
+  rawData: { learner_reference: 'EXIST-2', first_name: 'Grace', last_name: 'Hopper', apprenticeship_programme: 'Health', level: '3', start_date: '2026-01-01', cohort_name: 'Cohort F' },
+  classification: 'exact_existing', proposedAction: 'skip', resolution: null, resolvedBy: null, resolvedAt: null,
+  matchDetails: { matchedOn: 'learner_reference' }, matchedLearnerId: 55, matchedLearnerName: 'Grace Hopper',
+  cohortMatchStatus: 'matched', matchedCohortId: 9, matchedCohortName: 'Cohort F',
+  currentTutorId: 2, currentTutorName: 'Sam Tutor', currentCohortId: 3, currentCohortName: 'Cohort C',
+  cohortMismatch: true, transferRequested: false, transferApplied: false,
   errors: [], warnings: [], importResult: null, importError: null, createdAt: '2026-01-01T00:00:00Z',
 };
 
@@ -152,7 +165,7 @@ describe('LearnerImportPage', () => {
     fireEvent.click(updateRadio);
 
     expect(resolveMutate).toHaveBeenCalledWith(
-      { jobId: 7, rowId: 102, data: { resolution: 'update' } },
+      { jobId: 7, rowId: 102, data: { resolution: 'update', transferRequested: false } },
       expect.anything(),
     );
   });
@@ -268,5 +281,36 @@ describe('LearnerImportPage', () => {
     renderAtLocation('job=999');
 
     expect(screen.getByText('Import job not found')).toBeInTheDocument();
+  });
+
+  it('shows a before/after cohort change and a transfer checkbox for a mismatched row', () => {
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
+    mockRows = { data: { items: [mismatchRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    expect(screen.getByText(/Sam Tutor · Cohort C/)).toBeInTheDocument();
+    expect(screen.getByText(/Cohort F/)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /transfer to this cohort/i })).toBeInTheDocument();
+  });
+
+  it('does not show a cohort change or transfer checkbox for a row with no mismatch', () => {
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
+    mockRows = { data: { items: [duplicateRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    expect(screen.queryByRole('checkbox', { name: /transfer to this cohort/i })).not.toBeInTheDocument();
+  });
+
+  it('checking the transfer checkbox resolves the row with transferRequested set', () => {
+    mockJob = { data: readyJob, isError: false, refetch: vi.fn() };
+    mockRows = { data: { items: [mismatchRow], total: 1, page: 1, pageSize: 25 }, isLoading: false };
+    renderAtLocation('job=7');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /transfer to this cohort/i }));
+
+    expect(resolveMutate).toHaveBeenCalledWith(
+      { jobId: 7, rowId: 103, data: { resolution: 'skip', transferRequested: true } },
+      expect.anything(),
+    );
   });
 });

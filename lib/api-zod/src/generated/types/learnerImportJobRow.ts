@@ -41,4 +41,15 @@ export interface LearnerImportJobRow {
   /** @nullable */
   importError: string | null;
   createdAt: Date;
+  /** @nullable */
+  currentTutorId: number | null;
+  /** @nullable */
+  currentTutorName: string | null;
+  /** @nullable */
+  currentCohortId: number | null;
+  /** @nullable */
+  currentCohortName: string | null;
+  cohortMismatch: boolean;
+  transferRequested: boolean;
+  transferApplied: boolean;
 }

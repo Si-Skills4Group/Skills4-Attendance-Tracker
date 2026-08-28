@@ -3395,6 +3395,7 @@ components:
           createdAt,
           updatedAt,
           expiresAt,
+          cohortMismatchCount,
         ]
       properties:
         id: { type: integer }
@@ -3417,6 +3418,7 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
+        cohortMismatchCount: { type: integer }
 
     LearnerImportJobRow:
       type: object
@@ -3442,6 +3444,13 @@ components:
           importResult,
           importError,
           createdAt,
+          currentTutorId,
+          currentTutorName,
+          currentCohortId,
+          currentCohortName,
+          cohortMismatch,
+          transferRequested,
+          transferApplied,
         ]
       properties:
         id: { type: integer }
@@ -3481,6 +3490,13 @@ components:
             - type: "null"
         importError: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
+        currentTutorId: { type: ["integer", "null"] }
+        currentTutorName: { type: ["string", "null"] }
+        currentCohortId: { type: ["integer", "null"] }
+        currentCohortName: { type: ["string", "null"] }
+        cohortMismatch: { type: boolean }
+        transferRequested: { type: boolean }
+        transferApplied: { type: boolean }
 
     LearnerImportJobRowListResponse:
       type: object
@@ -3498,15 +3514,17 @@ components:
       required: [resolution]
       properties:
         resolution: { $ref: "#/components/schemas/LearnerImportRowResolution" }
+        transferRequested: { type: boolean }
 
     LearnerImportResult:
       type: object
-      required: [totalRows, created, updated, skipped]
+      required: [totalRows, created, updated, skipped, transferred]
       properties:
         totalRows: { type: integer }
         created: { type: integer }
         updated: { type: integer }
         skipped: { type: integer }
+        transferred: { type: integer }
 
     TutorImportJobStatus:
       type: string

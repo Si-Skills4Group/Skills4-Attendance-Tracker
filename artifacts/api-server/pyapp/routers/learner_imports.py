@@ -34,6 +34,7 @@ ERROR_REPORT_COLUMNS = ["row_number", "learner_reference", "classification", "er
 
 class ImportRowResolveInput(BaseModel):
     resolution: Literal["skip", "update"]
+    transferRequested: bool | None = None
 
 
 @router.get("/learners/import-jobs/template")
@@ -99,14 +100,16 @@ def resolve_learner_import_job_row(
     session: dict = Depends(require_admin),
 ):
     with get_cursor() as cur:
-        row = resolve_import_row(cur, job_id, row_id, payload.resolution, session["userId"])
+        row = resolve_import_row(
+            cur, job_id, row_id, payload.resolution, session["userId"], transfer_requested=payload.transferRequested
+        )
 
     write_audit_log(
         request,
         action="learner_import_row_resolved",
         entity_type="learner_import_row",
         entity_id=row_id,
-        new_value={"jobId": job_id, "resolution": payload.resolution},
+        new_value={"jobId": job_id, "resolution": payload.resolution, "transferRequested": payload.transferRequested},
     )
     return row
 

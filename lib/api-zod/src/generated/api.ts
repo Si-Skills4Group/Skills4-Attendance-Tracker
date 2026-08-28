@@ -1086,13 +1086,15 @@ export const UploadLearnerImportResponse = zod.object({
   "totalRows": zod.number(),
   "created": zod.number(),
   "updated": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "transferred": zod.number()
 }),zod.null()]),
   "lastError": zod.string().nullable(),
   "startedImportingAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "expiresAt": zod.coerce.date()
+  "expiresAt": zod.coerce.date(),
+  "cohortMismatchCount": zod.number()
 })
 
 
@@ -1116,13 +1118,15 @@ export const GetLearnerImportJobResponse = zod.object({
   "totalRows": zod.number(),
   "created": zod.number(),
   "updated": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "transferred": zod.number()
 }),zod.null()]),
   "lastError": zod.string().nullable(),
   "startedImportingAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "expiresAt": zod.coerce.date()
+  "expiresAt": zod.coerce.date(),
+  "cohortMismatchCount": zod.number()
 })
 
 
@@ -1160,7 +1164,14 @@ export const ListLearnerImportJobRowsResponse = zod.object({
   "warnings": zod.array(zod.string()),
   "importResult": zod.union([zod.enum(['created', 'updated', 'skipped', 'failed']),zod.null()]),
   "importError": zod.string().nullable(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "currentTutorId": zod.number().nullable(),
+  "currentTutorName": zod.string().nullable(),
+  "currentCohortId": zod.number().nullable(),
+  "currentCohortName": zod.string().nullable(),
+  "cohortMismatch": zod.boolean(),
+  "transferRequested": zod.boolean(),
+  "transferApplied": zod.boolean()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -1174,7 +1185,8 @@ export const ResolveLearnerImportJobRowParams = zod.object({
 })
 
 export const ResolveLearnerImportJobRowBody = zod.object({
-  "resolution": zod.enum(['skip', 'update'])
+  "resolution": zod.enum(['skip', 'update']),
+  "transferRequested": zod.boolean().optional()
 })
 
 export const ResolveLearnerImportJobRowResponse = zod.object({
@@ -1197,7 +1209,14 @@ export const ResolveLearnerImportJobRowResponse = zod.object({
   "warnings": zod.array(zod.string()),
   "importResult": zod.union([zod.enum(['created', 'updated', 'skipped', 'failed']),zod.null()]),
   "importError": zod.string().nullable(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "currentTutorId": zod.number().nullable(),
+  "currentTutorName": zod.string().nullable(),
+  "currentCohortId": zod.number().nullable(),
+  "currentCohortName": zod.string().nullable(),
+  "cohortMismatch": zod.boolean(),
+  "transferRequested": zod.boolean(),
+  "transferApplied": zod.boolean()
 })
 
 
@@ -1219,7 +1238,8 @@ export const ConfirmLearnerImportJobResponse = zod.object({
   "totalRows": zod.number(),
   "created": zod.number(),
   "updated": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "transferred": zod.number()
 })
 
 
@@ -1243,13 +1263,15 @@ export const CancelLearnerImportJobResponse = zod.object({
   "totalRows": zod.number(),
   "created": zod.number(),
   "updated": zod.number(),
-  "skipped": zod.number()
+  "skipped": zod.number(),
+  "transferred": zod.number()
 }),zod.null()]),
   "lastError": zod.string().nullable(),
   "startedImportingAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "expiresAt": zod.coerce.date()
+  "expiresAt": zod.coerce.date(),
+  "cohortMismatchCount": zod.number()
 })
 
 

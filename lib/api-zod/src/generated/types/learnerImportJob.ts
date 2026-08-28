@@ -28,4 +28,5 @@ export interface LearnerImportJob {
   createdAt: Date;
   updatedAt: Date;
   expiresAt: Date;
+  cohortMismatchCount: number;
 }

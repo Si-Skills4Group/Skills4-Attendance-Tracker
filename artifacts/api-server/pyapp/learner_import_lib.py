@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from fastapi import HTTPException, Request
 
 from .allocation_lib import apply_transfer
+from .audit import write_audit_log
 from .csv_utils import LEARNER_IMPORT_COLUMN_TO_FIELD, LEARNER_IMPORT_REQUIRED_COLUMNS
 
 IMPORT_JOB_STALE_IMPORTING_MINUTES = 15
@@ -29,7 +30,7 @@ JOB_SELECT = """
            possible_duplicate_count AS "possibleDuplicateCount", identifier_conflict_count AS "identifierConflictCount",
            invalid_count AS "invalidCount", result_summary AS "resultSummary", last_error AS "lastError",
            started_importing_at AS "startedImportingAt", created_at AS "createdAt", updated_at AS "updatedAt",
-           expires_at AS "expiresAt"
+           expires_at AS "expiresAt", cohort_mismatch_count AS "cohortMismatchCount"
     FROM learner_import_jobs
 """
 
@@ -39,7 +40,10 @@ ROW_SELECT = """
            resolved_by AS "resolvedBy", resolved_at AS "resolvedAt", match_details AS "matchDetails",
            matched_learner_id AS "matchedLearnerId", cohort_match_status AS "cohortMatchStatus",
            matched_cohort_id AS "matchedCohortId", errors, warnings,
-           import_result AS "importResult", import_error AS "importError", created_at AS "createdAt"
+           import_result AS "importResult", import_error AS "importError", created_at AS "createdAt",
+           current_tutor_id AS "currentTutorId", current_cohort_id AS "currentCohortId",
+           cohort_mismatch AS "cohortMismatch", transfer_requested AS "transferRequested",
+           transfer_applied AS "transferApplied"
     FROM learner_import_rows
 """
 
@@ -90,7 +94,8 @@ def load_existing_learners(cur) -> list[dict]:
     cur.execute(
         """
         SELECT id, learner_ref AS "learnerRef", uln, email,
-               first_name AS "firstName", last_name AS "lastName", start_date AS "startDate"
+               first_name AS "firstName", last_name AS "lastName", start_date AS "startDate",
+               tutor_id AS "tutorId", cohort_id AS "cohortId"
         FROM learners
         """
     )
@@ -330,6 +335,20 @@ def create_import_job(
     cohort_names = [row.get("cohort_name", "") for row in parsed_rows]
     cohort_resolution = resolve_cohort_names(cur, cohort_names)
 
+    # Current allocation for every matched learner, so a row whose CSV
+    # cohort_name resolves to a *different* cohort than the learner is
+    # actually in today can be flagged (cohort_mismatch) rather than
+    # silently ignored -- a small, targeted lookup rather than reusing
+    # classify_rows' internal ExistingLearnerIndex, which isn't exposed.
+    matched_ids = {r["matchedLearnerId"] for r in index_rows if r["matchedLearnerId"] is not None}
+    current_allocation_by_id: dict[int, dict] = {}
+    if matched_ids:
+        cur.execute(
+            'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = ANY(%s)',
+            (list(matched_ids),),
+        )
+        current_allocation_by_id = {row["id"]: row for row in cur.fetchall()}
+
     counts = {
         "new": 0,
         "exact_existing": 0,
@@ -366,6 +385,7 @@ def create_import_job(
     )
     job_id = cur.fetchone()["id"]
 
+    cohort_mismatch_count = 0
     for row_number, (raw_row, result) in enumerate(zip(parsed_rows, index_rows), start=1):
         cohort_name = (raw_row.get("cohort_name") or "").strip()
         cohort_status = None
@@ -379,12 +399,26 @@ def create_import_job(
             if cohort_status != "matched":
                 warnings.append(f"cohort_name '{cohort_name}' could not be resolved ({cohort_status.replace('_', ' ')})")
 
+        # A row whose CSV cohort_name resolves cleanly to a *different*
+        # cohort than the matched learner is in today -- flagged for the
+        # admin to review, never applied unless they explicitly opt in
+        # (see resolve_import_row's transferRequested / _import_one_row).
+        current = current_allocation_by_id.get(result["matchedLearnerId"])
+        current_tutor_id = current["tutorId"] if current else None
+        current_cohort_id = current["cohortId"] if current else None
+        cohort_mismatch = bool(
+            current is not None and cohort_status == "matched" and current_cohort_id != matched_cohort_id
+        )
+        if cohort_mismatch:
+            cohort_mismatch_count += 1
+
         cur.execute(
             """
             INSERT INTO learner_import_rows
                 (job_id, row_number, raw_data, classification, proposed_action, match_details,
-                 matched_learner_id, cohort_match_status, matched_cohort_id, errors, warnings)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 matched_learner_id, cohort_match_status, matched_cohort_id, errors, warnings,
+                 current_tutor_id, current_cohort_id, cohort_mismatch)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 job_id,
@@ -398,8 +432,13 @@ def create_import_job(
                 matched_cohort_id,
                 json.dumps(result["errors"]),
                 json.dumps(warnings),
+                current_tutor_id,
+                current_cohort_id,
+                cohort_mismatch,
             ),
         )
+
+    cur.execute("UPDATE learner_import_jobs SET cohort_mismatch_count = %s WHERE id = %s", (cohort_mismatch_count, job_id))
 
     cur.execute(f"{JOB_SELECT} WHERE id = %s", (job_id,))
     return cur.fetchone()
@@ -435,14 +474,18 @@ def list_import_job_rows(cur, job_id: int, page: int = 1, page_size: int = 25, c
 
 
 def _enrich_rows_with_names(cur, rows: list[dict]) -> None:
-    """Adds matchedLearnerName/matchedCohortName to each row in place --
-    an admin resolving a possible_duplicate is choosing whether to update
-    *this specific person*, and a bare database id is meaningless for that
-    decision. Batched (one query per id set across the whole page) rather
-    than per-row, matching this codebase's existing enrichment precedent
-    (allocation_lib.enrich_allocation_history)."""
+    """Adds matchedLearnerName/matchedCohortName/currentTutorName/
+    currentCohortName to each row in place -- an admin resolving a
+    possible_duplicate is choosing whether to update *this specific
+    person*, and a bare database id is meaningless for that decision;
+    same reasoning for the current-vs-proposed cohort/tutor comparison a
+    cohort_mismatch row shows. Batched (one query per id set across the
+    whole page) rather than per-row, matching this codebase's existing
+    enrichment precedent (allocation_lib.enrich_allocation_history)."""
     learner_ids = {r["matchedLearnerId"] for r in rows if r["matchedLearnerId"] is not None}
     cohort_ids = {r["matchedCohortId"] for r in rows if r["matchedCohortId"] is not None}
+    cohort_ids |= {r["currentCohortId"] for r in rows if r.get("currentCohortId") is not None}
+    tutor_ids = {r["currentTutorId"] for r in rows if r.get("currentTutorId") is not None}
 
     learner_names: dict[int, str] = {}
     if learner_ids:
@@ -454,19 +497,34 @@ def _enrich_rows_with_names(cur, rows: list[dict]) -> None:
         cur.execute("SELECT id, name FROM cohorts WHERE id = ANY(%s)", (list(cohort_ids),))
         cohort_names = {row["id"]: row["name"] for row in cur.fetchall()}
 
+    tutor_names: dict[int, str] = {}
+    if tutor_ids:
+        cur.execute("SELECT id, first_name, last_name FROM tutors WHERE id = ANY(%s)", (list(tutor_ids),))
+        tutor_names = {row["id"]: f"{row['first_name']} {row['last_name']}" for row in cur.fetchall()}
+
     for r in rows:
         r["matchedLearnerName"] = learner_names.get(r["matchedLearnerId"])
         r["matchedCohortName"] = cohort_names.get(r["matchedCohortId"])
+        r["currentCohortName"] = cohort_names.get(r.get("currentCohortId"))
+        r["currentTutorName"] = tutor_names.get(r.get("currentTutorId"))
 
 
-def resolve_import_row(cur, job_id: int, row_id: int, resolution: str, resolved_by: int) -> dict:
+def resolve_import_row(
+    cur, job_id: int, row_id: int, resolution: str, resolved_by: int, transfer_requested: bool | None = None,
+) -> dict:
     """Records the admin's explicit skip-or-update choice for one duplicate
     row. Only meaningful for a row that actually has a choice to make: a
     'new' row always creates, and a 'blocked' (invalid/identifier_conflict)
     row can never be actioned until the source file is fixed and
     re-uploaded -- resolving either is rejected rather than silently
     ignored, since 'silently ignored' is indistinguishable from a bug that
-    dropped the admin's choice on the floor."""
+    dropped the admin's choice on the floor.
+
+    transfer_requested is an independent axis from resolution -- a field
+    update (or skip) and an allocation transfer are unrelated concerns, so
+    a row can be skip+transfer or update+transfer. Settable true only when
+    cohort_mismatch is true for this row (there's nowhere to transfer to
+    otherwise); always settable false (opting back out)."""
     if resolution not in ("skip", "update"):
         raise HTTPException(status_code=400, detail="resolution must be 'skip' or 'update'")
 
@@ -482,16 +540,29 @@ def resolve_import_row(cur, job_id: int, row_id: int, resolution: str, resolved_
         raise HTTPException(status_code=400, detail="This row has errors and cannot be resolved -- fix the source file and re-upload")
     if row["classification"] == "new":
         raise HTTPException(status_code=400, detail="New learners are always created -- there is nothing to resolve")
+    if transfer_requested and not row["cohortMismatch"]:
+        raise HTTPException(status_code=400, detail="This row has no cohort change to transfer")
 
-    cur.execute(
-        """
-        UPDATE learner_import_rows
-        SET resolution = %s, resolved_by = %s, resolved_at = now()
-        WHERE id = %s
-        RETURNING id
-        """,
-        (resolution, resolved_by, row_id),
-    )
+    if transfer_requested is None:
+        cur.execute(
+            """
+            UPDATE learner_import_rows
+            SET resolution = %s, resolved_by = %s, resolved_at = now()
+            WHERE id = %s
+            RETURNING id
+            """,
+            (resolution, resolved_by, row_id),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE learner_import_rows
+            SET resolution = %s, resolved_by = %s, resolved_at = now(), transfer_requested = %s
+            WHERE id = %s
+            RETURNING id
+            """,
+            (resolution, resolved_by, transfer_requested, row_id),
+        )
     cur.execute(f"{ROW_SELECT} WHERE id = %s", (row_id,))
     resolved_row = cur.fetchone()
     _enrich_rows_with_names(cur, [resolved_row])
@@ -557,14 +628,53 @@ def _maybe_allocate_new_learner(cur, learner: dict, row: dict, session: dict) ->
     apply_transfer(cur, learner, cohort["tutorId"], cohort["id"], date.today(), "CSV import allocation", session["userId"])
 
 
+def _maybe_apply_requested_transfer(cur, row: dict, request: Request, session: dict) -> bool:
+    """Applies an admin-requested tutor/cohort transfer for an EXISTING
+    matched learner -- an independent axis from the row's skip/update
+    field resolution (both can apply to the same row). Re-fetches the
+    learner's current allocation and re-validates the target cohort fresh
+    (never trusts the classify-time current_tutor_id/current_cohort_id
+    snapshot), mirroring _maybe_allocate_new_learner's exact non-fatal
+    precedent: if the target became invalid since preview, the transfer
+    is silently skipped (a note is added to the row's warnings) rather
+    than failing the whole import. Returns whether a transfer was
+    actually applied."""
+    if not row.get("transferRequested") or not row["matchedCohortId"]:
+        return False
+
+    cur.execute('SELECT id, tutor_id AS "tutorId", active FROM cohorts WHERE id = %s', (row["matchedCohortId"],))
+    target_cohort = cur.fetchone()
+    if not target_cohort or not target_cohort["active"]:
+        cur.execute(
+            "UPDATE learner_import_rows SET warnings = warnings || %s::jsonb WHERE id = %s",
+            (json.dumps(["Requested transfer skipped -- target cohort no longer active"]), row["id"]),
+        )
+        return False
+
+    cur.execute(
+        'SELECT id, tutor_id AS "tutorId", cohort_id AS "cohortId" FROM learners WHERE id = %s AND deleted_at IS NULL',
+        (row["matchedLearnerId"],),
+    )
+    learner = cur.fetchone()
+    if not learner:
+        return False
+
+    apply_transfer(
+        cur, learner, target_cohort["tutorId"], target_cohort["id"], date.today(), "CSV import transfer", session["userId"],
+    )
+    write_audit_log(
+        request, action="learner_import_transfer_applied", entity_type="learner", entity_id=learner["id"],
+        previous_value={"tutorId": learner["tutorId"], "cohortId": learner["cohortId"]},
+        new_value={"tutorId": target_cohort["tutorId"], "cohortId": target_cohort["id"]},
+        cur=cur,
+    )
+    return True
+
+
 def _import_one_row(cur, row: dict, request: Request, session: dict) -> dict:
     from .routers.learners import LearnerInput, LearnerUpdate, _create_learner, _update_learner
 
     action = _effective_action(row)
-
-    if action == "skip":
-        cur.execute("UPDATE learner_import_rows SET import_result = 'skipped' WHERE id = %s", (row["id"],))
-        return {"rowId": row["id"], "result": "skipped"}
 
     if action == "create":
         payload = LearnerInput(**_row_to_field_kwargs(row["rawData"], include_blanks=True))
@@ -576,20 +686,36 @@ def _import_one_row(cur, row: dict, request: Request, session: dict) -> dict:
         )
         return {"rowId": row["id"], "result": "created", "learnerId": created["id"]}
 
-    # action == "update" -- never includes tutorId/cohortId (not in
-    # LEARNER_IMPORT_COLUMN_TO_FIELD), so this can never transfer an
-    # already-allocated learner; that guarantee lives entirely here.
+    # action is "skip" or "update" -- both are existing-learner paths, and
+    # both independently eligible for a requested allocation transfer,
+    # which runs regardless of which one applies (they're unrelated
+    # concerns: field changes vs. allocation changes).
+    transferred = _maybe_apply_requested_transfer(cur, row, request, session)
+    if transferred:
+        cur.execute("UPDATE learner_import_rows SET transfer_applied = true WHERE id = %s", (row["id"],))
+
+    if action == "skip":
+        cur.execute("UPDATE learner_import_rows SET import_result = 'skipped' WHERE id = %s", (row["id"],))
+        return {"rowId": row["id"], "result": "skipped", "transferred": transferred}
+
+    # action == "update" -- LearnerUpdate never includes tutorId/cohortId
+    # (not in LEARNER_IMPORT_COLUMN_TO_FIELD), so this alone can never
+    # transfer an already-allocated learner; that guarantee lives entirely
+    # here, and the only way to move one is the explicit opt-in above.
     payload = LearnerUpdate(**_row_to_field_kwargs(row["rawData"], include_blanks=False))
     updated = _update_learner(cur, row["matchedLearnerId"], payload, request, session)
     cur.execute("UPDATE learner_import_rows SET import_result = 'updated' WHERE id = %s", (row["id"],))
-    return {"rowId": row["id"], "result": "updated", "learnerId": updated["id"]}
+    return {"rowId": row["id"], "result": "updated", "learnerId": updated["id"], "transferred": transferred}
 
 
 def _build_result_summary(result_rows: list[dict]) -> dict:
     counts = {"created": 0, "updated": 0, "skipped": 0}
+    transferred = 0
     for r in result_rows:
         counts[r["result"]] += 1
-    return {"totalRows": len(result_rows), **counts}
+        if r.get("transferred"):
+            transferred += 1
+    return {"totalRows": len(result_rows), **counts, "transferred": transferred}
 
 
 def confirm_import_job(cur, job_id: int, request: Request, session: dict) -> dict:

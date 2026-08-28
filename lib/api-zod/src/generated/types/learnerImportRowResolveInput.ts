@@ -9,4 +9,5 @@ import type { LearnerImportRowResolution } from './learnerImportRowResolution';
 
 export interface LearnerImportRowResolveInput {
   resolution: LearnerImportRowResolution;
+  transferRequested?: boolean;
 }

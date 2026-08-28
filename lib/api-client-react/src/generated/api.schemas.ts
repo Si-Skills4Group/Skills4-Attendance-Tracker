@@ -376,6 +376,7 @@ export interface LearnerImportResult {
   created: number;
   updated: number;
   skipped: number;
+  transferred: number;
 }
 
 export interface LearnerImportJob {
@@ -398,6 +399,7 @@ export interface LearnerImportJob {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
+  cohortMismatchCount: number;
 }
 
 export type LearnerImportJobRowRawData = {[key: string]: string};
@@ -432,6 +434,17 @@ export interface LearnerImportJobRow {
   /** @nullable */
   importError: string | null;
   createdAt: string;
+  /** @nullable */
+  currentTutorId: number | null;
+  /** @nullable */
+  currentTutorName: string | null;
+  /** @nullable */
+  currentCohortId: number | null;
+  /** @nullable */
+  currentCohortName: string | null;
+  cohortMismatch: boolean;
+  transferRequested: boolean;
+  transferApplied: boolean;
 }
 
 export interface LearnerImportJobRowListResponse {
@@ -443,6 +456,7 @@ export interface LearnerImportJobRowListResponse {
 
 export interface LearnerImportRowResolveInput {
   resolution: LearnerImportRowResolution;
+  transferRequested?: boolean;
 }
 
 export type TutorImportJobStatus = typeof TutorImportJobStatus[keyof typeof TutorImportJobStatus];

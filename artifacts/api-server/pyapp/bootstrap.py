@@ -658,6 +658,24 @@ ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_notes text;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_assigned_at timestamptz;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS cover_assigned_by integer;
 CREATE INDEX IF NOT EXISTS idx_attendance_sessions_cover_tutor_id ON attendance_sessions (cover_tutor_id) WHERE cover_tutor_id IS NOT NULL;
+
+-- CSV learner import: support an explicit, reviewed, audited tutor/cohort
+-- transfer for an EXISTING matched learner, alongside the ordinary field
+-- update. Previously a CSV row's cohort_name was resolved and shown in the
+-- preview but silently never applied to an existing learner (LearnerUpdate
+-- has no tutorId/cohortId, by design -- apply_transfer is the only path
+-- allowed to move a learner). current_tutor_id/current_cohort_id are a
+-- classify-time snapshot of the matched learner's allocation, for display
+-- only; cohort_mismatch is precomputed once at classify time; transfer_
+-- requested is the admin's explicit per-row opt-in; transfer_applied
+-- records the actual confirm-time outcome (may stay false if the target
+-- cohort was deactivated between preview and confirm).
+ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS current_tutor_id integer;
+ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS current_cohort_id integer;
+ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS cohort_mismatch boolean NOT NULL DEFAULT false;
+ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS transfer_requested boolean NOT NULL DEFAULT false;
+ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS transfer_applied boolean NOT NULL DEFAULT false;
+ALTER TABLE learner_import_jobs ADD COLUMN IF NOT EXISTS cohort_mismatch_count integer NOT NULL DEFAULT 0;
 """
 
 
