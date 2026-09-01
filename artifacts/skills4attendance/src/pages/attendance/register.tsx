@@ -18,7 +18,7 @@ import {
   AttendanceRegister,
   CoverReason,
 } from "@workspace/api-client-react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -108,6 +108,14 @@ export default function RegisterPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // The sessions page hands its own (filtered) URL forward as `from` when
+  // linking into a register, so "back" restores that exact view instead of
+  // resetting to the top-level cohort list -- same convention as the
+  // cohort-list -> cohort-sessions hop. Falls back to /attendance when
+  // absent (dashboard links, the register-completion report, direct URLs).
+  const fromParam = new URLSearchParams(useSearch()).get("from");
+  const backHref = fromParam ? decodeURIComponent(fromParam) : "/attendance";
 
   const { data: currentUser } = useGetCurrentUser();
   const isAdmin = currentUser?.role === "admin";
@@ -724,7 +732,8 @@ export default function RegisterPage() {
     && currentUser.tutorId === session.tutorId
     && currentUser.tutorId !== session.coverTutorId;
   const isReadOnly = isCancelled || isLocked || isOriginalTutorWhileCoverActive;
-  const canRefresh = isAdmin && !isCancelled && !isCompleted && !isLocked && session.sessionDate.slice(0, 10) >= todayIso;
+  const canRefresh = !isCancelled && !isCompleted && !isLocked && !isOriginalTutorWhileCoverActive
+    && session.sessionDate.slice(0, 10) >= todayIso;
   const canLock = isAdmin && isCompleted && !isLocked;
   const canUnlock = isAdmin && isLocked;
   const canManageCover = isAdmin && !isCancelled && !isLocked;
@@ -737,13 +746,13 @@ export default function RegisterPage() {
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col h-[calc(100vh-64px)]">
       <div className="shrink-0 page-transition-enter">
         <Breadcrumbs items={[
-          { label: "Attendance", href: "/attendance" },
+          { label: "Attendance", href: backHref },
           { label: "Register" }
         ]} />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="icon" aria-label="Back to Attendance" onClick={() => guardNavigate("/attendance")}>
+            <Button variant="outline" size="icon" aria-label="Back to Attendance" onClick={() => guardNavigate(backHref)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div>

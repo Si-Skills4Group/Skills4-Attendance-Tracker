@@ -99,6 +99,38 @@ describe('CohortSessionsPage', () => {
     expect(backLink).toHaveAttribute('href', '/attendance?q=Foo&active=all');
   });
 
+  it('reads the session filters from the URL', () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    renderAtLocation('dateFrom=2026-02-01&status=cancelled');
+
+    expect(screen.getByDisplayValue('2026-02-01')).toBeInTheDocument();
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('updates the URL when a session filter changes, so a later back navigation restores it', async () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    const user = userEvent.setup();
+    const location = renderAtLocation();
+
+    const [dateFromInput] = screen.getAllByDisplayValue('');
+    await user.type(dateFromInput, '2026-03-01');
+
+    expect(location.history?.at(-1)).toContain('dateFrom=2026-03-01');
+  });
+
+  it('hands the current filtered URL to session links, so opening a register and going back restores this view', () => {
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [sessionA1], isLoading: false, isError: false };
+    renderAtLocation('status=scheduled');
+
+    const sessionLink = document.querySelector('a[href^="/attendance/100"]');
+    expect(sessionLink).toHaveAttribute(
+      'href', `/attendance/100?from=${encodeURIComponent('/attendance/cohorts/5?status=scheduled')}`,
+    );
+  });
+
   it('shows a loading state while the cohort is loading', () => {
     mockCohort = { data: undefined, isLoading: true, isError: false };
     mockSessions = { data: [], isLoading: false, isError: false };

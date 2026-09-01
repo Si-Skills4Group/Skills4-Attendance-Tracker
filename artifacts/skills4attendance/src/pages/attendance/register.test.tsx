@@ -74,8 +74,8 @@ vi.mock('@/components/register-history-panel', () => ({
   RegisterHistoryPanel: () => null,
 }));
 
-function renderAtLocation() {
-  const location = memoryLocation({ path: '/attendance/200', record: true });
+function renderAtLocation(searchPath = '') {
+  const location = memoryLocation({ path: '/attendance/200', searchPath, record: true });
   renderWithQueryClient(
     <Router hook={location.hook} searchHook={location.searchHook}>
       <Route path="/attendance/:id" component={RegisterPage} />
@@ -273,14 +273,46 @@ describe('RegisterPage', () => {
     expect(screen.queryByRole('button', { name: /refresh expected learners/i })).not.toBeInTheDocument();
   });
 
-  it('hides the Refresh action for tutors', () => {
+  it('offers the Refresh action for a tutor on their own, uncovered session', () => {
     mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
     mockRegister = {
       data: { session: makeSession({ sessionDate: '2099-01-01' }), entries },
       isLoading: false,
     };
     renderAtLocation();
+    expect(screen.getByRole('button', { name: /refresh expected learners/i })).toBeInTheDocument();
+  });
+
+  it('hides the Refresh action for the original tutor while a cover tutor is active', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    mockRegister = {
+      data: {
+        session: makeSession({
+          sessionDate: '2099-01-01', coverTutorId: 20, coverTutorName: 'Cara Cover',
+          effectiveTutorId: 20, effectiveTutorName: 'Cara Cover',
+        }),
+        entries,
+      },
+      isLoading: false,
+    };
+    renderAtLocation();
     expect(screen.queryByRole('button', { name: /refresh expected learners/i })).not.toBeInTheDocument();
+  });
+
+  it('offers the Refresh action to the active cover tutor', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 20 } };
+    mockRegister = {
+      data: {
+        session: makeSession({
+          sessionDate: '2099-01-01', coverTutorId: 20, coverTutorName: 'Cara Cover',
+          effectiveTutorId: 20, effectiveTutorName: 'Cara Cover',
+        }),
+        entries,
+      },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.getByRole('button', { name: /refresh expected learners/i })).toBeInTheDocument();
   });
 
   it('previews additions and removals before applying a refresh', async () => {
@@ -589,6 +621,28 @@ describe('RegisterPage', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
 
     confirmSpy.mockRestore();
+  });
+
+  it('navigates back to /attendance when no from param was supplied', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    const user = userEvent.setup();
+    const location = renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: 'Back to Attendance' }));
+    expect(location.history?.at(-1)).toBe('/attendance');
+  });
+
+  it('navigates back to the originating sessions-page URL when a from param was supplied', async () => {
+    mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+    const user = userEvent.setup();
+    const location = renderAtLocation('from=%2Fattendance%2Fcohorts%2F5%3FdateFrom%3D2026-02-01');
+
+    expect(screen.getByRole('link', { name: 'Attendance' })).toHaveAttribute(
+      'href', '/attendance/cohorts/5?dateFrom=2026-02-01',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Back to Attendance' }));
+    expect(location.history?.at(-1)).toBe('/attendance/cohorts/5?dateFrom=2026-02-01');
   });
 
   it('prompts to confirm before leaving with unsaved changes, and stays put when declined', async () => {

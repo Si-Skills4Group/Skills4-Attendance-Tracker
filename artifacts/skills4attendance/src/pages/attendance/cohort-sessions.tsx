@@ -8,7 +8,7 @@ import {
   getGetCohortQueryKey,
   getListAttendanceSessionsQueryKey,
 } from "@workspace/api-client-react";
-import { useParams, useSearch, Link } from "wouter";
+import { useParams, useSearch, useSearchParams, Link } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,10 +57,28 @@ export default function CohortSessionsPage() {
     query: { queryKey: getGetCohortQueryKey(cohortId) },
   });
 
-  const [dateFrom, setDateFrom] = React.useState("");
-  const [dateTo, setDateTo] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("all");
-  const [registerStatusFilter, setRegisterStatusFilter] = React.useState("all");
+  // This page's own filters live in the URL (not useState), so navigating
+  // into a session's register and back -- via the `from` param handed to
+  // SessionCardGrid below -- restores this exact filtered view instead of
+  // resetting to defaults. Merging into the existing URLSearchParams (via
+  // setParam) leaves the incoming `from` param above untouched.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dateFrom = searchParams.get("dateFrom") ?? "";
+  const dateTo = searchParams.get("dateTo") ?? "";
+  const statusFilter = searchParams.get("status") ?? "all";
+  const registerStatusFilter = searchParams.get("registerStatus") ?? "all";
+
+  const setParam = (key: string, value: string, isDefault: boolean) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (isDefault) next.delete(key);
+      else next.set(key, value);
+      return next;
+    });
+  };
+
+  const sessionsBackTo = `/attendance/cohorts/${cohortId}${search ? `?${search}` : ""}`;
+
   const sessionsParams = {
     cohortId,
     dateFrom: dateFrom || undefined,
@@ -195,18 +213,18 @@ export default function CohortSessionsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 page-transition-enter stagger-1">
         <div className="flex items-center gap-4 bg-card p-2 rounded-lg border shadow-sm w-fit">
           <div className="flex items-center px-2 text-sm font-medium text-muted-foreground">Filter:</div>
-          <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 w-auto text-sm border-transparent bg-muted/20" />
+          <Input type="date" value={dateFrom} onChange={e => setParam("dateFrom", e.target.value, e.target.value === "")} className="h-8 w-auto text-sm border-transparent bg-muted/20" />
           <span className="text-muted-foreground">-</span>
-          <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 w-auto text-sm border-transparent bg-muted/20" />
+          <Input type="date" value={dateTo} onChange={e => setParam("dateTo", e.target.value, e.target.value === "")} className="h-8 w-auto text-sm border-transparent bg-muted/20" />
           {(dateFrom || dateTo) && (
             <button
-              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              onClick={() => { setParam("dateFrom", "", true); setParam("dateTo", "", true); }}
               className="text-xs text-muted-foreground hover:text-foreground underline ml-1"
             >
               Clear
             </button>
           )}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={v => setParam("status", v, v === "all")}>
             <SelectTrigger className="h-8 w-auto text-sm border-transparent bg-muted/20"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sessions</SelectItem>
@@ -214,7 +232,7 @@ export default function CohortSessionsPage() {
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={registerStatusFilter} onValueChange={setRegisterStatusFilter}>
+          <Select value={registerStatusFilter} onValueChange={v => setParam("registerStatus", v, v === "all")}>
             <SelectTrigger className="h-8 w-auto text-sm border-transparent bg-muted/20"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any register status</SelectItem>
@@ -337,6 +355,7 @@ export default function CohortSessionsPage() {
           emptyDescription="Create the first session for this cohort to start taking attendance."
           emptyAction={<Button onClick={() => setCreateModalOpen(true)}>Create Session</Button>}
           showCohortName={false}
+          backTo={sessionsBackTo}
         />
       )}
     </div>

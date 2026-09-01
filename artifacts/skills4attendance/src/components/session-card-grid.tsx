@@ -15,6 +15,7 @@ export function SessionCardGrid({
   emptyDescription,
   emptyAction,
   showCohortName = true,
+  backTo,
 }: {
   sessions: AttendanceSession[];
   isLoading: boolean;
@@ -22,6 +23,9 @@ export function SessionCardGrid({
   emptyDescription?: string;
   emptyAction?: React.ReactNode;
   showCohortName?: boolean;
+  /** Current page's own URL (path + query), forwarded as `from` so the
+   * register page's back link can restore this exact filtered view. */
+  backTo?: string;
 }) {
   if (isLoading) {
     return (
@@ -81,7 +85,7 @@ export function SessionCardGrid({
             ? 'bg-amber-500'
             : 'bg-muted-foreground/40';
         return (
-          <Link key={session.id} href={`/attendance/${session.id}`}>
+          <Link key={session.id} href={`/attendance/${session.id}${backTo ? `?from=${encodeURIComponent(backTo)}` : ""}`}>
             <Card className={`h-full overflow-hidden transition-all hover:border-primary/50 hover:shadow-md cursor-pointer group ${accentClass} ${isCancelled ? 'opacity-70' : ''}`}>
               <div className="p-5 flex flex-col h-full">
                 <div className="flex justify-between items-start mb-3">

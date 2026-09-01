@@ -4,7 +4,7 @@ cohort's own tutor, learner allocations, or historical attendance
 authorship. Kept separate from test_attendance_register_workflow.py since
 this is squarely about the cover-tutor feature built on top of it."""
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -16,6 +16,7 @@ from pyapp.routers.attendance import (
     CompleteRegisterInput,
     CoverTutorInput,
     LockRegisterInput,
+    RefreshRegisterInput,
     RegisterEntryInput,
     RemoveCoverTutorInput,
     SessionCancelInput,
@@ -27,6 +28,7 @@ from pyapp.routers.attendance import (
     get_attendance_session,
     list_attendance_sessions,
     lock_attendance_register,
+    refresh_session_register,
     remove_cover_tutor_endpoint,
     save_attendance_register,
 )
@@ -289,6 +291,46 @@ class TestAccess:
         with pytest.raises(HTTPException) as exc:
             _record_one_present(
                 request_factory, scenario["session"]["id"], scenario["learner"]["id"], scenario["original"]["session"],
+            )
+        assert exc.value.status_code == 403
+
+    def test_replacement_tutor_can_refresh_the_register(
+        self, request_factory, admin_user, scenario, attendance_session_factory
+    ):
+        # Refresh is only allowed on a not-yet-historical session, unlike
+        # `scenario["session"]` (a fixed past date shared by the whole
+        # fixture) -- a fresh future-dated session is needed here.
+        future_session = attendance_session_factory(
+            cohort_id=scenario["cohort"]["id"], session_date=date.today() + timedelta(days=7),
+            created_by=admin_user["userId"],
+        )
+        assign_cover_tutor(
+            future_session["id"],
+            CoverTutorInput(coverTutorId=scenario["cover"]["tutorId"], reason="tutor_sickness", registerVersion=1),
+            request_factory(),
+            admin_user,
+        )
+        result = refresh_session_register(
+            future_session["id"], RefreshRegisterInput(confirm=False), request_factory(), scenario["cover"]["session"],
+        )
+        assert "toAdd" in result
+
+    def test_original_tutor_cannot_refresh_while_cover_is_active(
+        self, request_factory, admin_user, scenario, attendance_session_factory
+    ):
+        future_session = attendance_session_factory(
+            cohort_id=scenario["cohort"]["id"], session_date=date.today() + timedelta(days=7),
+            created_by=admin_user["userId"],
+        )
+        assign_cover_tutor(
+            future_session["id"],
+            CoverTutorInput(coverTutorId=scenario["cover"]["tutorId"], reason="tutor_sickness", registerVersion=1),
+            request_factory(),
+            admin_user,
+        )
+        with pytest.raises(HTTPException) as exc:
+            refresh_session_register(
+                future_session["id"], RefreshRegisterInput(confirm=False), request_factory(), scenario["original"]["session"],
             )
         assert exc.value.status_code == 403
 

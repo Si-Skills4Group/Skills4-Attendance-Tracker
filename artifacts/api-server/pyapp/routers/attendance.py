@@ -575,13 +575,13 @@ def delete_attendance_session(
 
 @router.post("/attendance/sessions/{session_id}/refresh-register")
 def refresh_session_register(
-    session_id: int, payload: RefreshRegisterInput, request: Request, session: dict = Depends(require_admin)
+    session_id: int, payload: RefreshRegisterInput, request: Request, session: dict = Depends(require_auth)
 ):
     with get_cursor() as cur:
+        attendance_session = require_attendance_access(cur, session_id, session)
+        require_attendance_write_access(attendance_session, session)
         cur.execute(f"{SESSION_SELECT} WHERE s.id = %s AND s.deleted_at IS NULL", (session_id,))
         existing = cur.fetchone()
-        if not existing:
-            raise HTTPException(status_code=404, detail="Attendance session not found")
         if existing["status"] == "cancelled":
             raise HTTPException(status_code=400, detail="Cancelled sessions cannot be refreshed")
         if existing["sessionDate"] < date.today():

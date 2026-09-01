@@ -351,28 +351,6 @@ class TestCohortNavigationDataIntegrity:
         assert by_id_b[b2["id"]]["recordedCount"] == 1 and by_id_b[b2["id"]]["expectedCount"] == 1
 
 
-def _as_tutor(monkeypatch, tutor_id, user_id):
-    session = {"userId": user_id, "role": "tutor", "tutorId": tutor_id}
-
-    def fake_require_auth(request):
-        request.state.session = session
-        request.state.current_user_id = user_id
-        return session
-
-    monkeypatch.setattr(auth_module, "require_auth", fake_require_auth)
-
-
-def _as_admin(monkeypatch, user_id=999999):
-    session = {"userId": user_id, "role": "admin", "tutorId": None}
-
-    def fake_require_auth(request):
-        request.state.session = session
-        request.state.current_user_id = user_id
-        return session
-
-    monkeypatch.setattr(auth_module, "require_auth", fake_require_auth)
-
-
 def _as_tutor_via_dependency_override(client, tutor_id, user_id):
     """require_auth is wired directly as Depends(require_auth) on some
     routes (e.g. cancel_attendance_session) rather than via require_admin
@@ -898,16 +876,35 @@ class TestNewEndpointPermissions:
         assert response.status_code == 200
         assert response.json()["status"] == "cancelled"
 
-    def test_tutor_cannot_refresh_a_register_over_http(
-        self, client, monkeypatch, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
+    def test_tutor_can_refresh_their_own_sessions_register_over_http(
+        self, client, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
     ):
         tutor = tutor_factory()
         cohort = cohort_factory(tutor_id=tutor["tutorId"])
         future_date = datetime.date.today() + datetime.timedelta(days=7)
         session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
 
-        _as_tutor(monkeypatch, tutor["tutorId"], tutor["userId"])
-        response = client.post(f"/api/attendance/sessions/{session['id']}/refresh-register", json={"confirm": False})
+        _as_tutor_via_dependency_override(client, tutor["tutorId"], tutor["userId"])
+        try:
+            response = client.post(f"/api/attendance/sessions/{session['id']}/refresh-register", json={"confirm": False})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 200
+
+    def test_tutor_cannot_refresh_another_tutors_register_over_http(
+        self, client, admin_user, tutor_factory, cohort_factory, attendance_session_factory,
+    ):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+
+        _as_tutor_via_dependency_override(client, other["tutorId"], other["userId"])
+        try:
+            response = client.post(f"/api/attendance/sessions/{session['id']}/refresh-register", json={"confirm": False})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
         assert response.status_code == 403
 
     def test_admin_can_cancel_a_session_over_http(
@@ -944,9 +941,12 @@ class TestNewEndpointPermissions:
             client.app.dependency_overrides.pop(auth_module.require_auth, None)
         assert response.status_code == 404
 
-    def test_nonexistent_session_id_is_404_for_refresh(self, client, monkeypatch):
-        _as_admin(monkeypatch)
-        response = client.post("/api/attendance/sessions/999999999/refresh-register", json={"confirm": False})
+    def test_nonexistent_session_id_is_404_for_refresh(self, client):
+        _as_admin_via_dependency_override(client)
+        try:
+            response = client.post("/api/attendance/sessions/999999999/refresh-register", json={"confirm": False})
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
         assert response.status_code == 404
 
 
