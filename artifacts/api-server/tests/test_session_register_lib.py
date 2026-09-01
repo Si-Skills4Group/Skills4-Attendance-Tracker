@@ -156,6 +156,22 @@ class TestRegisterRefresh:
         assert diff["blocked"] == []
         assert stays["id"] not in {r["learnerId"] for r in diff["toAdd"]} | {r["learnerId"] for r in diff["toRemove"]}
 
+    def test_diff_lists_are_sorted_by_first_name(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date="2026-06-01", created_by=admin_user["userId"]
+        )
+        session_row = self._session_row(session, cohort["id"], datetime.date(2026, 6, 1))
+        ensure_expected_learners_snapshot(db, session["id"], cohort["id"], datetime.date(2026, 6, 1))
+
+        carol = learner_factory(cohort_id=cohort["id"], first_name="Carol", last_name="Adams", start_date="2026-04-01")
+        alice = learner_factory(cohort_id=cohort["id"], first_name="Alice", last_name="Zephyr", start_date="2026-04-01")
+
+        diff = compute_register_refresh(db, session_row)
+        assert [r["learnerId"] for r in diff["toAdd"]] == [alice["id"], carol["id"]]
+
     def test_learner_with_recorded_attendance_is_blocked_not_removed(
         self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
     ):

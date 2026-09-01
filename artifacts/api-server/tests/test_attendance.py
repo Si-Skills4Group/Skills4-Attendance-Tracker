@@ -351,6 +351,33 @@ class TestCohortNavigationDataIntegrity:
         assert by_id_b[b2["id"]]["recordedCount"] == 1 and by_id_b[b2["id"]]["expectedCount"] == 1
 
 
+class TestRegisterEntryOrdering:
+    def test_register_entries_are_sorted_by_first_name(
+        self, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        carol = learner_factory(cohort_id=cohort["id"], first_name="Carol", last_name="Adams")
+        alice = learner_factory(cohort_id=cohort["id"], first_name="Alice", last_name="Zephyr")
+        bob = learner_factory(cohort_id=cohort["id"], first_name="Bob", last_name="Baker")
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        view = get_attendance_session(session["id"], admin_user)
+
+        assert [e["learnerId"] for e in view["entries"]] == [alice["id"], bob["id"], carol["id"]]
+
+    def test_expected_learners_are_sorted_by_first_name(
+        self, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        carol = learner_factory(cohort_id=cohort["id"], first_name="Carol", last_name="Adams")
+        alice = learner_factory(cohort_id=cohort["id"], first_name="Alice", last_name="Zephyr")
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+
+        expected = get_session_expected_learners(session["id"], admin_user)
+
+        assert [e["learnerId"] for e in expected] == [alice["id"], carol["id"]]
+
+
 def _as_tutor_via_dependency_override(client, tutor_id, user_id):
     """require_auth is wired directly as Depends(require_auth) on some
     routes (e.g. cancel_attendance_session) rather than via require_admin

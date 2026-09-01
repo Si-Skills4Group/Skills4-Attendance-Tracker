@@ -369,7 +369,7 @@ def get_attendance_session(session_id: int, session: dict = Depends(require_auth
             LEFT JOIN attendance_records ar ON ar.learner_id = l.id AND ar.session_id = %s
             LEFT JOIN users u ON ar.last_edited_by = u.id
             WHERE sel.session_id = %s
-            ORDER BY l.last_name, l.first_name
+            ORDER BY l.first_name, l.last_name
             """,
             (session_id, session_id),
         )
@@ -401,7 +401,7 @@ def get_session_expected_learners(session_id: int, session: dict = Depends(requi
             FROM session_expected_learners sel
             JOIN learners l ON l.id = sel.learner_id
             WHERE sel.session_id = %s
-            ORDER BY l.last_name, l.first_name
+            ORDER BY l.first_name, l.last_name
             """,
             (session_id,),
         )

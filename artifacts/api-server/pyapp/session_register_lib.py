@@ -145,7 +145,7 @@ def compute_register_refresh(cur, session_row: dict) -> dict:
         cur.execute(
             """
             SELECT id AS "learnerId", concat(first_name, ' ', last_name) AS "learnerName"
-            FROM learners WHERE id = ANY(%s) ORDER BY last_name, first_name
+            FROM learners WHERE id = ANY(%s) ORDER BY first_name, last_name
             """,
             (list(ids),),
         )
