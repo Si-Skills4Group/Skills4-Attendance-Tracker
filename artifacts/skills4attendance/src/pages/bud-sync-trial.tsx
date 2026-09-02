@@ -224,14 +224,25 @@ export default function BudSyncTrialPage() {
   };
 
   const newLearnerDraftFor = (item: BudSyncItem) => {
+    if (newLearnerDrafts[item.id]) return newLearnerDrafts[item.id];
     const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
-    return newLearnerDrafts[item.id] ?? { learnerRef: (learner.learnerRef as string) ?? "", level: (learner.level as string) ?? "" };
+    const programme = (learner.programme as string) ?? "";
+    // Level defaults to 3 for every programme except a "Services" one (e.g.
+    // Business Administration Services), which is level 2 -- per Skills 4's
+    // own programme naming, not something Bud itself reports.
+    const defaultLevel = programme.toLowerCase().includes("services") ? "2" : "3";
+    return {
+      learnerRef: (learner.learnerRef as string) || item.sourceLearnerReference || "",
+      level: (learner.level as string) || defaultLevel,
+    };
   };
 
-  const updateNewLearnerDraft = (itemId: number, field: "learnerRef" | "level", value: string) => {
+  const updateNewLearnerDraft = (
+    itemId: number, field: "learnerRef" | "level", value: string, seed: { learnerRef: string; level: string },
+  ) => {
     setNewLearnerDrafts((prev) => ({
       ...prev,
-      [itemId]: { learnerRef: prev[itemId]?.learnerRef ?? "", level: prev[itemId]?.level ?? "", [field]: value },
+      [itemId]: { learnerRef: prev[itemId]?.learnerRef ?? seed.learnerRef, level: prev[itemId]?.level ?? seed.level, [field]: value },
     }));
   };
 
@@ -259,10 +270,15 @@ export default function BudSyncTrialPage() {
     // actually in scope here.
     const jobId = newLearnerItems?.items.find((i) => selectedNewLearnerIds.has(i.id))?.syncJobId;
     if (jobId === undefined) return;
-    const items = Array.from(selectedNewLearnerIds).map((itemId) => {
-      const draft = newLearnerDrafts[itemId] ?? { learnerRef: "", level: "" };
-      return { itemId, learnerRef: draft.learnerRef, level: draft.level };
-    });
+    // Reuses newLearnerDraftFor rather than reading newLearnerDrafts directly,
+    // so a row a user never clicked into still submits the same Ref/Level
+    // default it's showing on screen, not blank strings.
+    const items = (newLearnerItems?.items ?? [])
+      .filter((i) => selectedNewLearnerIds.has(i.id))
+      .map((item) => {
+        const draft = newLearnerDraftFor(item);
+        return { itemId: item.id, learnerRef: draft.learnerRef, level: draft.level };
+      });
     bulkApproveMutation.mutate(
       { jobId, data: { items } },
       {
@@ -602,7 +618,7 @@ export default function BudSyncTrialPage() {
                                 <TableCell>
                                   <Input
                                     value={draft.learnerRef}
-                                    onChange={(e) => updateNewLearnerDraft(item.id, "learnerRef", e.target.value)}
+                                    onChange={(e) => updateNewLearnerDraft(item.id, "learnerRef", e.target.value, draft)}
                                     placeholder="Required"
                                     className="h-8 w-32"
                                     aria-label={`Learner reference for item ${item.id}`}
@@ -611,7 +627,7 @@ export default function BudSyncTrialPage() {
                                 <TableCell>
                                   <Input
                                     value={draft.level}
-                                    onChange={(e) => updateNewLearnerDraft(item.id, "level", e.target.value)}
+                                    onChange={(e) => updateNewLearnerDraft(item.id, "level", e.target.value, draft)}
                                     placeholder="Required"
                                     className="h-8 w-20"
                                     aria-label={`Level for item ${item.id}`}

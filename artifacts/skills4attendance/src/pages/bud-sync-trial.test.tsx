@@ -255,15 +255,19 @@ describe('BudSyncTrialPage', () => {
     expect(screen.getByText('corr-abc')).toBeInTheDocument();
   });
 
-  it('New Learners tab lets an admin fill in Ref/Level inline and bulk-approve selected rows', async () => {
+  it('New Learners tab lets an admin override the defaulted Ref/Level inline and bulk-approve selected rows', async () => {
     const user = userEvent.setup();
     activateJob();
     newLearnerItems = [{ ...newItem, proposedValues: { ...newItem.proposedValues, learner: { ...newItem.proposedValues.learner, learnerRef: null, level: null } } }];
     renderWithQueryClient(<BudSyncTrialPage />);
     await user.click(screen.getByRole('tab', { name: /new learners/i }));
 
-    await user.type(screen.getByLabelText(/learner reference for item 2/i), 'BUD-NEW-1');
-    await user.type(screen.getByLabelText(/level for item 2/i), '3');
+    const refInput = screen.getByLabelText(/learner reference for item 2/i);
+    const levelInput = screen.getByLabelText(/level for item 2/i);
+    await user.clear(refInput);
+    await user.type(refInput, 'BUD-NEW-1');
+    await user.clear(levelInput);
+    await user.type(levelInput, '4');
     await user.click(screen.getByRole('checkbox', { name: /select item 2/i }));
 
     const approveButton = screen.getByRole('button', { name: /approve.*create selected/i });
@@ -271,7 +275,50 @@ describe('BudSyncTrialPage', () => {
     await user.click(approveButton);
 
     expect(mutateSpies.bulkApprove).toHaveBeenCalledWith(
-      { jobId: 9, data: { items: [{ itemId: 2, learnerRef: 'BUD-NEW-1', level: '3' }] } },
+      { jobId: 9, data: { items: [{ itemId: 2, learnerRef: 'BUD-NEW-1', level: '4' }] } },
+      expect.anything(),
+    );
+  });
+
+  it('New Learners tab defaults Ref to the source identifier and Level to 3', async () => {
+    const user = userEvent.setup();
+    activateJob();
+    newLearnerItems = [{ ...newItem, proposedValues: { ...newItem.proposedValues, learner: { ...newItem.proposedValues.learner, learnerRef: null, level: null } } }];
+    renderWithQueryClient(<BudSyncTrialPage />);
+    await user.click(screen.getByRole('tab', { name: /new learners/i }));
+
+    expect(screen.getByLabelText(/learner reference for item 2/i)).toHaveValue('BUD-REF-2');
+    expect(screen.getByLabelText(/level for item 2/i)).toHaveValue('3');
+  });
+
+  it('New Learners tab defaults Level to 2 for a "Services" programme', async () => {
+    const user = userEvent.setup();
+    activateJob();
+    newLearnerItems = [{
+      ...newItem,
+      proposedValues: {
+        ...newItem.proposedValues,
+        learner: { ...newItem.proposedValues.learner, level: null, programme: 'Business Administration Services' },
+      },
+    }];
+    renderWithQueryClient(<BudSyncTrialPage />);
+    await user.click(screen.getByRole('tab', { name: /new learners/i }));
+
+    expect(screen.getByLabelText(/level for item 2/i)).toHaveValue('2');
+  });
+
+  it('bulk-approves with the defaulted Ref/Level for a row the admin never edited', async () => {
+    const user = userEvent.setup();
+    activateJob();
+    newLearnerItems = [{ ...newItem, proposedValues: { ...newItem.proposedValues, learner: { ...newItem.proposedValues.learner, learnerRef: null, level: null } } }];
+    renderWithQueryClient(<BudSyncTrialPage />);
+    await user.click(screen.getByRole('tab', { name: /new learners/i }));
+
+    await user.click(screen.getByRole('checkbox', { name: /select item 2/i }));
+    await user.click(screen.getByRole('button', { name: /approve.*create selected/i }));
+
+    expect(mutateSpies.bulkApprove).toHaveBeenCalledWith(
+      { jobId: 9, data: { items: [{ itemId: 2, learnerRef: 'BUD-REF-2', level: '3' }] } },
       expect.anything(),
     );
   });
