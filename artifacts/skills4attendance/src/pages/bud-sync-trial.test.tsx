@@ -94,6 +94,9 @@ let conflictItems: any[] = [conflictItem];
 // own length, so tests can simulate "more pages exist beyond this one"
 // without needing the mock to actually slice a large array per page.
 let newLearnersTotalOverride: number | null = null;
+// Only set by the cross-page-selection test -- lets the mock return
+// different items per page instead of the same fixed newLearnerItems list.
+let newLearnerItemsByPage: Record<number, typeof newItem[]> | null = null;
 const mutateSpies = {
   establish: vi.fn(),
   reset: vi.fn(),
@@ -119,7 +122,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useListLearners: () => ({ data: { items: [], total: 0, page: 1, pageSize: 10 } }),
   useListBudSyncJobItems: (_jobId: number, params: { matchStatus?: string; page?: number; pageSize?: number }) => {
     const items = params?.matchStatus === 'status_change' ? statusChangeItems
-      : params?.matchStatus === 'new' ? newLearnerItems
+      : params?.matchStatus === 'new' ? (newLearnerItemsByPage ? (newLearnerItemsByPage[params?.page ?? 1] ?? []) : newLearnerItems)
       : params?.matchStatus === 'conflict' ? conflictItems
       : [];
     const total = params?.matchStatus === 'new' && newLearnersTotalOverride !== null ? newLearnersTotalOverride : items.length;
@@ -141,6 +144,7 @@ describe('BudSyncTrialPage', () => {
     newLearnerItems = [newItem];
     conflictItems = [conflictItem];
     newLearnersTotalOverride = null;
+    newLearnerItemsByPage = null;
     Object.values(mutateSpies).forEach((spy) => spy.mockReset());
   });
 
@@ -234,6 +238,42 @@ describe('BudSyncTrialPage', () => {
 
     await user.click(next);
     expect(screen.getByTestId('new-learners-pager-summary').textContent).toMatch(/showing 26 to 30 of 30 new learners/i);
+  });
+
+  it('keeps a selection made on an earlier page when bulk-approving after navigating to a later one', async () => {
+    const user = userEvent.setup();
+    activateJob();
+    const noIncomingRefOrLevel = { ...newItem.proposedValues.learner, learnerRef: null, level: null };
+    const page1Item = {
+      ...newItem, id: 10, sourceLearnerReference: 'BUD-P1',
+      proposedValues: { ...newItem.proposedValues, learner: noIncomingRefOrLevel },
+    };
+    const page2Item = {
+      ...newItem, id: 11, sourceLearnerReference: 'BUD-P2',
+      proposedValues: { ...newItem.proposedValues, learner: noIncomingRefOrLevel },
+    };
+    newLearnersTotalOverride = 30;
+    newLearnerItemsByPage = { 1: [page1Item], 2: [page2Item] };
+    renderWithQueryClient(<BudSyncTrialPage />);
+    await user.click(screen.getByRole('tab', { name: /new learners/i }));
+
+    await user.click(screen.getByRole('checkbox', { name: /select item 10/i }));
+    await user.click(screen.getByRole('button', { name: /next page of new learners/i }));
+    await user.click(screen.getByRole('checkbox', { name: /select item 11/i }));
+    await user.click(screen.getByRole('button', { name: /approve.*create selected/i }));
+
+    expect(mutateSpies.bulkApprove).toHaveBeenCalledWith(
+      {
+        jobId: 9,
+        data: {
+          items: [
+            { itemId: 10, learnerRef: 'BUD-P1', level: '3' },
+            { itemId: 11, learnerRef: 'BUD-P2', level: '3' },
+          ],
+        },
+      },
+      expect.anything(),
+    );
   });
 
   it('Conflicts tab displays unsafe records with no selection checkboxes', async () => {

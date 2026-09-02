@@ -223,8 +223,7 @@ export default function BudSyncTrialPage() {
     });
   };
 
-  const newLearnerDraftFor = (item: BudSyncItem) => {
-    if (newLearnerDrafts[item.id]) return newLearnerDrafts[item.id];
+  const computeNewLearnerDefaultDraft = (item: BudSyncItem) => {
     const learner = (item.proposedValues?.learner as Record<string, unknown>) ?? {};
     const programme = (learner.programme as string) ?? "";
     // Level defaults to 3 for every programme except a "Services" one (e.g.
@@ -236,6 +235,26 @@ export default function BudSyncTrialPage() {
       level: (learner.level as string) || defaultLevel,
     };
   };
+
+  // Each page fetch is only 25 rows, so newLearnerDrafts (keyed by item id,
+  // never reset by pagination) is seeded with every visited page's defaults
+  // as soon as it loads -- not just lazily computed for display. Without
+  // this, selecting rows across two pages and then approving in one go
+  // would only find drafts for whichever page happened to be on screen at
+  // submit time, silently dropping the other page's selections.
+  React.useEffect(() => {
+    const items = newLearnerItems?.items;
+    if (!items || items.length === 0) return;
+    setNewLearnerDrafts((prev) => {
+      const additions = items.filter((item) => !prev[item.id]);
+      if (additions.length === 0) return prev;
+      const next = { ...prev };
+      additions.forEach((item) => { next[item.id] = computeNewLearnerDefaultDraft(item); });
+      return next;
+    });
+  }, [newLearnerItems]);
+
+  const newLearnerDraftFor = (item: BudSyncItem) => newLearnerDrafts[item.id] ?? computeNewLearnerDefaultDraft(item);
 
   const updateNewLearnerDraft = (
     itemId: number, field: "learnerRef" | "level", value: string, seed: { learnerRef: string; level: string },
@@ -270,15 +289,16 @@ export default function BudSyncTrialPage() {
     // actually in scope here.
     const jobId = newLearnerItems?.items.find((i) => selectedNewLearnerIds.has(i.id))?.syncJobId;
     if (jobId === undefined) return;
-    // Reuses newLearnerDraftFor rather than reading newLearnerDrafts directly,
-    // so a row a user never clicked into still submits the same Ref/Level
-    // default it's showing on screen, not blank strings.
-    const items = (newLearnerItems?.items ?? [])
-      .filter((i) => selectedNewLearnerIds.has(i.id))
-      .map((item) => {
-        const draft = newLearnerDraftFor(item);
-        return { itemId: item.id, learnerRef: draft.learnerRef, level: draft.level };
-      });
+    // Iterates selectedNewLearnerIds directly, NOT newLearnerItems.items --
+    // the latter is only the currently-loaded page (25 rows), so filtering
+    // against it would silently drop selections made on any other page.
+    // newLearnerDrafts is seeded for every visited page (see the effect
+    // above), so a row that was never manually edited still resolves to
+    // the same default shown on screen, not blank strings.
+    const items = Array.from(selectedNewLearnerIds).map((itemId) => {
+      const draft = newLearnerDrafts[itemId] ?? { learnerRef: "", level: "" };
+      return { itemId, learnerRef: draft.learnerRef, level: draft.level };
+    });
     bulkApproveMutation.mutate(
       { jobId, data: { items } },
       {
