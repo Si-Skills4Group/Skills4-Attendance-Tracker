@@ -598,9 +598,11 @@ export default function RegisterPage() {
   // ---------------------------------------------------------------------
   const [refreshOpen, setRefreshOpen] = React.useState(false);
   const [refreshDiff, setRefreshDiff] = React.useState<{ toAdd: { learnerId: number; learnerName: string }[]; toRemove: { learnerId: number; learnerName: string }[]; blocked: { learnerId: number; learnerName: string }[] } | null>(null);
+  const [refreshReasonInput, setRefreshReasonInput] = React.useState("");
 
   const openRefreshDialog = () => {
     setRefreshDiff(null);
+    setRefreshReasonInput("");
     setRefreshOpen(true);
     refreshMutation.mutate({ id: sessionId, data: { confirm: false } }, {
       onSuccess: (result) => {
@@ -614,7 +616,7 @@ export default function RegisterPage() {
   };
 
   const confirmRefresh = () => {
-    refreshMutation.mutate({ id: sessionId, data: { confirm: true } }, {
+    refreshMutation.mutate({ id: sessionId, data: { confirm: true, reason: isHistorical ? refreshReasonInput.trim() : undefined } }, {
       onSuccess: () => {
         toast({ title: "Register refreshed" });
         setRefreshOpen(false);
@@ -732,8 +734,7 @@ export default function RegisterPage() {
     && currentUser.tutorId === session.tutorId
     && currentUser.tutorId !== session.coverTutorId;
   const isReadOnly = isCancelled || isLocked || isOriginalTutorWhileCoverActive;
-  const canRefresh = !isCancelled && !isCompleted && !isLocked && !isOriginalTutorWhileCoverActive
-    && session.sessionDate.slice(0, 10) >= todayIso;
+  const canRefresh = !isCancelled && !isCompleted && !isLocked && !isOriginalTutorWhileCoverActive;
   const canLock = isAdmin && isCompleted && !isLocked;
   const canUnlock = isAdmin && isLocked;
   const canManageCover = isAdmin && !isCancelled && !isLocked;
@@ -1274,7 +1275,7 @@ export default function RegisterPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={refreshOpen} onOpenChange={(o) => { setRefreshOpen(o); if (!o) setRefreshDiff(null); }}>
+      <Dialog open={refreshOpen} onOpenChange={(o) => { setRefreshOpen(o); if (!o) { setRefreshDiff(null); setRefreshReasonInput(""); } }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Refresh Expected Learners</DialogTitle>
@@ -1311,13 +1312,29 @@ export default function RegisterPage() {
                   </ul>
                 </div>
               )}
+              {isHistorical && (
+                <div className="border-t pt-4">
+                  <p className="text-xs text-amber-700 dark:text-amber-500 mb-2">
+                    This session has already happened -- refreshing it will be logged as a correction.
+                  </p>
+                  <Label htmlFor="refresh-reason">Reason</Label>
+                  <Textarea
+                    id="refresh-reason" value={refreshReasonInput} onChange={e => setRefreshReasonInput(e.target.value)}
+                    rows={2} className="mt-2"
+                  />
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRefreshOpen(false)}>Cancel</Button>
             <Button
               onClick={confirmRefresh}
-              disabled={!refreshDiff || refreshMutation.isPending || (refreshDiff.toAdd.length === 0 && refreshDiff.toRemove.length === 0)}
+              disabled={
+                !refreshDiff || refreshMutation.isPending
+                || (refreshDiff.toAdd.length === 0 && refreshDiff.toRemove.length === 0)
+                || (isHistorical && !refreshReasonInput.trim())
+              }
             >
               {refreshMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Apply Changes

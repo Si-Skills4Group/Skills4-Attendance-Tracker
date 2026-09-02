@@ -1,4 +1,5 @@
 import datetime
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -805,16 +806,61 @@ class TestRegisterRefreshEndpoint:
         )
         assert db.fetchone() is not None
 
-    def test_historical_session_cannot_be_refreshed(
-        self, request_factory, admin_user, cohort_factory, attendance_session_factory,
+    def test_historical_session_preview_still_works(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
     ):
         cohort = cohort_factory()
         past_date = datetime.date.today() - datetime.timedelta(days=1)
         session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)  # freezes the snapshot before "joins" exists
+
+        joins = learner_factory(cohort_id=cohort["id"], start_date=str(past_date))
+
+        diff = refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
+        assert {learner["learnerId"] for learner in diff["toAdd"]} == {joins["id"]}
+
+    def test_historical_session_refresh_requires_a_reason_to_apply(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        past_date = datetime.date.today() - datetime.timedelta(days=1)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        learner_factory(cohort_id=cohort["id"], start_date=str(past_date))
 
         with pytest.raises(HTTPException) as exc:
-            refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
+            refresh_session_register(session["id"], RefreshRegisterInput(confirm=True), request_factory(), admin_user)
         assert exc.value.status_code == 400
+
+        with pytest.raises(HTTPException) as exc:
+            refresh_session_register(session["id"], RefreshRegisterInput(confirm=True, reason="   "), request_factory(), admin_user)
+        assert exc.value.status_code == 400
+
+    def test_historical_session_can_be_refreshed_with_a_reason_and_is_audited_as_a_correction(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        past_date = datetime.date.today() - datetime.timedelta(days=1)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)  # freezes the snapshot before "joins" exists
+
+        joins = learner_factory(cohort_id=cohort["id"], start_date=str(past_date))
+
+        result = refresh_session_register(
+            session["id"], RefreshRegisterInput(confirm=True, reason="Two learners joined late"), request_factory(), admin_user,
+        )
+        assert {learner["learnerId"] for learner in result["added"]} == {joins["id"]}
+
+        expected = get_session_expected_learners(session["id"], admin_user)
+        assert joins["id"] in {learner["learnerId"] for learner in expected}
+
+        db.execute(
+            "SELECT new_value FROM audit_logs WHERE entity_type = 'attendance_session' AND entity_id = %s "
+            "AND action = 'refresh_register_correction'",
+            (session["id"],),
+        )
+        row = db.fetchone()
+        assert row is not None
+        assert json.loads(row["new_value"])["reason"] == "Two learners joined late"
 
     def test_cancelled_session_cannot_be_refreshed(
         self, request_factory, admin_user, cohort_factory, attendance_session_factory,

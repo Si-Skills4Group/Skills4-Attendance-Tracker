@@ -802,6 +802,7 @@ export interface SessionDeleteInput {
 
 export interface RefreshRegisterInput {
   confirm?: boolean;
+  reason?: string;
 }
 
 export interface CompleteRegisterInput {

@@ -8,4 +8,5 @@
 
 export interface RefreshRegisterInput {
   confirm?: boolean;
+  reason?: string;
 }

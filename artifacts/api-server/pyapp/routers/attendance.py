@@ -128,6 +128,7 @@ class SessionDeleteInput(BaseModel):
 
 class RefreshRegisterInput(BaseModel):
     confirm: bool = False
+    reason: str | None = None
 
 
 class CompleteRegisterInput(BaseModel):
@@ -584,8 +585,15 @@ def refresh_session_register(
         existing = cur.fetchone()
         if existing["status"] == "cancelled":
             raise HTTPException(status_code=400, detail="Cancelled sessions cannot be refreshed")
-        if existing["sessionDate"] < date.today():
-            raise HTTPException(status_code=400, detail="Historical sessions cannot be refreshed")
+        # A past session CAN be refreshed -- learners_expected_in_cohort_as_of
+        # resolves membership as of the session's own date via
+        # learner_allocation_history, so this never applies today's
+        # membership retroactively, and compute_register_refresh already
+        # never removes a learner with recorded attendance (blocked, not
+        # removed). Requiring a reason + auditing it distinctly as a
+        # correction (mirrors assign_cover_tutor's is_correction handling)
+        # is the only extra guard needed for the historical case.
+        is_historical = existing["sessionDate"] < date.today()
 
         ensure_expected_learners_snapshot(
             cur, existing["id"], existing["cohortId"], existing["sessionDate"], session.get("userId")
@@ -597,17 +605,20 @@ def refresh_session_register(
         diff = compute_register_refresh(cur, existing)
         if not payload.confirm:
             return diff
+        if is_historical and not (payload.reason and payload.reason.strip()):
+            raise HTTPException(status_code=400, detail="A reason is required to refresh a historical session's register")
         result = apply_register_refresh(cur, existing, diff, session["userId"])
 
     write_audit_log(
         request,
-        action="refresh_register",
+        action="refresh_register_correction" if is_historical else "refresh_register",
         entity_type="attendance_session",
         entity_id=session_id,
         new_value={
             "added": [r["learnerId"] for r in result["added"]],
             "removed": [r["learnerId"] for r in result["removed"]],
             "blocked": [r["learnerId"] for r in result["blocked"]],
+            **({"reason": payload.reason} if is_historical else {}),
         },
     )
     return result

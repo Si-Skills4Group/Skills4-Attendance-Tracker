@@ -2139,7 +2139,8 @@ export const RefreshSessionRegisterParams = zod.object({
 export const refreshSessionRegisterBodyConfirmDefault = false;
 
 export const RefreshSessionRegisterBody = zod.object({
-  "confirm": zod.boolean().default(refreshSessionRegisterBodyConfirmDefault)
+  "confirm": zod.boolean().default(refreshSessionRegisterBodyConfirmDefault),
+  "reason": zod.string().optional()
 })
 
 export const RefreshSessionRegisterResponse = zod.union([zod.object({

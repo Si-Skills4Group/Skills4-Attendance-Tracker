@@ -3973,6 +3973,7 @@ components:
       type: object
       properties:
         confirm: { type: boolean, default: false }
+        reason: { type: string }
 
     CompleteRegisterInput:
       type: object

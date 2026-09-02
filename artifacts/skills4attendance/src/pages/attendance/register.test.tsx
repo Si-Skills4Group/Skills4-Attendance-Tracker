@@ -264,13 +264,38 @@ describe('RegisterPage', () => {
     expect(screen.getByRole('button', { name: /refresh expected learners/i })).toBeInTheDocument();
   });
 
-  it('hides the Refresh action for a historical session', () => {
+  it('offers the Refresh action for a historical session, requiring a reason to apply it', async () => {
     mockRegister = {
       data: { session: makeSession({ sessionDate: '2020-01-01' }), entries },
       isLoading: false,
     };
+    mockRefreshMutate.mockImplementation((payload, { onSuccess }: any) => {
+      if (payload.data.confirm) {
+        onSuccess({ added: [{ learnerId: 3, learnerName: 'Carol Jones' }], removed: [], blocked: [] });
+      } else {
+        onSuccess({ toAdd: [{ learnerId: 3, learnerName: 'Carol Jones' }], toRemove: [], blocked: [] });
+      }
+    });
+    const user = userEvent.setup();
     renderAtLocation();
-    expect(screen.queryByRole('button', { name: /refresh expected learners/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /refresh expected learners/i }));
+    expect(await screen.findByText('To add (1)')).toBeInTheDocument();
+
+    const applyButton = screen.getByRole('button', { name: /apply changes/i });
+    expect(applyButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Reason'), 'Two learners joined late and need adding');
+    expect(applyButton).not.toBeDisabled();
+
+    await user.click(applyButton);
+
+    await waitFor(() => {
+      expect(mockRefreshMutate).toHaveBeenLastCalledWith(
+        { id: 200, data: { confirm: true, reason: 'Two learners joined late and need adding' } },
+        expect.anything(),
+      );
+    });
   });
 
   it('offers the Refresh action for a tutor on their own, uncovered session', () => {
