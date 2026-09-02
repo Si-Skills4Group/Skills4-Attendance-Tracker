@@ -96,7 +96,7 @@ let conflictItems: any[] = [conflictItem];
 let newLearnersTotalOverride: number | null = null;
 // Only set by the cross-page-selection test -- lets the mock return
 // different items per page instead of the same fixed newLearnerItems list.
-let newLearnerItemsByPage: Record<number, typeof newItem[]> | null = null;
+let newLearnerItemsByPage: Record<number, any[]> | null = null;
 const mutateSpies = {
   establish: vi.fn(),
   reset: vi.fn(),
