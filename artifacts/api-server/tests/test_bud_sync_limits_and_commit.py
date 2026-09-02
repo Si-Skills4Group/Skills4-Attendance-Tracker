@@ -57,6 +57,45 @@ class TestTrialLimits:
         db.execute("SELECT count(*)::int AS c FROM learners WHERE learner_ref LIKE 'BUD-LIM-%'")
         assert db.fetchone()["c"] == 0
 
+        # Regression: this rejection is an ordinary, correctable validation
+        # error -- the job must stay "ready" (not get wedged as "failed")
+        # so the admin can simply resubmit with an override reason.
+        db.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job["id"],))
+        assert db.fetchone()["status"] == "ready"
+
+    def test_commit_can_be_retried_with_an_override_reason_after_the_limit_rejection(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, _one_learner_creation_limit,
+    ):
+        baseline_factory()
+        _prep_two_new_learners(db, bud_row_factory, tutor_factory, "R")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_ids = [r["id"] for r in db.fetchall()]
+        for item_id in item_ids:
+            update_item(
+                db, job["id"], item_id,
+                {"learner.level": "3", "learner.learnerRef": f"BUD-LIM-R-{item_id}"},
+                True,
+            )
+
+        with pytest.raises(HTTPException) as exc_info:
+            run_commit(db, job["id"], item_ids, "over limit", None, request_factory(admin_user), admin_user)
+        assert exc_info.value.status_code == 409
+
+        result = run_commit(
+            db, job["id"], item_ids, "over limit but approved", "Trial expansion approved by admin",
+            request_factory(admin_user), admin_user,
+        )
+        assert result["status"] == "completed"
+
+        db.execute("SELECT id FROM learners WHERE learner_ref LIKE 'BUD-LIM-R-%'")
+        created = db.fetchall()
+        assert len(created) == 2
+        for row in created:
+            db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (row["id"],))
+            db.execute("DELETE FROM learners WHERE id = %s", (row["id"],))
+
     def test_override_reason_allows_commit_and_is_audited(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, _one_learner_creation_limit,
     ):

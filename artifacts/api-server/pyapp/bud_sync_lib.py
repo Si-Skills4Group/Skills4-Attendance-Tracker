@@ -1234,85 +1234,100 @@ def run_commit(cur, job_id: int, item_ids: list[int], approval_reason: str, limi
     job = get_job(cur, job_id)
     if job["status"] == "completed":
         return job  # idempotent replay -- no reapplication
-
-    cur.execute("UPDATE bud_sync_job SET status = 'committing' WHERE id = %s AND status = 'ready'", (job_id,))
-    if cur.rowcount == 0:
+    if job["status"] != "ready":
         raise HTTPException(status_code=409, detail=f"Job is not ready to commit (status={job['status']})")
 
-    try:
-        active_baseline = get_active_baseline(cur)
-        if active_baseline is None or active_baseline["id"] != job["baselineId"]:
-            raise HTTPException(
-                status_code=409,
-                detail="The trial baseline has changed since this preview was generated. Generate a new preview.",
-            )
-
-        cur.execute(
-            """
-            SELECT id, sync_job_id AS "syncJobId", source_identifier AS "sourceIdentifier", match_status AS "matchStatus",
-                   action_type AS "actionType", internal_learner_id AS "internalLearnerId",
-                   proposed_values AS "proposedValues", previous_values AS "previousValues"
-            FROM bud_sync_item WHERE id = ANY(%s) AND sync_job_id = %s
-            """,
-            (item_ids, job_id),
+    # Everything below this point through the trial-limit check is pure
+    # validation -- reads plus the staleness pre-check's own item-level
+    # writes (autocommitted immediately, independent of this function's
+    # outcome; see the transaction's own comment below). None of it may
+    # mark the job "failed": an admin correcting a 400/409 here (missing
+    # fields, over the trial limit without an override reason, etc.) must
+    # be able to simply resubmit, not find the job permanently wedged.
+    # Only a genuine failure while actually applying the batch, in the
+    # transaction below, should ever flip status to "failed".
+    active_baseline = get_active_baseline(cur)
+    if active_baseline is None or active_baseline["id"] != job["baselineId"]:
+        raise HTTPException(
+            status_code=409,
+            detail="The trial baseline has changed since this preview was generated. Generate a new preview.",
         )
-        items = cur.fetchall()
-        found_ids = {i["id"] for i in items}
-        missing_ids = set(item_ids) - found_ids
-        if missing_ids:
-            raise HTTPException(status_code=404, detail=f"Sync item(s) not found in this job: {sorted(missing_ids)}")
 
-        conflicted = [i["id"] for i in items if i["matchStatus"] == "conflict"]
-        if conflicted:
-            raise HTTPException(status_code=400, detail=f"Conflicted items cannot be committed: {conflicted}")
-        incomplete = [i["id"] for i in items if _item_missing_fields(i)]
-        if incomplete:
-            raise HTTPException(status_code=400, detail=f"Item(s) missing required fields: {incomplete}")
+    cur.execute(
+        """
+        SELECT id, sync_job_id AS "syncJobId", source_identifier AS "sourceIdentifier", match_status AS "matchStatus",
+               action_type AS "actionType", internal_learner_id AS "internalLearnerId",
+               proposed_values AS "proposedValues", previous_values AS "previousValues"
+        FROM bud_sync_item WHERE id = ANY(%s) AND sync_job_id = %s
+        """,
+        (item_ids, job_id),
+    )
+    items = cur.fetchall()
+    found_ids = {i["id"] for i in items}
+    missing_ids = set(item_ids) - found_ids
+    if missing_ids:
+        raise HTTPException(status_code=404, detail=f"Sync item(s) not found in this job: {sorted(missing_ids)}")
 
-        # Staleness: re-read just the selected items' Bud source rows and
-        # internal learner rows; anything that moved since preview is
-        # excluded from this batch rather than blindly applied. Source
-        # staleness is detected via synced_at (Bud's own "this row changed"
-        # marker, captured at preview time in previous_values.budSyncedAt);
-        # internal staleness via learners.updated_at, mirroring the
-        # register-version optimistic-concurrency pattern.
-        surviving: list[dict] = []
-        stale_source_ids: list[int] = []
-        stale_internal_ids: list[int] = []
-        fresh_bud_rows_by_plan_id: dict[str, dict] = {r["learningPlanId"]: r for r in _fetch_bud_rows(cur)}
-        for item in items:
-            previous = item["previousValues"] or {}
-            fresh_row = fresh_bud_rows_by_plan_id.get(item["sourceIdentifier"])
-            previous_synced_at = previous.get("budSyncedAt")
-            fresh_synced_at = str(fresh_row["syncedAt"]) if fresh_row and fresh_row.get("syncedAt") else None
-            if item["actionType"] != "none" and previous_synced_at and fresh_synced_at != previous_synced_at:
-                stale_source_ids.append(item["id"])
+    conflicted = [i["id"] for i in items if i["matchStatus"] == "conflict"]
+    if conflicted:
+        raise HTTPException(status_code=400, detail=f"Conflicted items cannot be committed: {conflicted}")
+    incomplete = [i["id"] for i in items if _item_missing_fields(i)]
+    if incomplete:
+        raise HTTPException(status_code=400, detail=f"Item(s) missing required fields: {incomplete}")
+
+    # Staleness: re-read just the selected items' Bud source rows and
+    # internal learner rows; anything that moved since preview is
+    # excluded from this batch rather than blindly applied. Source
+    # staleness is detected via synced_at (Bud's own "this row changed"
+    # marker, captured at preview time in previous_values.budSyncedAt);
+    # internal staleness via learners.updated_at, mirroring the
+    # register-version optimistic-concurrency pattern.
+    surviving: list[dict] = []
+    stale_source_ids: list[int] = []
+    stale_internal_ids: list[int] = []
+    fresh_bud_rows_by_plan_id: dict[str, dict] = {r["learningPlanId"]: r for r in _fetch_bud_rows(cur)}
+    for item in items:
+        previous = item["previousValues"] or {}
+        fresh_row = fresh_bud_rows_by_plan_id.get(item["sourceIdentifier"])
+        previous_synced_at = previous.get("budSyncedAt")
+        fresh_synced_at = str(fresh_row["syncedAt"]) if fresh_row and fresh_row.get("syncedAt") else None
+        if item["actionType"] != "none" and previous_synced_at and fresh_synced_at != previous_synced_at:
+            stale_source_ids.append(item["id"])
+            continue
+
+        if item["internalLearnerId"] is not None and previous.get("updatedAt"):
+            cur.execute("SELECT updated_at AS \"updatedAt\" FROM learners WHERE id = %s", (item["internalLearnerId"],))
+            current = cur.fetchone()
+            if current and str(current["updatedAt"]) != previous["updatedAt"]:
+                stale_internal_ids.append(item["id"])
                 continue
 
-            if item["internalLearnerId"] is not None and previous.get("updatedAt"):
-                cur.execute("SELECT updated_at AS \"updatedAt\" FROM learners WHERE id = %s", (item["internalLearnerId"],))
-                current = cur.fetchone()
-                if current and str(current["updatedAt"]) != previous["updatedAt"]:
-                    stale_internal_ids.append(item["id"])
-                    continue
+        surviving.append(item)
 
-            surviving.append(item)
+    for item_id in stale_source_ids + stale_internal_ids:
+        cur.execute(
+            "UPDATE bud_sync_item SET outcome = %s, processed_at = now() WHERE id = %s",
+            ("stale_internal_rejected" if item_id in stale_internal_ids else "stale_source_rejected", item_id),
+        )
 
-        for item_id in stale_source_ids + stale_internal_ids:
-            cur.execute(
-                "UPDATE bud_sync_item SET outcome = %s, processed_at = now() WHERE id = %s",
-                ("stale_internal_rejected" if item_id in stale_internal_ids else "stale_source_rejected", item_id),
-            )
+    limits = _get_trial_limits(cur)
+    batch_counts = _count_batch_actions(surviving)
+    over_limit = {k: v for k, v in batch_counts.items() if v > limits[k]}
+    if over_limit and not limit_override_reason:
+        raise HTTPException(
+            status_code=409,
+            detail={"reason": "trial_limit_exceeded", "overLimit": over_limit, "limits": limits},
+        )
 
-        limits = _get_trial_limits(cur)
-        batch_counts = _count_batch_actions(surviving)
-        over_limit = {k: v for k, v in batch_counts.items() if v > limits[k]}
-        if over_limit and not limit_override_reason:
-            raise HTTPException(
-                status_code=409,
-                detail={"reason": "trial_limit_exceeded", "overLimit": over_limit, "limits": limits},
-            )
+    # Only from here on is the job actually claimed for writing -- the
+    # atomic status flip (rather than a plain UPDATE) still guards against
+    # two concurrent commit requests both passing the checks above and
+    # both trying to apply the same batch.
+    cur.execute("UPDATE bud_sync_job SET status = 'committing' WHERE id = %s AND status = 'ready'", (job_id,))
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Job is not ready to commit (status changed concurrently)")
 
+    try:
         # Every business write for this batch -- the limit-override audit,
         # each item's create/update dispatch, its accepted-snapshot upsert,
         # its per-item audit row, and the job's own completion -- shares one
