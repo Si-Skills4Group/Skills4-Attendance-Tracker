@@ -924,7 +924,7 @@ export default function RegisterPage() {
         )}
       </div>
 
-      <Card className="flex-1 shadow-sm overflow-hidden flex flex-col min-h-0 page-transition-enter stagger-1">
+      <Card className="flex-1 min-h-[260px] shadow-sm overflow-hidden flex flex-col page-transition-enter stagger-1">
         <div className="overflow-auto flex-1 relative">
           <Table>
             <TableHeader className="bg-muted/30 sticky top-0 z-10 backdrop-blur-md shadow-sm">

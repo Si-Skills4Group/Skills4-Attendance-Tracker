@@ -3,7 +3,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..allocation_lib import expected_learners_count_sql
 from ..bud_progress import get_bud_progress_by_uln
 from ..attendance_metrics import (
     Period,
@@ -75,12 +74,20 @@ def _sessions_awaiting_completion(
         params.append(cohort_ids)
 
     where = " AND ".join(clauses)
-    # Expected learners are resolved as of each session's own date (not the
-    # learner's current cohort) -- otherwise a learner who has since
-    # transferred elsewhere would silently disappear from a past session's
-    # outstanding-count calculation, or a past session could look
-    # "complete" purely because its roster shrank after the fact.
-    expected_sql = expected_learners_count_sql("s.cohort_id", "s.session_date")
+    # Expected learners are read from each session's own frozen
+    # session_expected_learners snapshot -- the exact same source
+    # _compute_register_status/fetch_register_completion use (attendance.py,
+    # attendance_metrics.py) -- rather than recomputed live, so a session
+    # this list flags always agrees with what that session's own register
+    # page shows. A live recomputation disagrees with an already-completed
+    # or locked register the moment any later, unrelated allocation
+    # correction changes who's "expected" as of that date -- exactly what
+    # the snapshot exists to prevent (session_register_lib.py's module
+    # docstring). Reopening a completed session's roster is a deliberate,
+    # reason-required action (Refresh Expected Learners), not something
+    # this list should nag about on its own -- so locked/already-complete
+    # sessions are excluded here the same way fetch_register_completion
+    # buckets them separately from "outstanding".
     cur.execute(
         f"""
         SELECT s.id, s.cohort_id AS "cohortId", c.name AS "cohortName", s.session_date AS "sessionDate",
@@ -93,10 +100,11 @@ def _sessions_awaiting_completion(
         LEFT JOIN tutors t ON c.tutor_id = t.id
         LEFT JOIN tutors ct ON s.cover_tutor_id = ct.id
         WHERE {where}
-          AND {expected_sql} > 0
+          AND s.register_locked_at IS NULL
+          AND (SELECT count(*) FROM session_expected_learners sel WHERE sel.session_id = s.id) > 0
           AND (
               SELECT count(*) FROM attendance_records ar WHERE ar.session_id = s.id
-          ) < {expected_sql}
+          ) < (SELECT count(*) FROM session_expected_learners sel WHERE sel.session_id = s.id)
         ORDER BY s.session_date DESC
         """,
         params,

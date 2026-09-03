@@ -60,7 +60,7 @@ export function RegisterHistoryPanel({ sessionId }: { sessionId: number }) {
         ) : !data || data.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No history recorded for this session yet.</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-3 max-h-72 overflow-y-auto pr-1">
             {data.items.map((entry) => (
               <li key={entry.id} className="text-sm border-l-2 border-muted pl-3">
                 <div className="flex items-center gap-2 flex-wrap">

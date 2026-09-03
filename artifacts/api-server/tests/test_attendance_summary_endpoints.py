@@ -352,3 +352,67 @@ class TestReconciliation:
             (session_before_transfer["id"], learner["id"]),
         )
         assert db.fetchone()["cohort_id"] == cohort_old["id"]
+
+
+class TestSessionsAwaitingCompletion:
+    """A completed/locked session's own frozen session_expected_learners
+    snapshot is what makes it "complete" -- this list must agree with that,
+    not recompute eligibility live and disagree with the register's own
+    page the moment an unrelated, later allocation change alters who'd be
+    expected today."""
+
+    def test_a_completed_session_does_not_reappear_after_a_later_unrelated_learner_joins_the_cohort(
+        self, db, admin_user, request_factory, tutor_factory, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        from datetime import date, timedelta
+
+        from pyapp.routers.attendance import (
+            AttendanceRegisterInput, CompleteRegisterInput, RegisterEntryInput, complete_register, save_attendance_register,
+        )
+        from pyapp.routers.dashboard import get_admin_dashboard
+
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        session_date = date.today() - timedelta(days=1)
+        learner = learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"], start_date="2026-01-01")
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=session_date.isoformat(), created_by=admin_user["userId"])
+
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[
+                RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0),
+            ]),
+            request_factory(), admin_user,
+        )
+        complete_register(
+            session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+            request_factory(), admin_user,
+        )
+
+        # A second learner joins the cohort AFTER the register was
+        # completed, backdated to before the session -- this raises what a
+        # LIVE eligibility recomputation would call "expected" for that
+        # date, but must not touch the frozen snapshot or un-complete the
+        # session from this list's perspective.
+        learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"], start_date="2026-01-01")
+
+        result = get_admin_dashboard(admin_user)
+        assert session["id"] not in {s["id"] for s in result["sessionsAwaitingCompletion"]}
+
+    def test_a_genuinely_incomplete_past_session_still_appears(
+        self, db, admin_user, request_factory, tutor_factory, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        from datetime import date, timedelta
+
+        from pyapp.routers.attendance import get_attendance_session
+        from pyapp.routers.dashboard import get_admin_dashboard
+
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"], start_date="2026-01-01")
+        session_date = date.today() - timedelta(days=1)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=session_date.isoformat(), created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)  # generates the expected-learners snapshot
+
+        result = get_admin_dashboard(admin_user)
+        assert session["id"] in {s["id"] for s in result["sessionsAwaitingCompletion"]}
