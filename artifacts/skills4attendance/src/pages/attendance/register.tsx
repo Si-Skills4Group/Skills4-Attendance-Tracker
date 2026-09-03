@@ -744,6 +744,7 @@ export default function RegisterPage() {
   const isSaving = saveMutation.isPending || completeMutation.isPending;
 
   return (
+    <>
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full flex flex-col h-[calc(100vh-64px)]">
       <div className="shrink-0 page-transition-enter">
         <Breadcrumbs items={[
@@ -1050,14 +1051,19 @@ export default function RegisterPage() {
             "Changes are kept locally until you click Save Draft or Complete Register."}
         </div>
       </Card>
+    </div>
 
-      {isAdmin && (
-        <div className="mt-6 shrink-0">
-          <RegisterHistoryPanel sessionId={sessionId} />
-        </div>
-      )}
+    {/* Register history is admin-only and secondary to the register itself
+        -- kept out of the fixed-viewport-height block above so it can never
+        shrink the learner table; it's reached by scrolling the page past
+        that block, not by competing with it for space. */}
+    {isAdmin && (
+      <div className="px-6 md:px-8 pb-6 max-w-7xl mx-auto w-full">
+        <RegisterHistoryPanel sessionId={sessionId} />
+      </div>
+    )}
 
-      {/* Historical change-reason prompt */}
+    {/* Historical change-reason prompt */}
       <Dialog open={!!reasonDialog} onOpenChange={(o) => { if (!o) { setReasonDialog(null); setReasonInput(""); } }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -1448,6 +1454,6 @@ export default function RegisterPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
