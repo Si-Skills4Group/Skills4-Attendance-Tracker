@@ -929,8 +929,26 @@ def bulk_approve_new_learners(cur, job_id: int, items: list[dict], request: Requ
     if job["status"] != "ready":
         raise HTTPException(status_code=409, detail=f"Job is not in a reviewable state (status={job['status']})")
 
+    # sourceLearnerReference (the default the frontend now pre-fills learnerRef
+    # with) is Bud's per-PERSON identifier, not per-enrolment -- the same
+    # person can have multiple learning plans sharing one reference, so two
+    # otherwise-unrelated "new" rows in one batch can easily default to the
+    # same learnerRef. Caught here (and reported per-item, like every other
+    # rejection in this function) rather than only surfacing deep inside
+    # _create_learner's UNIQUE constraint at commit time, which would roll
+    # back the whole batch instead of just the offending row(s).
+    submitted_refs = {entry["learnerRef"].strip() for entry in items if entry.get("learnerRef", "").strip()}
+    existing_refs: set[str] = set()
+    if submitted_refs:
+        cur.execute(
+            "SELECT learner_ref FROM learners WHERE learner_ref = ANY(%s) AND deleted_at IS NULL",
+            (list(submitted_refs),),
+        )
+        existing_refs = {r["learner_ref"] for r in cur.fetchall()}
+
     approved_ids: list[int] = []
     errors: list[dict] = []
+    claimed_refs: dict[str, int] = {}
     with cur.connection.transaction():
         for entry in items:
             item_id = entry["itemId"]
@@ -956,6 +974,19 @@ def bulk_approve_new_learners(cur, job_id: int, items: list[dict], request: Requ
             if not learner_ref or not level:
                 errors.append({"itemId": item_id, "message": "learnerRef and level are both required"})
                 continue
+            if learner_ref in existing_refs:
+                errors.append({
+                    "itemId": item_id,
+                    "message": f"'{learner_ref}' is already used by an existing learner -- use Already represented to link this row to them instead",
+                })
+                continue
+            if learner_ref in claimed_refs:
+                errors.append({
+                    "itemId": item_id,
+                    "message": f"'{learner_ref}' is also used by item #{claimed_refs[learner_ref]} in this batch -- give it a different reference",
+                })
+                continue
+            claimed_refs[learner_ref] = item_id
 
             proposed = item["proposedValues"]
             proposed["learner"]["learnerRef"] = learner_ref
@@ -1274,6 +1305,33 @@ def run_commit(cur, job_id: int, item_ids: list[int], approval_reason: str, limi
     incomplete = [i["id"] for i in items if _item_missing_fields(i)]
     if incomplete:
         raise HTTPException(status_code=400, detail=f"Item(s) missing required fields: {incomplete}")
+
+    # Defense-in-depth against bulk_approve_new_learners' own duplicate/
+    # existing-reference check (the earlier, primary catch point) -- an
+    # item could reach here via a different approval path, or a collision
+    # could newly appear between approve and commit. Every item here has a
+    # non-empty learnerRef already, per the incomplete check above.
+    ref_to_item_ids: dict[str, list[int]] = {}
+    for i in items:
+        if i["actionType"] != "create_learner":
+            continue
+        ref_to_item_ids.setdefault(i["proposedValues"]["learner"]["learnerRef"], []).append(i["id"])
+    duplicated_refs = {ref: ids for ref, ids in ref_to_item_ids.items() if len(ids) > 1}
+    if duplicated_refs:
+        detail = "; ".join(f"'{ref}' used by items {ids}" for ref, ids in duplicated_refs.items())
+        raise HTTPException(status_code=400, detail=f"Duplicate learner reference(s) within this batch: {detail}")
+    if ref_to_item_ids:
+        cur.execute(
+            "SELECT learner_ref FROM learners WHERE learner_ref = ANY(%s) AND deleted_at IS NULL",
+            (list(ref_to_item_ids.keys()),),
+        )
+        existing_refs = {r["learner_ref"] for r in cur.fetchall()}
+        if existing_refs:
+            detail = "; ".join(f"'{ref}' (item {ref_to_item_ids[ref]})" for ref in sorted(existing_refs))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Reference(s) already used by an existing learner -- use Already represented to link instead: {detail}",
+            )
 
     # Staleness: re-read just the selected items' Bud source rows and
     # internal learner rows; anything that moved since preview is

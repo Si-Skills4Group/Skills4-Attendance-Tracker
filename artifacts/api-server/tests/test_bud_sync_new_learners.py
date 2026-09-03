@@ -498,6 +498,66 @@ class TestBulkApproveNewLearners:
         assert result["approvedCount"] == 1
         assert result["errors"] == [{"itemId": item_ids[1], "message": "learnerRef and level are both required"}]
 
+    def test_two_items_sharing_a_reference_in_one_batch_only_approves_the_first(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
+    ):
+        # sourceLearnerReference is Bud's per-PERSON identifier -- the same
+        # person can have two learning plans (different learning_plan_id)
+        # sharing one reference, and neither yet matches an internal
+        # learner, so both classify "new" independently.
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-BULK-5' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-5", start_date=_tomorrow(), learner_reference="BUD-SHARED-REF")
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-5", start_date=_tomorrow(), learner_reference="BUD-SHARED-REF")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new' ORDER BY id", (job["id"],))
+        item_ids = [row["id"] for row in db.fetchall()]
+        assert len(item_ids) == 2
+
+        result = bulk_approve_new_learners(
+            db, job["id"],
+            [
+                {"itemId": item_ids[0], "learnerRef": "BUD-SHARED-REF", "level": "3"},
+                {"itemId": item_ids[1], "learnerRef": "BUD-SHARED-REF", "level": "3"},
+            ],
+            request_factory(admin_user), admin_user,
+        )
+        assert result["approvedCount"] == 1
+        assert result["errors"] == [{
+            "itemId": item_ids[1],
+            "message": f"'BUD-SHARED-REF' is also used by item #{item_ids[0]} in this batch -- give it a different reference",
+        }]
+
+        db.execute("SELECT approved FROM bud_sync_item WHERE id = %s", (item_ids[0],))
+        assert db.fetchone()["approved"] is True
+        db.execute("SELECT approved FROM bud_sync_item WHERE id = %s", (item_ids[1],))
+        assert db.fetchone()["approved"] is False
+
+    def test_a_reference_already_used_by_an_existing_learner_is_rejected(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, learner_factory,
+    ):
+        learner_factory(learner_ref="BUD-EXISTING-REF")
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-BULK-6' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-6", start_date=_tomorrow())
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_id = db.fetchone()["id"]
+
+        result = bulk_approve_new_learners(
+            db, job["id"], [{"itemId": item_id, "learnerRef": "BUD-EXISTING-REF", "level": "3"}],
+            request_factory(admin_user), admin_user,
+        )
+        assert result["approvedCount"] == 0
+        assert result["errors"] == [{
+            "itemId": item_id,
+            "message": "'BUD-EXISTING-REF' is already used by an existing learner -- use Already represented to link this row to them instead",
+        }]
+
     def test_a_completed_job_rejects_further_bulk_approval(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
     ):

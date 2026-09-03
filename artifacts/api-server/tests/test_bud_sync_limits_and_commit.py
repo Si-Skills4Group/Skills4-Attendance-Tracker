@@ -220,3 +220,57 @@ class TestCommitIdempotencyAndStaleness:
         assert db.fetchone()["outcome"] == "stale_internal_rejected"
         db.execute("SELECT email FROM learners WHERE id = %s", (learner["id"],))
         assert db.fetchone()["email"] != "second-change@example.com"
+
+
+class TestDuplicateOrExistingLearnerRef:
+    """Defense-in-depth: bulk_approve_new_learners is the primary catch
+    point for a duplicate/existing learnerRef (see test_bud_sync_new_learners.py),
+    but run_commit re-checks independently for anything that reached it via
+    a different approval path. update_item has no such guard of its own,
+    so it's used here specifically to exercise run_commit's own check."""
+
+    def test_two_create_learner_items_sharing_a_reference_are_rejected_and_job_stays_ready(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
+    ):
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-DUP-1' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(tutor_id="BUD-DUP-1", start_date=_tomorrow(), synced_at="2099-01-01T00:00:00Z", learner_reference="BUD-DUP-REF")
+        bud_row_factory(tutor_id="BUD-DUP-1", start_date=_tomorrow(), synced_at="2099-01-01T00:00:00Z", learner_reference="BUD-DUP-REF")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new' ORDER BY id", (job["id"],))
+        item_ids = [r["id"] for r in db.fetchall()]
+        assert len(item_ids) == 2
+        for item_id in item_ids:
+            update_item(db, job["id"], item_id, {"learner.level": "3", "learner.learnerRef": "BUD-DUP-REF"}, True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            run_commit(db, job["id"], item_ids, "reason", None, request_factory(admin_user), admin_user)
+        assert exc_info.value.status_code == 400
+
+        db.execute("SELECT count(*)::int AS c FROM learners WHERE learner_ref = 'BUD-DUP-REF'")
+        assert db.fetchone()["c"] == 0
+        db.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job["id"],))
+        assert db.fetchone()["status"] == "ready"
+
+    def test_a_create_learner_item_whose_reference_already_exists_is_rejected_and_job_stays_ready(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, learner_factory,
+    ):
+        learner_factory(learner_ref="BUD-DUP-EXISTING")
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-DUP-2' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(tutor_id="BUD-DUP-2", start_date=_tomorrow(), synced_at="2099-01-01T00:00:00Z")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_id = db.fetchone()["id"]
+        update_item(db, job["id"], item_id, {"learner.level": "3", "learner.learnerRef": "BUD-DUP-EXISTING"}, True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            run_commit(db, job["id"], [item_id], "reason", None, request_factory(admin_user), admin_user)
+        assert exc_info.value.status_code == 400
+
+        db.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job["id"],))
+        assert db.fetchone()["status"] == "ready"
