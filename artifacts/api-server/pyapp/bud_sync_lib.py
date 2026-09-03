@@ -937,13 +937,17 @@ def bulk_approve_new_learners(cur, job_id: int, items: list[dict], request: Requ
     # rejection in this function) rather than only surfacing deep inside
     # _create_learner's UNIQUE constraint at commit time, which would roll
     # back the whole batch instead of just the offending row(s).
+    #
+    # Deliberately NOT filtered to deleted_at IS NULL -- learners.learner_ref
+    # has a plain UNIQUE constraint with no such exception (bootstrap.py),
+    # and _create_learner's own pre-insert check doesn't filter it either,
+    # so a soft-deleted learner's old reference is still just as blocked.
+    # Excluding deleted rows here would silently pass a ref through that
+    # the actual INSERT then rejects anyway.
     submitted_refs = {entry["learnerRef"].strip() for entry in items if entry.get("learnerRef", "").strip()}
     existing_refs: set[str] = set()
     if submitted_refs:
-        cur.execute(
-            "SELECT learner_ref FROM learners WHERE learner_ref = ANY(%s) AND deleted_at IS NULL",
-            (list(submitted_refs),),
-        )
+        cur.execute("SELECT learner_ref FROM learners WHERE learner_ref = ANY(%s)", (list(submitted_refs),))
         existing_refs = {r["learner_ref"] for r in cur.fetchall()}
 
     approved_ids: list[int] = []
@@ -1321,10 +1325,10 @@ def run_commit(cur, job_id: int, item_ids: list[int], approval_reason: str, limi
         detail = "; ".join(f"'{ref}' used by items {ids}" for ref, ids in duplicated_refs.items())
         raise HTTPException(status_code=400, detail=f"Duplicate learner reference(s) within this batch: {detail}")
     if ref_to_item_ids:
-        cur.execute(
-            "SELECT learner_ref FROM learners WHERE learner_ref = ANY(%s) AND deleted_at IS NULL",
-            (list(ref_to_item_ids.keys()),),
-        )
+        # Not filtered to deleted_at IS NULL -- see the matching comment in
+        # bulk_approve_new_learners; the UNIQUE constraint doesn't exempt
+        # soft-deleted rows, so neither can this check.
+        cur.execute("SELECT learner_ref FROM learners WHERE learner_ref = ANY(%s)", (list(ref_to_item_ids.keys()),))
         existing_refs = {r["learner_ref"] for r in cur.fetchall()}
         if existing_refs:
             detail = "; ".join(f"'{ref}' (item {ref_to_item_ids[ref]})" for ref in sorted(existing_refs))

@@ -558,6 +558,36 @@ class TestBulkApproveNewLearners:
             "message": "'BUD-EXISTING-REF' is already used by an existing learner -- use Already represented to link this row to them instead",
         }]
 
+    def test_a_reference_used_by_a_soft_deleted_learner_is_still_rejected(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, learner_factory,
+    ):
+        # learners.learner_ref is a plain UNIQUE constraint with no
+        # deleted_at exception, and _create_learner's own pre-insert check
+        # doesn't filter deleted rows either -- so a soft-deleted learner's
+        # old reference is just as blocked as an active one's. This check
+        # must agree, or it waves through a ref the actual INSERT then
+        # rejects deep inside the commit transaction.
+        deleted = learner_factory(learner_ref="BUD-DELETED-REF")
+        db.execute("UPDATE learners SET deleted_at = now() WHERE id = %s", (deleted["id"],))
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-T-BULK-7' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(synced_at="2099-01-01T00:00:00Z", tutor_id="BUD-T-BULK-7", start_date=_tomorrow())
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_id = db.fetchone()["id"]
+
+        result = bulk_approve_new_learners(
+            db, job["id"], [{"itemId": item_id, "learnerRef": "BUD-DELETED-REF", "level": "3"}],
+            request_factory(admin_user), admin_user,
+        )
+        assert result["approvedCount"] == 0
+        assert result["errors"] == [{
+            "itemId": item_id,
+            "message": "'BUD-DELETED-REF' is already used by an existing learner -- use Already represented to link this row to them instead",
+        }]
+
     def test_a_completed_job_rejects_further_bulk_approval(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory,
     ):

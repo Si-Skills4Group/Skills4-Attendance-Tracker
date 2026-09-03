@@ -274,3 +274,30 @@ class TestDuplicateOrExistingLearnerRef:
 
         db.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job["id"],))
         assert db.fetchone()["status"] == "ready"
+
+    def test_a_create_learner_item_whose_reference_belongs_to_a_soft_deleted_learner_is_rejected_and_job_stays_ready(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, tutor_factory, learner_factory,
+    ):
+        # Regression: learner_ref's UNIQUE constraint has no deleted_at
+        # exception, so a soft-deleted learner's old reference is still
+        # blocked -- this check must not exclude deleted_at IS NOT NULL
+        # rows, or it waves a ref through that _create_learner's own
+        # pre-insert check then rejects deep inside the transaction.
+        deleted = learner_factory(learner_ref="BUD-DUP-DELETED")
+        db.execute("UPDATE learners SET deleted_at = now() WHERE id = %s", (deleted["id"],))
+        tutor = tutor_factory()
+        db.execute("UPDATE tutors SET external_system_id = 'BUD-DUP-3' WHERE id = %s", (tutor["tutorId"],))
+        baseline_factory()
+        bud_row_factory(tutor_id="BUD-DUP-3", start_date=_tomorrow(), synced_at="2099-01-01T00:00:00Z")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute("SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND match_status = 'new'", (job["id"],))
+        item_id = db.fetchone()["id"]
+        update_item(db, job["id"], item_id, {"learner.level": "3", "learner.learnerRef": "BUD-DUP-DELETED"}, True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            run_commit(db, job["id"], [item_id], "reason", None, request_factory(admin_user), admin_user)
+        assert exc_info.value.status_code == 400
+
+        db.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job["id"],))
+        assert db.fetchone()["status"] == "ready"
