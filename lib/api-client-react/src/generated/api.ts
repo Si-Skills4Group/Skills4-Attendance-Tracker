@@ -72,6 +72,7 @@ import type {
   ExportAllocationHistoryReportParams,
   ExportAttendanceHoursReportParams,
   ExportCohortReportParams,
+  ExportLastAttendanceReportParams,
   ExportLatenessReportParams,
   ExportLearnerReportParams,
   ExportOrganisationReportParams,
@@ -86,6 +87,7 @@ import type {
   GetAttendanceHoursReportParams,
   GetCohortAttendanceSummaryParams,
   GetCohortReportV2Params,
+  GetLastAttendanceReportParams,
   GetLatenessReportParams,
   GetLearnerAttendanceSummaryParams,
   GetLearnerReportV2Params,
@@ -97,6 +99,7 @@ import type {
   GetTutorOutstandingRegistersParams,
   GetTutorReportV2Params,
   HealthStatus,
+  LastAttendanceReportResponse,
   LatenessReportResponse,
   Learner,
   LearnerAttendanceSummaryListResponse,
@@ -6688,6 +6691,162 @@ export function useExportRegisterCompletionReport<TData = Awaited<ReturnType<typ
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportRegisterCompletionReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLastAttendanceReportUrl = (params?: GetLastAttendanceReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/last-attendance?${stringifiedParams}` : `/api/reports/last-attendance`
+}
+
+export const getLastAttendanceReport = async (params?: GetLastAttendanceReportParams, options?: RequestInit): Promise<LastAttendanceReportResponse> => {
+
+  return customFetch<LastAttendanceReportResponse>(getGetLastAttendanceReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLastAttendanceReportQueryKey = (params?: GetLastAttendanceReportParams,) => {
+    return [
+    `/api/reports/last-attendance`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetLastAttendanceReportQueryOptions = <TData = Awaited<ReturnType<typeof getLastAttendanceReport>>, TError = ErrorType<ErrorResponse>>(params?: GetLastAttendanceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLastAttendanceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLastAttendanceReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLastAttendanceReport>>> = ({ signal }) => getLastAttendanceReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLastAttendanceReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLastAttendanceReportQueryResult = NonNullable<Awaited<ReturnType<typeof getLastAttendanceReport>>>
+export type GetLastAttendanceReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetLastAttendanceReport<TData = Awaited<ReturnType<typeof getLastAttendanceReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetLastAttendanceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLastAttendanceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLastAttendanceReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportLastAttendanceReportUrl = (params?: ExportLastAttendanceReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/last-attendance/export?${stringifiedParams}` : `/api/reports/last-attendance/export`
+}
+
+export const exportLastAttendanceReport = async (params?: ExportLastAttendanceReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportLastAttendanceReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportLastAttendanceReportQueryKey = (params?: ExportLastAttendanceReportParams,) => {
+    return [
+    `/api/reports/last-attendance/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportLastAttendanceReportQueryOptions = <TData = Awaited<ReturnType<typeof exportLastAttendanceReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportLastAttendanceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportLastAttendanceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportLastAttendanceReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportLastAttendanceReport>>> = ({ signal }) => exportLastAttendanceReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportLastAttendanceReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportLastAttendanceReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportLastAttendanceReport>>>
+export type ExportLastAttendanceReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportLastAttendanceReport<TData = Awaited<ReturnType<typeof exportLastAttendanceReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportLastAttendanceReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportLastAttendanceReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportLastAttendanceReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

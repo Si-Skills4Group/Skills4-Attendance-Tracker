@@ -1157,6 +1157,27 @@ export interface LatenessReportResponse {
   metrics: AttendanceMetrics;
 }
 
+export interface LastAttendanceRow {
+  learnerId: number;
+  learnerName: string;
+  learnerRef: string;
+  status: LearnerStatus;
+  /** @nullable */
+  cohortId: number | null;
+  /** @nullable */
+  cohortName: string | null;
+  tutorName: string;
+  /** @nullable */
+  lastAttendedDate: string | null;
+}
+
+export interface LastAttendanceReportResponse {
+  items: LastAttendanceRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface AttendanceHoursItem {
   key: string;
   label: string;
@@ -1989,6 +2010,20 @@ tutorId?: TutorIdQueryParamParameter;
 cohortId?: CohortIdQueryParamParameter;
 registerStatus?: RegisterStatusFilter;
 overdueOnly?: boolean;
+};
+
+export type GetLastAttendanceReportParams = {
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+status?: LearnerStatus;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type ExportLastAttendanceReportParams = {
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+status?: LearnerStatus;
 };
 
 export type GetAllocationHistoryReportParams = {

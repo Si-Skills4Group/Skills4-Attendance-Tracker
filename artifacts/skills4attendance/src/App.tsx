@@ -34,6 +34,7 @@ const AbsenceReportPage = React.lazy(() => import("@/pages/reports/absence"));
 const LatenessReportPage = React.lazy(() => import("@/pages/reports/lateness"));
 const AttendanceHoursReportPage = React.lazy(() => import("@/pages/reports/attendance-hours"));
 const RegisterCompletionReportPage = React.lazy(() => import("@/pages/reports/register-completion"));
+const LastAttendanceReportPage = React.lazy(() => import("@/pages/reports/last-attendance"));
 const AllocationHistoryReportPage = React.lazy(() => import("@/pages/reports/allocation-history"));
 const AuditLogPage = React.lazy(() => import("@/pages/audit-log"));
 const BudSyncTrialPage = React.lazy(() => import("@/pages/bud-sync-trial"));
@@ -77,6 +78,7 @@ function ProtectedRouter() {
           <Route path="/reports/lateness" component={LatenessReportPage} />
           <Route path="/reports/attendance-hours" component={AttendanceHoursReportPage} />
           <Route path="/reports/register-completion" component={RegisterCompletionReportPage} />
+          <Route path="/reports/last-attendance" component={LastAttendanceReportPage} />
           <Route path="/reports/allocation-history" component={AllocationHistoryReportPage} />
           <Route path="/audit-log">{() => <RequireAdmin><AuditLogPage /></RequireAdmin>}</Route>
           <Route path="/bud-sync-trial">{() => <RequireAdmin><BudSyncTrialPage /></RequireAdmin>}</Route>

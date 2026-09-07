@@ -299,3 +299,75 @@ class TestCsvResponseShape:
         assert "notes" not in header
         assert "entraId" not in header
         assert all(not col.startswith("_") for col in header)
+
+
+class TestLastAttendanceExport:
+    """The last-attendance report is a point-in-time learner listing, not a
+    period-bounded session listing like every other report in this file --
+    but it shares the exact same export machinery (stream_report_csv), so
+    it gets its own small slice of the same coverage rather than a full
+    duplicate of every class above."""
+
+    def test_successful_export_is_audited_with_no_period(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory,
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"])
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/last-attendance/export?cohortId={cohort['id']}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/csv")
+        correlation_id = response.headers["X-Correlation-Id"]
+
+        audit_row = _latest_audit_row(db, correlation_id)
+        assert audit_row["action"] == "export_report"
+        assert audit_row["new_value"]["reportType"] == "last-attendance"
+        assert audit_row["new_value"]["outcome"] == "completed"
+        assert audit_row["new_value"]["dateFrom"] is None
+        assert audit_row["new_value"]["dateTo"] is None
+
+    def test_content_columns_are_the_explicit_allowlist_only(
+        self, client, monkeypatch, cohort_factory, learner_factory,
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"])
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/last-attendance/export?cohortId={cohort['id']}")
+        assert response.status_code == 200
+        header = next(csv.reader(io.StringIO(response.text)))
+        assert header == ["learnerName", "learnerRef", "cohortName", "tutorName", "status", "lastAttendedDate"]
+
+    def test_a_never_attended_learner_exports_with_a_blank_date(
+        self, client, monkeypatch, cohort_factory, learner_factory,
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"], learner_ref="LAST-ATT-1")
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/last-attendance/export?cohortId={cohort['id']}")
+        rows = list(csv.reader(io.StringIO(response.text)))
+        header, data_rows = rows[0], rows[1:]
+        row = next(r for r in data_rows if r[header.index("learnerRef")] == "LAST-ATT-1")
+        assert row[header.index("lastAttendedDate")] == ""
+
+    def test_tutor_cannot_export_another_tutors_cohort(self, client, monkeypatch, tutor_factory, cohort_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(f"/api/reports/last-attendance/export?cohortId={cohort['id']}")
+        assert response.status_code == 403
+
+    def test_tutor_cannot_widen_scope_by_supplying_someone_elses_cohort_alongside_their_own_tutor_id(
+        self, client, monkeypatch, tutor_factory, cohort_factory,
+    ):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(
+            f"/api/reports/last-attendance/export?tutorId={other['tutorId']}&cohortId={cohort['id']}"
+        )
+        assert response.status_code == 403

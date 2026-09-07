@@ -3432,6 +3432,43 @@ export const ExportRegisterCompletionReportQueryParams = zod.object({
 export const ExportRegisterCompletionReportResponse = zod.unknown()
 
 
+export const getLastAttendanceReportQueryPageDefault = 1;
+export const getLastAttendanceReportQueryPageSizeDefault = 25;
+
+export const GetLastAttendanceReportQueryParams = zod.object({
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional(),
+  "page": zod.coerce.number().default(getLastAttendanceReportQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getLastAttendanceReportQueryPageSizeDefault)
+})
+
+export const GetLastAttendanceReportResponse = zod.object({
+  "items": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "learnerRef": zod.string(),
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
+  "cohortId": zod.number().nullable(),
+  "cohortName": zod.string().nullable(),
+  "tutorName": zod.string(),
+  "lastAttendedDate": zod.coerce.date().nullable()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const ExportLastAttendanceReportQueryParams = zod.object({
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional()
+})
+
+export const ExportLastAttendanceReportResponse = zod.unknown()
+
+
 export const getAllocationHistoryReportQueryPageDefault = 1;
 export const getAllocationHistoryReportQueryPageSizeDefault = 25;
 

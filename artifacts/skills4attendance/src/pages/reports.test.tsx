@@ -36,6 +36,7 @@ describe('ReportsHubPage', () => {
     expect(screen.getByText('Absence Analysis')).toBeInTheDocument();
     expect(screen.getByText('Late Attendance')).toBeInTheDocument();
     expect(screen.getByText('Register Completion')).toBeInTheDocument();
+    expect(screen.getByText('Last Attendance')).toBeInTheDocument();
     expect(screen.queryByText('Organisation Overview')).not.toBeInTheDocument();
     expect(screen.queryByText('Allocation History')).not.toBeInTheDocument();
   });

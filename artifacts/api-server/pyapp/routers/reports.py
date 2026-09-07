@@ -36,12 +36,14 @@ from ..report_rows import (
     RegisterStatusFilter,
     fetch_absence_rows,
     fetch_allocation_history_rows,
+    fetch_last_attendance_rows,
     fetch_lateness_rows,
     fetch_learner_session_history,
     fetch_register_completion_rows,
 )
 from .cohorts import COHORT_SELECT
 from .dashboard import _get_threshold, _low_attendance_rows, _resolve_period_or_400
+from .learners import LearnerStatus
 from .tutors import TUTOR_SELECT
 
 router = APIRouter(tags=["reports"])
@@ -127,6 +129,8 @@ ALLOCATION_HISTORY_COLUMNS = [
     "learnerName", "previousTutorName", "newTutorName", "previousCohortName", "newCohortName",
     "effectiveDate", "effectiveTo", "transferReason", "changedByName", "changedDate",
 ]
+
+LAST_ATTENDANCE_COLUMNS = ["learnerName", "learnerRef", "cohortName", "tutorName", "status", "lastAttendedDate"]
 
 
 # ---------------------------------------------------------------------------
@@ -787,6 +791,53 @@ def export_register_completion_report(
         request, report_type="register-completion", columns=REGISTER_COMPLETION_COLUMNS, filename="register-completion-report.csv",
         fetch_page=fetch_page, date_from=period_start, date_to=period_end,
         filters={"tutorId": tutor_id, "cohortId": cohort_id, "registerStatus": registerStatus, "overdueOnly": overdueOnly},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Last-attendance report -- every learner's most recently attended session,
+# a point-in-time snapshot rather than a period aggregate (no date_from/
+# date_to; a learner who's never attended still appears, with a null date).
+# ---------------------------------------------------------------------------
+
+
+@router.get("/reports/last-attendance")
+def get_last_attendance_report(
+    tutorId: int | None = None,
+    cohortId: int | None = None,
+    status: LearnerStatus | None = None,
+    page: int = 1,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
+    session: dict = Depends(require_auth),
+):
+    with get_cursor() as cur:
+        tutor_id, cohort_id, _ = _enforce_tutor_scope(cur, session, tutorId, cohortId, None)
+        rows, total = fetch_last_attendance_rows(
+            cur, tutor_id=tutor_id, cohort_id=cohort_id, status=status, page=page, page_size=pageSize,
+        )
+    return {"items": rows, "total": total, "page": page, "pageSize": pageSize}
+
+
+@router.get("/reports/last-attendance/export")
+def export_last_attendance_report(
+    request: Request,
+    tutorId: int | None = None,
+    cohortId: int | None = None,
+    status: LearnerStatus | None = None,
+    session: dict = Depends(require_auth),
+):
+    with get_cursor() as cur:
+        tutor_id, cohort_id, _ = _enforce_tutor_scope(cur, session, tutorId, cohortId, None)
+
+    def fetch_page(cur, page, page_size):
+        return fetch_last_attendance_rows(
+            cur, tutor_id=tutor_id, cohort_id=cohort_id, status=status, page=page, page_size=page_size,
+        )
+
+    return stream_report_csv(
+        request, report_type="last-attendance", columns=LAST_ATTENDANCE_COLUMNS, filename="last-attendance-report.csv",
+        fetch_page=fetch_page, date_from=None, date_to=None,
+        filters={"tutorId": tutor_id, "cohortId": cohort_id, "status": status},
     )
 
 

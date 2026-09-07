@@ -2346,6 +2346,56 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /reports/last-attendance:
+    get:
+      operationId: getLastAttendanceReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/LearnerStatus" }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Every learner's most recently attended session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LastAttendanceReportResponse" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/last-attendance/export:
+    get:
+      operationId: exportLastAttendanceReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/LearnerStatus" }
+      responses:
+        "200":
+          description: CSV export of the last-attendance listing (streamed)
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to export this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /reports/allocation-history:
     get:
       operationId: getAllocationHistoryReport
@@ -4414,6 +4464,30 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    LastAttendanceRow:
+      type: object
+      required: [learnerId, learnerName, learnerRef, status, cohortId, cohortName, tutorName, lastAttendedDate]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+        status: { $ref: "#/components/schemas/LearnerStatus" }
+        cohortId: { type: ["integer", "null"] }
+        cohortName: { type: ["string", "null"] }
+        tutorName: { type: string }
+        lastAttendedDate: { type: ["string", "null"], format: date }
+
+    LastAttendanceReportResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/LastAttendanceRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     AttendanceHoursItem:
       type: object

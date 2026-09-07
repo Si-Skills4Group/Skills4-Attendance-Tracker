@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from pyapp.report_rows import (
     fetch_absence_rows,
     fetch_allocation_history_rows,
+    fetch_last_attendance_rows,
     fetch_learner_session_history,
     fetch_lateness_rows,
     fetch_register_completion_rows,
@@ -261,3 +262,95 @@ class TestFetchLearnerSessionHistory:
 
         rows, total = fetch_learner_session_history(db, learner_id=learner["id"], period_start=PERIOD[0], period_end=PERIOD[1])
         assert total == 0
+
+
+class TestFetchLastAttendanceRows:
+    """Learner-centric, unlike the session-row-centric functions above --
+    every learner appears once, even one who's never attended at all."""
+
+    def test_a_learner_with_no_attended_sessions_shows_a_null_date(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _record(db, session_row["id"], learner["id"], "absent_unauthorised")
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
+        assert total == 1
+        assert rows[0]["learnerId"] == learner["id"]
+        assert rows[0]["lastAttendedDate"] is None
+
+    def test_picks_the_most_recent_attended_session_ignoring_a_later_absence(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        earlier = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        later = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-13", created_by=admin_user["userId"])
+        _record(db, earlier["id"], learner["id"], "present", hours_attended=6)
+        _record(db, later["id"], learner["id"], "absent_authorised")
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
+        assert total == 1
+        assert rows[0]["lastAttendedDate"].isoformat() == "2026-01-06"
+
+    def test_picks_the_latest_of_two_attended_sessions(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        earlier = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        later = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-13", created_by=admin_user["userId"])
+        _record(db, earlier["id"], learner["id"], "present", hours_attended=6)
+        _record(db, later["id"], learner["id"], "late", hours_attended=5, minutes_late=10)
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
+        assert rows[0]["lastAttendedDate"].isoformat() == "2026-01-13"
+
+    def test_a_cancelled_sessions_attendance_is_excluded(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
+        db.execute("UPDATE attendance_sessions SET status = 'cancelled' WHERE id = %s", (session_row["id"],))
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
+        assert rows[0]["lastAttendedDate"] is None
+
+    def test_tutor_filter_scopes_to_the_learners_own_tutor(
+        self, db, tutor_factory, cohort_factory, learner_factory
+    ):
+        tutor_a = tutor_factory()
+        tutor_b = tutor_factory()
+        cohort = cohort_factory()
+        learner_a = learner_factory(cohort_id=cohort["id"], tutor_id=tutor_a["tutorId"])
+        learner_factory(cohort_id=cohort["id"], tutor_id=tutor_b["tutorId"])
+
+        rows, total = fetch_last_attendance_rows(db, tutor_id=tutor_a["tutorId"])
+        assert total == 1
+        assert rows[0]["learnerId"] == learner_a["id"]
+
+    def test_status_filter(self, db, cohort_factory, learner_factory):
+        cohort = cohort_factory()
+        active = learner_factory(cohort_id=cohort["id"], status="active")
+        learner_factory(cohort_id=cohort["id"], status="withdrawn", withdrawal_date="2026-01-01")
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"], status="active")
+        assert total == 1
+        assert rows[0]["learnerId"] == active["id"]
+
+    def test_never_attended_learner_sorts_before_an_attended_one_regardless_of_name(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        attended = learner_factory(cohort_id=cohort["id"], first_name="Aaa")
+        never = learner_factory(cohort_id=cohort["id"], first_name="Zzz")
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _record(db, session_row["id"], attended["id"], "present", hours_attended=6)
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
+        assert total == 2
+        assert [r["learnerId"] for r in rows] == [never["id"], attended["id"]]

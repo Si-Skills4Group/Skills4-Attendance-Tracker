@@ -116,6 +116,78 @@ def fetch_learner_session_history(
     return cur.fetchall(), total
 
 
+def fetch_last_attendance_rows(
+    cur,
+    *,
+    tutor_id: int | None = None,
+    cohort_id: int | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> tuple[list[dict], int]:
+    """One row per learner (learner-centric, unlike every other function in
+    this file, which is session-row-centric) -- their most recent attended
+    (present/late) session, or NULL if they've never attended one. A
+    learner with no attended sessions still appears here, deliberately:
+    spotting exactly that is this report's whole purpose. Filters on the
+    learner's own tutor_id/cohort_id (their current assignment), not the
+    cohort's tutor, since this lists learners, not sessions."""
+    clauses = ["l.deleted_at IS NULL"]
+    params: dict = {}
+    if tutor_id is not None:
+        clauses.append("l.tutor_id = %(tutorId)s")
+        params["tutorId"] = tutor_id
+    if cohort_id is not None:
+        clauses.append("l.cohort_id = %(cohortId)s")
+        params["cohortId"] = cohort_id
+    if status:
+        clauses.append("l.status = %(status)s")
+        params["status"] = status
+    where = " AND ".join(clauses)
+
+    last_attended_cte = """
+        WITH last_attended AS (
+            SELECT ar.learner_id, MAX(s.session_date) AS last_attended_date
+            FROM attendance_records ar
+            JOIN attendance_sessions s ON ar.session_id = s.id
+            WHERE ar.status IN ('present', 'late') AND s.status != 'cancelled' AND s.deleted_at IS NULL
+            GROUP BY ar.learner_id
+        )
+    """
+
+    cur.execute(
+        f"""
+        {last_attended_cte}
+        SELECT count(*) AS total
+        FROM learners l
+        LEFT JOIN last_attended la ON la.learner_id = l.id
+        WHERE {where}
+        """,
+        params,
+    )
+    total = cur.fetchone()["total"]
+
+    cur.execute(
+        f"""
+        {last_attended_cte}
+        SELECT l.id AS "learnerId", concat(l.first_name, ' ', l.last_name) AS "learnerName",
+               l.learner_ref AS "learnerRef", l.status,
+               c.id AS "cohortId", c.name AS "cohortName",
+               CASE WHEN t.id IS NULL THEN 'Unassigned' ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName",
+               la.last_attended_date AS "lastAttendedDate"
+        FROM learners l
+        LEFT JOIN cohorts c ON l.cohort_id = c.id
+        LEFT JOIN tutors t ON l.tutor_id = t.id
+        LEFT JOIN last_attended la ON la.learner_id = l.id
+        WHERE {where}
+        ORDER BY la.last_attended_date ASC NULLS FIRST, l.last_name, l.first_name
+        LIMIT %(limit)s OFFSET %(offset)s
+        """,
+        {**params, "limit": page_size, "offset": (page - 1) * page_size},
+    )
+    return cur.fetchall(), total
+
+
 def fetch_absence_rows(
     cur,
     *,

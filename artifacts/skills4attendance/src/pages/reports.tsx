@@ -13,6 +13,7 @@ import {
   Clock,
   ClipboardCheck,
   History,
+  UserX,
   ArrowRight,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ const CARDS: ReportCard[] = [
   { href: "/reports/absence", title: "Absence Analysis", description: "Authorised and unauthorised absences, with the same filters as every other report.", icon: CalendarX },
   { href: "/reports/lateness", title: "Late Attendance", description: "Late arrivals and how many minutes were missed.", icon: Clock },
   { href: "/reports/register-completion", title: "Register Completion", description: "Which registers are outstanding, in progress, completed or locked.", icon: ClipboardCheck },
+  { href: "/reports/last-attendance", title: "Last Attendance", description: "Every learner's most recently attended session, to spot who's gone quiet.", icon: UserX },
   { href: "/reports/allocation-history", title: "Allocation History", description: "Learner transfers between tutors and cohorts over time.", icon: History, adminOnly: true },
 ];
 
