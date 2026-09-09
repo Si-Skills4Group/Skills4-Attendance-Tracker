@@ -44,6 +44,23 @@ export default function AllocationPage() {
   const { data: tutors = [] } = useListTutors({ active: true });
   const { data: cohorts = [] } = useListCohorts({ active: true });
 
+  // Once a target tutor is chosen, only that tutor's own cohorts make sense
+  // as a target cohort -- an unfiltered list would let an admin pick a
+  // combination the backend would reject (or silently mismatch) anyway.
+  const targetTutorIdNum = targetTutorId ? Number(targetTutorId) : null;
+  const targetCohortOptions = targetTutorIdNum
+    ? cohorts.filter((c) => c.tutorId === targetTutorIdNum)
+    : cohorts;
+
+  const handleTargetTutorChange = (value: string) => {
+    setTargetTutorId(value);
+    const tutorIdNum = value ? Number(value) : null;
+    const selectedCohort = cohorts.find((c) => String(c.id) === targetCohortId);
+    if (tutorIdNum && selectedCohort && selectedCohort.tutorId !== tutorIdNum) {
+      setTargetCohortId("");
+    }
+  };
+
   const { data: learnersData, isLoading, refetch: refetchLearners } = useListLearners({
     search: debouncedSearch || undefined,
     unallocated: tutorFilter === unallocatedValue ? true : undefined,
@@ -314,7 +331,7 @@ export default function AllocationPage() {
                     ...tutors.map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
                   ]}
                   value={targetTutorId}
-                  onValueChange={setTargetTutorId}
+                  onValueChange={handleTargetTutorChange}
                   placeholder="Leave unchanged"
                   searchPlaceholder="Search tutors..."
                 />
@@ -326,7 +343,7 @@ export default function AllocationPage() {
                   aria-label="Target Cohort"
                   options={[
                     { value: "", label: "Leave unchanged" },
-                    ...cohorts.map((c) => ({ value: String(c.id), label: c.name })),
+                    ...targetCohortOptions.map((c) => ({ value: String(c.id), label: c.name })),
                   ]}
                   value={targetCohortId}
                   onValueChange={setTargetCohortId}

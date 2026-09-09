@@ -9,7 +9,10 @@ const tutors = [
   { id: 20, firstName: 'Cara', lastName: 'Cover' },
 ];
 
-const cohorts = [{ id: 5, name: 'Cohort A' }];
+const cohorts = [
+  { id: 5, name: 'Cohort A', tutorId: 10 },
+  { id: 6, name: 'Cohort B', tutorId: 20 },
+];
 
 function makeLearner(overrides: Record<string, any> = {}) {
   return {
@@ -116,6 +119,41 @@ describe('AllocationPage', () => {
     await user.click(await screen.findByText('Cara Cover'));
     expect(screen.queryByText('Choose a new tutor or cohort.')).not.toBeInTheDocument();
     expect(applyButton).toBeEnabled();
+  });
+
+  it('shows every cohort in the target picker when no target tutor is chosen', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('combobox', { name: /target cohort/i }));
+    expect(await screen.findByText('Cohort A')).toBeInTheDocument();
+    expect(screen.getByText('Cohort B')).toBeInTheDocument();
+  });
+
+  it('narrows the target cohort picker to the chosen target tutor\'s own cohorts', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('combobox', { name: /target tutor/i }));
+    await user.click(await screen.findByText('Cara Cover'));
+
+    await user.click(screen.getByRole('combobox', { name: /target cohort/i }));
+    expect(await screen.findByText('Cohort B')).toBeInTheDocument();
+    expect(screen.queryByText('Cohort A')).not.toBeInTheDocument();
+  });
+
+  it('clears an already-chosen target cohort that does not belong to the newly chosen target tutor', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('combobox', { name: /target cohort/i }));
+    await user.click(await screen.findByText('Cohort A'));
+    expect(screen.getByRole('combobox', { name: /target cohort/i })).toHaveTextContent('Cohort A');
+
+    await user.click(screen.getByRole('combobox', { name: /target tutor/i }));
+    await user.click(await screen.findByText('Cara Cover'));
+
+    expect(screen.getByRole('combobox', { name: /target cohort/i })).toHaveTextContent('Leave unchanged');
   });
 
   it('executes a transfer with the selected learner ids and chosen target', async () => {
