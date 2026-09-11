@@ -106,6 +106,19 @@ class TestFetchAbsenceRows:
         assert total == 0
         assert rows == []
 
+    def test_deleted_sessions_are_excluded(self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _record(db, session_row["id"], learner["id"], "absent_unauthorised")
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session_row["id"],))
+
+        rows, total = fetch_absence_rows(
+            db, absence_type="absent_unauthorised", period_start=PERIOD[0], period_end=PERIOD[1], cohort_id=cohort["id"]
+        )
+        assert total == 0
+        assert rows == []
+
 
 class TestFetchLatenessRows:
     def test_returns_minutes_late_and_orders_worst_first(
@@ -135,6 +148,17 @@ class TestFetchLatenessRows:
         rows, total = fetch_lateness_rows(db, period_start=PERIOD[0], period_end=PERIOD[1], cohort_id=cohort["id"])
         assert total == 1
         assert rows[0]["learnerId"] == late_learner["id"]
+
+    def test_deleted_sessions_are_excluded(self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _record(db, session_row["id"], learner["id"], "late", hours_attended=5, minutes_late=10)
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session_row["id"],))
+
+        rows, total = fetch_lateness_rows(db, period_start=PERIOD[0], period_end=PERIOD[1], cohort_id=cohort["id"])
+        assert total == 0
+        assert rows == []
 
 
 class TestFetchRegisterCompletionRows:
@@ -190,6 +214,18 @@ class TestFetchRegisterCompletionRows:
         )
         assert total == 1
         assert rows[0]["sessionId"] == s_completed["id"]
+
+    def test_deleted_sessions_are_excluded(self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session_row["id"],))
+
+        rows, total = fetch_register_completion_rows(db, period_start=PERIOD[0], period_end=PERIOD[1], cohort_id=cohort["id"])
+        assert total == 0
+        assert rows == []
 
 
 class TestFetchAllocationHistoryRows:
@@ -263,6 +299,18 @@ class TestFetchLearnerSessionHistory:
         rows, total = fetch_learner_session_history(db, learner_id=learner["id"], period_start=PERIOD[0], period_end=PERIOD[1])
         assert total == 0
 
+    def test_deleted_sessions_are_excluded_from_history(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session_row["id"],))
+
+        rows, total = fetch_learner_session_history(db, learner_id=learner["id"], period_start=PERIOD[0], period_end=PERIOD[1])
+        assert total == 0
+
 
 class TestFetchLastAttendanceRows:
     """Learner-centric, unlike the session-row-centric functions above --
@@ -316,6 +364,18 @@ class TestFetchLastAttendanceRows:
         session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
         _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
         db.execute("UPDATE attendance_sessions SET status = 'cancelled' WHERE id = %s", (session_row["id"],))
+
+        rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
+        assert rows[0]["lastAttendedDate"] is None
+
+    def test_a_deleted_sessions_attendance_is_excluded(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _record(db, session_row["id"], learner["id"], "present", hours_attended=6)
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session_row["id"],))
 
         rows, total = fetch_last_attendance_rows(db, cohort_id=cohort["id"])
         assert rows[0]["lastAttendedDate"] is None

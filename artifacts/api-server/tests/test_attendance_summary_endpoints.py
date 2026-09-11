@@ -416,3 +416,24 @@ class TestSessionsAwaitingCompletion:
 
         result = get_admin_dashboard(admin_user)
         assert session["id"] in {s["id"] for s in result["sessionsAwaitingCompletion"]}
+
+    def test_a_deleted_incomplete_session_does_not_appear(
+        self, db, admin_user, request_factory, tutor_factory, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        from datetime import date, timedelta
+
+        from pyapp.routers.attendance import (
+            SessionDeleteInput, delete_attendance_session, get_attendance_session,
+        )
+        from pyapp.routers.dashboard import get_admin_dashboard
+
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"], start_date="2026-01-01")
+        session_date = date.today() - timedelta(days=1)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=session_date.isoformat(), created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)  # generates the expected-learners snapshot
+        delete_attendance_session(session["id"], SessionDeleteInput(reason="Duplicate"), request_factory(), admin_user)
+
+        result = get_admin_dashboard(admin_user)
+        assert session["id"] not in {s["id"] for s in result["sessionsAwaitingCompletion"]}

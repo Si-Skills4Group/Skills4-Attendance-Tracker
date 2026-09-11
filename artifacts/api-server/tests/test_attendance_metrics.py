@@ -234,6 +234,24 @@ class TestFetchAttendanceMetrics:
         assert metrics.expectedMinutes == 0
         assert metrics.unauthorisedAbsenceMinutes == 0
 
+    def test_deleted_sessions_are_excluded(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "absent_unauthorised")
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session["id"],))
+
+        metrics = fetch_attendance_metrics(
+            db, scope="learner", scope_id=learner["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert metrics.expectedMinutes == 0
+        assert metrics.unauthorisedAbsenceMinutes == 0
+
     def test_deleted_learner_minutes_are_excluded_from_cohort_scope(
         self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
     ):
@@ -632,6 +650,21 @@ class TestFetchRegisterCompletion:
         session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
         _snapshot(db, session)
         db.execute("UPDATE attendance_sessions SET status = 'cancelled' WHERE id = %s", (session["id"],))
+
+        summary = fetch_register_completion(
+            db, scope="cohort", scope_id=cohort["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert summary.notStarted == 0
+        assert summary.completionPercentage is None
+
+    def test_deleted_sessions_are_excluded_from_completion(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(cohort_id=cohort["id"], created_by=admin_user["userId"])
+        _snapshot(db, session)
+        db.execute("UPDATE attendance_sessions SET deleted_at = now() WHERE id = %s", (session["id"],))
 
         summary = fetch_register_completion(
             db, scope="cohort", scope_id=cohort["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
