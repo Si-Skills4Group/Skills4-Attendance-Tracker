@@ -180,6 +180,27 @@ def apply_register_refresh(cur, session_row: dict, diff: dict, user_id: int | No
             (session_id, learner["learnerId"]),
         )
 
+    if diff["toAdd"]:
+        # Adding a learner can turn an already-completed register genuinely
+        # incomplete again (expected now exceeds recorded). registerStatus
+        # itself is always derived fresh from these two counts (never
+        # stored), so it self-corrects on the next read -- but completed_at/
+        # completed_by ARE stored, display-only fields ("Completed Sep 3,
+        # 2026") that would otherwise sit there contradicting a freshly
+        # "in progress" register. Clearing them only fires when adding
+        # actually reopens the register -- a remove-only refresh (expected
+        # count going down) never touches them.
+        cur.execute("SELECT count(*)::int AS c FROM session_expected_learners WHERE session_id = %s", (session_id,))
+        expected_count = cur.fetchone()["c"]
+        cur.execute("SELECT count(*)::int AS c FROM attendance_records WHERE session_id = %s", (session_id,))
+        recorded_count = cur.fetchone()["c"]
+        if recorded_count < expected_count:
+            cur.execute(
+                "UPDATE attendance_sessions SET completed_at = NULL, completed_by = NULL "
+                "WHERE id = %s AND completed_at IS NOT NULL",
+                (session_id,),
+            )
+
     return {
         "added": diff["toAdd"],
         "removed": diff["toRemove"],

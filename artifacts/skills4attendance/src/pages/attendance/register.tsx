@@ -734,7 +734,11 @@ export default function RegisterPage() {
     && currentUser.tutorId === session.tutorId
     && currentUser.tutorId !== session.coverTutorId;
   const isReadOnly = isCancelled || isLocked || isOriginalTutorWhileCoverActive;
-  const canRefresh = !isCancelled && !isCompleted && !isLocked && !isOriginalTutorWhileCoverActive;
+  // A completed register can only be refreshed by an admin (mirrors the
+  // backend's own admin-only gate for that case); a not-yet-completed
+  // register keeps working for any writer, historical or not. Locked
+  // stays fully hidden -- unlock first.
+  const canRefresh = !isCancelled && !isLocked && !isOriginalTutorWhileCoverActive && (!isCompleted || isAdmin);
   const canLock = isAdmin && isCompleted && !isLocked;
   const canUnlock = isAdmin && isLocked;
   const canManageCover = isAdmin && !isCancelled && !isLocked;
@@ -1322,6 +1326,7 @@ export default function RegisterPage() {
                 <div className="border-t pt-4">
                   <p className="text-xs text-amber-700 dark:text-amber-500 mb-2">
                     This session has already happened -- refreshing it will be logged as a correction.
+                    {isCompleted && refreshDiff.toAdd.length > 0 && " This register was already marked complete; adding a learner will reopen it as in progress."}
                   </p>
                   <Label htmlFor="refresh-reason">Reason</Label>
                   <Textarea

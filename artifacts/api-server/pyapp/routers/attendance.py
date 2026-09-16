@@ -599,26 +599,43 @@ def refresh_session_register(
             cur, existing["id"], existing["cohortId"], existing["sessionDate"], session.get("userId")
         )
         full = _with_counts(cur, existing)
-        if full["registerStatus"] in ("completed", "locked"):
-            raise HTTPException(status_code=400, detail="Completed registers cannot be refreshed")
+        if full["registerStatus"] == "locked":
+            raise HTTPException(status_code=400, detail="Locked registers cannot be refreshed -- unlock it first")
+        # A completed register is a stricter bar than merely historical --
+        # mirrors assign_cover_tutor's own is_correction handling, which
+        # gates a change to an already-completed register behind admin only
+        # while any writer (tutor or admin) can still refresh their own
+        # not-yet-completed session, historical or not.
+        was_completed = full["registerStatus"] == "completed"
+        if was_completed and session.get("role") != "admin":
+            raise HTTPException(
+                status_code=403, detail="Only an Administrator can refresh a completed register's expected learners"
+            )
 
         diff = compute_register_refresh(cur, existing)
         if not payload.confirm:
             return diff
-        if is_historical and not (payload.reason and payload.reason.strip()):
-            raise HTTPException(status_code=400, detail="A reason is required to refresh a historical session's register")
+        if (is_historical or was_completed) and not (payload.reason and payload.reason.strip()):
+            raise HTTPException(
+                status_code=400, detail="A reason is required to refresh a historical or completed session's register"
+            )
         result = apply_register_refresh(cur, existing, diff, session["userId"])
 
+    action = (
+        "refresh_register_completed_correction" if was_completed
+        else "refresh_register_correction" if is_historical
+        else "refresh_register"
+    )
     write_audit_log(
         request,
-        action="refresh_register_correction" if is_historical else "refresh_register",
+        action=action,
         entity_type="attendance_session",
         entity_id=session_id,
         new_value={
             "added": [r["learnerId"] for r in result["added"]],
             "removed": [r["learnerId"] for r in result["removed"]],
             "blocked": [r["learnerId"] for r in result["blocked"]],
-            **({"reason": payload.reason} if is_historical else {}),
+            **({"reason": payload.reason} if (is_historical or was_completed) else {}),
         },
     )
     return result

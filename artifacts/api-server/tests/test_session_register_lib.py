@@ -225,6 +225,60 @@ class TestRegisterRefresh:
         db.execute("SELECT learner_id FROM session_expected_learners WHERE session_id = %s", (session["id"],))
         assert {r["learner_id"] for r in db.fetchall()} == {joins["id"]}
 
+    def test_apply_register_refresh_clears_completed_at_when_adding_reopens_the_register(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date="2026-06-01", created_by=admin_user["userId"]
+        )
+        session_row = self._session_row(session, cohort["id"], datetime.date(2026, 6, 1))
+
+        ensure_expected_learners_snapshot(db, session["id"], cohort["id"], datetime.date(2026, 6, 1))
+        db.execute(
+            "INSERT INTO attendance_records (session_id, learner_id, status, hours_attended) VALUES (%s, %s, 'present', 7)",
+            (session["id"], learner["id"]),
+        )
+        db.execute(
+            "UPDATE attendance_sessions SET completed_at = now(), completed_by = %s WHERE id = %s",
+            (admin_user["userId"], session["id"]),
+        )
+
+        joins = learner_factory(cohort_id=cohort["id"], start_date="2026-04-01")
+        diff = compute_register_refresh(db, session_row)
+        apply_register_refresh(db, session_row, diff, user_id=admin_user["userId"])
+
+        db.execute("SELECT completed_at, completed_by FROM attendance_sessions WHERE id = %s", (session["id"],))
+        row = db.fetchone()
+        assert row["completed_at"] is None
+        assert row["completed_by"] is None
+
+    def test_apply_register_refresh_leaves_completed_at_when_nothing_is_added(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date="2026-06-01", created_by=admin_user["userId"]
+        )
+        session_row = self._session_row(session, cohort["id"], datetime.date(2026, 6, 1))
+
+        ensure_expected_learners_snapshot(db, session["id"], cohort["id"], datetime.date(2026, 6, 1))
+        db.execute(
+            "INSERT INTO attendance_records (session_id, learner_id, status, hours_attended) VALUES (%s, %s, 'present', 7)",
+            (session["id"], learner["id"]),
+        )
+        db.execute(
+            "UPDATE attendance_sessions SET completed_at = now(), completed_by = %s WHERE id = %s",
+            (admin_user["userId"], session["id"]),
+        )
+
+        apply_register_refresh(db, session_row, {"toAdd": [], "toRemove": [], "blocked": []}, user_id=admin_user["userId"])
+
+        db.execute("SELECT completed_at FROM attendance_sessions WHERE id = %s", (session["id"],))
+        assert db.fetchone()["completed_at"] is not None
+
 
 class TestCancelSession:
     def test_requires_confirmation_when_attendance_already_recorded(

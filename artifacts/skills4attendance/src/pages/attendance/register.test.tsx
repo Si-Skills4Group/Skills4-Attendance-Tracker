@@ -298,6 +298,25 @@ describe('RegisterPage', () => {
     });
   });
 
+  it('offers the Refresh action to an admin on a completed register', () => {
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2020-01-01', registerStatus: 'completed' }), entries },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.getByRole('button', { name: /refresh expected learners/i })).toBeInTheDocument();
+  });
+
+  it('hides the Refresh action from a tutor on a completed register, even their own', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2020-01-01', registerStatus: 'completed' }), entries },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.queryByRole('button', { name: /refresh expected learners/i })).not.toBeInTheDocument();
+  });
+
   it('offers the Refresh action for a tutor on their own, uncovered session', () => {
     mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
     mockRegister = {

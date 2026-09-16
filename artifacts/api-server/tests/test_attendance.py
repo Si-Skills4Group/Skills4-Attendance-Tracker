@@ -13,16 +13,20 @@ from pyapp.routers.attendance import (
     AttendanceRegisterInput,
     AttendanceSessionInput,
     AttendanceSessionUpdate,
+    CompleteRegisterInput,
+    LockRegisterInput,
     RefreshRegisterInput,
     RegisterEntryInput,
     SessionCancelInput,
     SessionDeleteInput,
     cancel_attendance_session,
+    complete_register,
     create_attendance_session,
     delete_attendance_session,
     get_attendance_session,
     get_session_expected_learners,
     list_attendance_sessions,
+    lock_attendance_register,
     mark_all_present,
     refresh_session_register,
     save_attendance_register,
@@ -874,22 +878,160 @@ class TestRegisterRefreshEndpoint:
             refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
         assert exc.value.status_code == 400
 
-    def test_completed_register_cannot_be_refreshed(
+    def test_admin_can_refresh_a_completed_register_with_a_reason(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        past_date = datetime.date.today() - datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            request_factory(), admin_user,
+        )
+        complete_register(
+            session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+            request_factory(), admin_user,
+        )
+        joins = learner_factory(cohort_id=cohort["id"], start_date=str(past_date))
+
+        diff = refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
+        assert {r["learnerId"] for r in diff["toAdd"]} == {joins["id"]}
+
+        with pytest.raises(HTTPException) as exc:
+            refresh_session_register(session["id"], RefreshRegisterInput(confirm=True), request_factory(), admin_user)
+        assert exc.value.status_code == 400
+
+        result = refresh_session_register(
+            session["id"], RefreshRegisterInput(confirm=True, reason="Learner joined after completion"),
+            request_factory(), admin_user,
+        )
+        assert {r["learnerId"] for r in result["added"]} == {joins["id"]}
+
+        db.execute(
+            "SELECT action FROM audit_logs WHERE entity_type = 'attendance_session' AND entity_id = %s "
+            "ORDER BY id DESC LIMIT 1",
+            (session["id"],),
+        )
+        assert db.fetchone()["action"] == "refresh_register_completed_correction"
+
+    def test_tutor_cannot_refresh_a_completed_register(
+        self, request_factory, admin_user, tutor_factory, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        past_date = datetime.date.today() - datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            request_factory(), tutor["session"],
+        )
+        complete_register(
+            session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+            request_factory(), tutor["session"],
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), tutor["session"])
+        assert exc.value.status_code == 403
+
+    def test_locked_register_cannot_be_refreshed_even_by_an_admin(
         self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
     ):
         cohort = cohort_factory()
         learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
-        future_date = datetime.date.today() + datetime.timedelta(days=7)
-        session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
-        save_attendance_register(
+        past_date = datetime.date.today() - datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        saved = save_attendance_register(
             session["id"],
             AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            request_factory(), admin_user,
+        )
+        completed = complete_register(
+            session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+            request_factory(), admin_user,
+        )
+        lock_attendance_register(
+            session["id"],
+            LockRegisterInput(reason="End of month lock", registerVersion=completed["session"]["registerVersion"]),
             request_factory(), admin_user,
         )
 
         with pytest.raises(HTTPException) as exc:
             refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
         assert exc.value.status_code == 400
+
+    def test_refreshing_a_completed_register_that_adds_a_learner_reopens_it(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        past_date = datetime.date.today() - datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            request_factory(), admin_user,
+        )
+        complete_register(
+            session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+            request_factory(), admin_user,
+        )
+        learner_factory(cohort_id=cohort["id"], start_date=str(past_date))
+
+        refresh_session_register(
+            session["id"], RefreshRegisterInput(confirm=True, reason="Learner joined after completion"),
+            request_factory(), admin_user,
+        )
+
+        reopened = get_attendance_session(session["id"], admin_user)
+        assert reopened["session"]["registerStatus"] == "in_progress"
+        assert reopened["session"]["completedAt"] is None
+
+    def test_refreshing_a_completed_register_with_only_blocked_removals_leaves_it_completed(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        # A register can only be "completed" once every expected learner
+        # already has a recorded row -- so any removal candidate on an
+        # already-completed register is, by construction, always
+        # already-recorded and therefore always blocked, never actually
+        # removed (see test_learner_with_recorded_attendance_is_blocked_not_removed
+        # for that guarantee itself). This proves the completed_at-clearing
+        # side effect only fires on an actual addition, not on a no-op
+        # blocked-removal refresh.
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"], start_date="2026-01-01")
+        past_date = datetime.date.today() - datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=past_date, created_by=admin_user["userId"])
+        saved = save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[RegisterEntryInput(learnerId=learner["id"], status="present", hoursAttended=7, minutesLate=0)]),
+            request_factory(), admin_user,
+        )
+        complete_register(
+            session["id"], CompleteRegisterInput(registerVersion=saved["session"]["registerVersion"]),
+            request_factory(), admin_user,
+        )
+        db.execute(
+            "UPDATE learners SET status = 'withdrawn', withdrawal_date = %s WHERE id = %s",
+            (str(past_date), learner["id"]),
+        )
+
+        diff = refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
+        assert {r["learnerId"] for r in diff["blocked"]} == {learner["id"]}
+        assert diff["toRemove"] == [] and diff["toAdd"] == []
+
+        refresh_session_register(
+            session["id"], RefreshRegisterInput(confirm=True, reason="Checking nothing changes"),
+            request_factory(), admin_user,
+        )
+
+        still_completed = get_attendance_session(session["id"], admin_user)
+        assert still_completed["session"]["registerStatus"] == "completed"
+        assert still_completed["session"]["completedAt"] is not None
 
     def test_learner_with_recorded_attendance_is_blocked_not_removed(
         self, db, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
