@@ -40,6 +40,7 @@ export default function LatenessReportPage() {
     programme: filters.programme,
     level: filters.level,
     employer: filters.employer,
+    subject: filters.subject,
     page,
     pageSize,
   };
@@ -81,6 +82,7 @@ export default function LatenessReportPage() {
         cohorts={cohorts}
         showTutor={!isTutor}
         showProgrammeLevelEmployer
+        showSubject
       />
 
       {data?.metrics && <AttendanceMetricsCards metrics={data.metrics} />}

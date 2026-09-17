@@ -225,6 +225,34 @@ class TestRegisterRefresh:
         db.execute("SELECT learner_id FROM session_expected_learners WHERE session_id = %s", (session["id"],))
         assert {r["learner_id"] for r in db.fetchall()} == {joins["id"]}
 
+    def test_refresh_picks_up_a_new_functional_skills_secondary_enrollment(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory, secondary_enrollment_factory,
+    ):
+        """A Functional Skills session generated before a learner's
+        secondary enrollment existed must still pick them up via the
+        existing Refresh Expected Learners mechanism, with zero new code
+        beyond the resolver's OR-EXISTS extension."""
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], start_date="2026-01-01")
+        session = attendance_session_factory(
+            cohort_id=fs_cohort["id"], session_date="2026-06-01", created_by=admin_user["userId"]
+        )
+        session_row = self._session_row(session, fs_cohort["id"], datetime.date(2026, 6, 1))
+
+        # Generated before the enrollment exists -- zero expected learners.
+        ensure_expected_learners_snapshot(db, session["id"], fs_cohort["id"], datetime.date(2026, 6, 1))
+        db.execute("SELECT count(*) AS c FROM session_expected_learners WHERE session_id = %s", (session["id"],))
+        assert db.fetchone()["c"] == 0
+
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01")
+
+        diff = compute_register_refresh(db, session_row)
+        assert {r["learnerId"] for r in diff["toAdd"]} == {learner["id"]}
+        apply_register_refresh(db, session_row, diff, user_id=admin_user["userId"])
+
+        db.execute("SELECT learner_id FROM session_expected_learners WHERE session_id = %s", (session["id"],))
+        assert {r["learner_id"] for r in db.fetchall()} == {learner["id"]}
+
     def test_apply_register_refresh_clears_completed_at_when_adding_reopens_the_register(
         self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
     ):

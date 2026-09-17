@@ -304,7 +304,20 @@ def require_learner_access(cur, learner_id: int, session: dict[str, Any]) -> dic
     if not learner:
         raise HTTPException(status_code=404, detail="Learner not found")
     if session.get("role") == "tutor" and learner["tutorId"] != session.get("tutorId"):
-        deny_object_access("learner", learner_id, "Not allowed to access this learner")
+        # Not the learner's home tutor -- but a Functional Skills tutor with
+        # an active secondary enrollment into one of their own cohorts for
+        # this learner still needs access to this learner's own data
+        # (reports, attendance summary), scoped to their own cohort(s).
+        cur.execute(
+            """
+            SELECT 1 FROM learner_cohort_enrollments e
+            JOIN cohorts c ON c.id = e.cohort_id
+            WHERE e.learner_id = %s AND e.status = 'active' AND c.tutor_id = %s
+            """,
+            (learner_id, session.get("tutorId")),
+        )
+        if not cur.fetchone():
+            deny_object_access("learner", learner_id, "Not allowed to access this learner")
     return learner
 
 

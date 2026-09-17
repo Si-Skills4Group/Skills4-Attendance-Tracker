@@ -15,4 +15,5 @@ export const ExportOrganisationReportBreakdown = {
   programme: 'programme',
   level: 'level',
   employer: 'employer',
+  subject: 'subject',
 } as const;

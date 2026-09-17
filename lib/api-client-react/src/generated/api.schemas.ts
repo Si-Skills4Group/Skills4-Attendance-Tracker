@@ -195,6 +195,15 @@ export interface TutorUpdate {
   externalSystemId?: string;
 }
 
+export type FunctionalSkillsSubject = typeof FunctionalSkillsSubject[keyof typeof FunctionalSkillsSubject];
+
+
+export const FunctionalSkillsSubject = {
+  math: 'math',
+  english: 'english',
+  both: 'both',
+} as const;
+
 export interface Learner {
   id: number;
   learnerRef: string;
@@ -226,6 +235,8 @@ export interface Learner {
   cohortName: string | null;
   /** @nullable */
   externalSystemId: string | null;
+  /** Distinct subjects of this learner's currently active Functional Skills secondary enrollments -- empty when they have none. */
+  functionalSkillsSubjects: FunctionalSkillsSubject[];
   createdAt: string;
   updatedAt: string;
 }
@@ -575,6 +586,17 @@ export interface TutorImportRowResolveInput {
   resolution: TutorImportRowResolution;
 }
 
+/**
+ * 'primary' is a learner's normal home cohort, enrolled/transferred via the Allocation screen. 'secondary' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see /learners/{learnerId}/secondary-enrollments) alongside, never instead of, their home cohort.
+ */
+export type CohortMembershipType = typeof CohortMembershipType[keyof typeof CohortMembershipType];
+
+
+export const CohortMembershipType = {
+  primary: 'primary',
+  secondary: 'secondary',
+} as const;
+
 export interface Cohort {
   id: number;
   name: string;
@@ -593,6 +615,9 @@ export interface Cohort {
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;
+  membershipType: CohortMembershipType;
+  /** Only meaningful (and required) on a 'secondary' cohort -- always null on a 'primary' one. */
+  subject: FunctionalSkillsSubject | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -624,6 +649,8 @@ export interface CohortInput {
   endDate?: string;
   active?: boolean;
   externalSystemId?: string;
+  membershipType?: CohortMembershipType;
+  subject?: FunctionalSkillsSubject;
 }
 
 export interface CohortUpdate {
@@ -646,11 +673,60 @@ export interface CohortUpdate {
   active?: boolean;
   /** @nullable */
   externalSystemId?: string | null;
+  membershipType?: CohortMembershipType;
+  /** Pass null to clear a previously-set subject (e.g. when switching back to a Standard cohort). */
+  subject?: FunctionalSkillsSubject | null;
 }
 
 export interface CohortDeleteInput {
   /** @minLength 1 */
   reason: string;
+}
+
+export type SecondaryEnrollmentStatus = typeof SecondaryEnrollmentStatus[keyof typeof SecondaryEnrollmentStatus];
+
+
+export const SecondaryEnrollmentStatus = {
+  active: 'active',
+  ended: 'ended',
+} as const;
+
+/**
+ * A learner's Functional Skills secondary enrollment into a 'secondary' membership_type cohort -- purely additive alongside their home cohort, never a transfer.
+ */
+export interface SecondaryEnrollment {
+  id: number;
+  learnerId: number;
+  cohortId: number;
+  cohortName: string;
+  /** @nullable */
+  cohortTutorId: number | null;
+  /** @nullable */
+  cohortTutorName: string | null;
+  enrolledDate: string;
+  /** @nullable */
+  endDate: string | null;
+  status: SecondaryEnrollmentStatus;
+  enrolledBy: number;
+  /** @nullable */
+  enrollmentReason: string | null;
+  /** @nullable */
+  endedBy: number | null;
+  /** @nullable */
+  endReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SecondaryEnrollmentInput {
+  cohortId: number;
+  enrolledDate: string;
+  reason?: string;
+}
+
+export interface SecondaryEnrollmentEndInput {
+  endDate: string;
+  reason?: string;
 }
 
 export interface AllocationHistoryEntry {
@@ -851,6 +927,8 @@ export interface ExpectedLearner {
   learnerId: number;
   learnerName: string;
   learnerRef?: string;
+  /** Only present on the plain "who's expected" listing, not on a refresh diff's toAdd/toRemove/blocked entries. */
+  functionalSkillsSubjects?: FunctionalSkillsSubject[];
 }
 
 export interface RegisterRefreshDiff {
@@ -882,6 +960,8 @@ export interface RegisterEntry {
   lastEditedBy: number | null;
   /** @nullable */
   lastEditedByName: string | null;
+  /** Distinct subjects of this learner's currently active Functional Skills secondary enrollments -- empty when they have none. */
+  functionalSkillsSubjects: FunctionalSkillsSubject[];
 }
 
 export interface RegisterEntryInput {
@@ -1001,6 +1081,23 @@ export interface RegisterCompletionSummary {
   completionPercentage: number | null;
 }
 
+export type LearnerCohortBreakdownEntryRelationship = typeof LearnerCohortBreakdownEntryRelationship[keyof typeof LearnerCohortBreakdownEntryRelationship];
+
+
+export const LearnerCohortBreakdownEntryRelationship = {
+  home: 'home',
+  functional_skills: 'functional_skills',
+} as const;
+
+export interface LearnerCohortBreakdownEntry {
+  cohortId: number;
+  /** @nullable */
+  cohortName: string | null;
+  relationship: LearnerCohortBreakdownEntryRelationship;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+}
+
 /**
  * Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.
  */
@@ -1016,8 +1113,11 @@ export interface BudProgress {
 
 export interface LearnerReportResponse {
   learner: Learner;
+  /** The learner's HOME cohort figures specifically (identical to cohortBreakdown's "home" entry) -- never a blend across every cohort this learner is expected in. See cohortBreakdown for a Functional Skills secondary enrollment's own, separate figures. */
   metrics: AttendanceMetrics;
   registerCompletion: RegisterCompletionSummary;
+  /** One entry per cohort this learner is currently expected in -- their home cohort plus each active Functional Skills secondary enrollment -- each with its own, never-blended metrics. */
+  cohortBreakdown: LearnerCohortBreakdownEntry[];
   bud: BudProgress | null;
   sessionHistory: LearnerSessionHistoryListResponse;
 }
@@ -1096,6 +1196,11 @@ export interface EmployerBreakdownRow {
   metrics: AttendanceMetrics;
 }
 
+export interface SubjectBreakdownRow {
+  subject: FunctionalSkillsSubject;
+  metrics: AttendanceMetrics;
+}
+
 export interface OrganisationReportResponse {
   activeLearners: number;
   activeTutors: number;
@@ -1108,6 +1213,8 @@ export interface OrganisationReportResponse {
   programmeBreakdown: ProgrammeBreakdownRow[];
   levelBreakdown: LevelBreakdownRow[];
   employerBreakdown: EmployerBreakdownRow[];
+  /** Math vs English (vs Both) Functional Skills attendance -- a 'primary' cohort never contributes a row. */
+  subjectBreakdown: SubjectBreakdownRow[];
 }
 
 export interface AbsenceRow {
@@ -1316,6 +1423,11 @@ export interface AttendanceSummaryResponse {
   metrics: AttendanceMetrics;
   registerCompletion: RegisterCompletionSummary;
 }
+
+export type LearnerAttendanceSummaryDetailResponse = AttendanceSummaryResponse & {
+  /** One entry per cohort this learner is currently expected in -- home cohort plus each active Functional Skills secondary enrollment. metrics/registerCompletion above are the HOME cohort's figures specifically, never a blend. */
+  cohortBreakdown: LearnerCohortBreakdownEntry[];
+};
 
 export interface LearnerAttendanceSummaryListResponse {
   items: LearnerAttendanceSummaryRow[];
@@ -1710,6 +1822,8 @@ export type LevelQueryParamParameter = string;
 
 export type EmployerQueryParamParameter = string;
 
+export type SubjectQueryParamParameter = FunctionalSkillsSubject;
+
 export type GetTutorDashboardCohortsParams = {
 period?: PeriodParamParameter;
 dateFrom?: DateFromParamParameter;
@@ -1916,6 +2030,7 @@ export const ExportOrganisationReportBreakdown = {
   programme: 'programme',
   level: 'level',
   employer: 'employer',
+  subject: 'subject',
 } as const;
 
 export type GetAbsenceReportParams = {
@@ -1929,6 +2044,10 @@ programme?: ProgrammeQueryParamParameter;
 level?: LevelQueryParamParameter;
 employer?: EmployerQueryParamParameter;
 learnerId?: LearnerIdQueryParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
 page?: PageParamParameter;
 pageSize?: PageSizeParamParameter;
 };
@@ -1944,6 +2063,10 @@ programme?: ProgrammeQueryParamParameter;
 level?: LevelQueryParamParameter;
 employer?: EmployerQueryParamParameter;
 learnerId?: LearnerIdQueryParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
 };
 
 export type GetLatenessReportParams = {
@@ -1956,6 +2079,10 @@ programme?: ProgrammeQueryParamParameter;
 level?: LevelQueryParamParameter;
 employer?: EmployerQueryParamParameter;
 learnerId?: LearnerIdQueryParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
 page?: PageParamParameter;
 pageSize?: PageSizeParamParameter;
 };
@@ -1970,6 +2097,10 @@ programme?: ProgrammeQueryParamParameter;
 level?: LevelQueryParamParameter;
 employer?: EmployerQueryParamParameter;
 learnerId?: LearnerIdQueryParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
 };
 
 export type GetAttendanceHoursReportParams = {

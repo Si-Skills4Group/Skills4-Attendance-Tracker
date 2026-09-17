@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AttendanceStatus } from './attendanceStatus';
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 
 export interface RegisterEntry {
   /** @nullable */
@@ -24,4 +25,6 @@ export interface RegisterEntry {
   lastEditedBy: number | null;
   /** @nullable */
   lastEditedByName: string | null;
+  /** Distinct subjects of this learner's currently active Functional Skills secondary enrollments -- empty when they have none. */
+  functionalSkillsSubjects: FunctionalSkillsSubject[];
 }

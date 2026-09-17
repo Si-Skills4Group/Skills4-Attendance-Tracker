@@ -5,7 +5,9 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CohortMembershipType } from './cohortMembershipType';
 import type { DeliveryDay } from './deliveryDay';
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 
 export interface Cohort {
   id: number;
@@ -25,6 +27,9 @@ export interface Cohort {
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;
+  membershipType: CohortMembershipType;
+  /** Only meaningful (and required) on a 'secondary' cohort -- always null on a 'primary' one. */
+  subject: FunctionalSkillsSubject | null;
   createdAt: Date;
   updatedAt: Date;
 }

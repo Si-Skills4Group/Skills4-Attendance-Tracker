@@ -15,7 +15,14 @@ export interface ReportFilters extends DateFilterValue {
   programme?: string;
   level?: string;
   employer?: string;
+  subject?: "math" | "english" | "both";
 }
+
+const SUBJECT_LABELS: Record<"math" | "english" | "both", string> = {
+  math: "Math",
+  english: "English",
+  both: "Both",
+};
 
 interface TutorOption {
   id: number;
@@ -39,6 +46,11 @@ interface ReportFilterBarProps {
   showTutor?: boolean;
   showCohort?: boolean;
   showProgrammeLevelEmployer?: boolean;
+  /** Filters to a Functional Skills cohort's subject -- a standard cohort's
+   * sessions never match, so this is most useful alongside the Cohort
+   * filter or on its own to see Math vs English Functional Skills
+   * attendance specifically. */
+  showSubject?: boolean;
 }
 
 /** Shared filter chrome for the Phase 9 list-style reports (absence,
@@ -54,6 +66,7 @@ export function ReportFilterBar({
   showTutor = true,
   showCohort = true,
   showProgrammeLevelEmployer = false,
+  showSubject = false,
 }: ReportFilterBarProps) {
   const [programmeInput, setProgrammeInput] = React.useState(value.programme ?? "");
   const [levelInput, setLevelInput] = React.useState(value.level ?? "");
@@ -104,12 +117,15 @@ export function ReportFilterBar({
   if (value.employer) {
     activeChips.push({ key: "employer", label: `Employer: ${value.employer}`, onClear: () => { setEmployerInput(""); onChange({ ...value, employer: undefined }); } });
   }
+  if (showSubject && value.subject) {
+    activeChips.push({ key: "subject", label: `Subject: ${SUBJECT_LABELS[value.subject]}`, onClear: () => onChange({ ...value, subject: undefined }) });
+  }
 
   const clearAll = () => {
     setProgrammeInput("");
     setLevelInput("");
     setEmployerInput("");
-    onChange({ period: "current_month", dateFrom: undefined, dateTo: undefined });
+    onChange({ period: "current_month", dateFrom: undefined, dateTo: undefined, subject: undefined });
   };
 
   return (
@@ -142,6 +158,16 @@ export function ReportFilterBar({
             <Input className="w-28 h-9" placeholder="Level" value={levelInput} onChange={(e) => setLevelInput(e.target.value)} />
             <Input className="w-36 h-9" placeholder="Employer" value={employerInput} onChange={(e) => setEmployerInput(e.target.value)} />
           </>
+        )}
+        {showSubject && (
+          <Combobox
+            className="w-40"
+            options={[{ value: ALL, label: "All subjects" }, ...(Object.keys(SUBJECT_LABELS) as (keyof typeof SUBJECT_LABELS)[]).map((s) => ({ value: s, label: SUBJECT_LABELS[s] }))]}
+            value={value.subject ?? ALL}
+            onValueChange={(v) => onChange({ ...value, subject: v === ALL ? undefined : (v as "math" | "english" | "both") })}
+            placeholder="Subject"
+            searchPlaceholder="Search subjects..."
+          />
         )}
         {activeChips.length > 0 && (
           <Button variant="ghost" size="sm" onClick={clearAll}>Clear filters</Button>

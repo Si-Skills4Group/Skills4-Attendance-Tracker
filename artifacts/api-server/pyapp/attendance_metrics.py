@@ -45,6 +45,22 @@ def uk_today() -> date:
     return datetime.now(UK_TZ).date()
 
 
+def _capped_period_end(period_end: date) -> date:
+    """A session dated after today cannot possibly have any attendance
+    recorded yet -- it hasn't happened. Without this cap, viewing "Current
+    Month" partway through the month would count every not-yet-run session
+    for the rest of the month as "expected but not attended", silently
+    dragging a learner's percentage down for a period that hasn't finished
+    yet (a learner who has attended 100% of everything so far would show
+    well under 100%). Every attendance-percentage/register-completion
+    calculation below uses this for its session_date upper bound, while
+    still echoing back the originally-requested period_end in the response
+    (see _row_to_metrics) so a report still correctly labels itself "Jan
+    1-31" even before the month is over -- only which sessions get summed
+    into the total is capped, not the displayed period."""
+    return min(period_end, uk_today())
+
+
 def resolve_period(
     period: Period,
     date_from: date | None = None,
@@ -202,7 +218,7 @@ def fetch_attendance_metrics(
         "s.session_date <= %s",
         scope_sql,
     ]
-    params: list = [period_start, period_end, *scope_params]
+    params: list = [period_start, _capped_period_end(period_end), *scope_params]
     if programme:
         clauses.append("c.programme = %s")
         params.append(programme)
@@ -237,6 +253,7 @@ def fetch_attendance_metrics_grouped(
     period_start: date,
     period_end: date,
     fixed_cohort_id: int | None = None,
+    restrict_to_cohort_ids: list[int] | None = None,
 ) -> dict[int, AttendanceMetrics]:
     """One aggregate query for many learners/cohorts/tutors at once, each
     bucketed via GROUP BY -- the batched twin of fetch_attendance_metrics,
@@ -249,17 +266,34 @@ def fetch_attendance_metrics_grouped(
     to sessions belonging to that one cohort -- without it, a learner's
     metrics would be their lifetime total across every cohort they've ever
     been expected in, which is the wrong question for "how did this
-    learner do *in this cohort*"."""
+    learner do *in this cohort*".
+
+    restrict_to_cohort_ids (group_by="learner" only) is the multi-cohort
+    sibling of fixed_cohort_id, for a tutor/cohort-scoped view of learners
+    who may now be expected in more than one cohort (a home cohort plus a
+    Functional Skills secondary enrollment): it restricts each learner's
+    totals to sessions belonging to ANY of the given cohorts (typically "all
+    of this tutor's own cohorts"), so a Functional Skills tutor's low-
+    attendance list only ever reflects that tutor's own sessions, never a
+    learner's unrelated home-programme attendance, and vice versa. Mutually
+    exclusive with fixed_cohort_id."""
     if not group_ids:
         return {}
     column = _GROUP_BY_COLUMN[group_by]
     extra_clause = ""
     extra_params: list = []
+    if fixed_cohort_id is not None and restrict_to_cohort_ids is not None:
+        raise ValueError("fixed_cohort_id and restrict_to_cohort_ids are mutually exclusive")
     if fixed_cohort_id is not None:
         if group_by != "learner":
             raise ValueError("fixed_cohort_id is only meaningful when group_by='learner'")
         extra_clause = " AND s.cohort_id = %s"
         extra_params = [fixed_cohort_id]
+    elif restrict_to_cohort_ids is not None:
+        if group_by != "learner":
+            raise ValueError("restrict_to_cohort_ids is only meaningful when group_by='learner'")
+        extra_clause = " AND s.cohort_id = ANY(%s)"
+        extra_params = [restrict_to_cohort_ids]
     cur.execute(
         f"""
         SELECT {column} AS "groupId", {_METRICS_SELECT_COLUMNS}
@@ -273,7 +307,7 @@ def fetch_attendance_metrics_grouped(
           AND {column} = ANY(%s){extra_clause}
         GROUP BY {column}
         """,
-        [period_start, period_end, group_ids, *extra_params],
+        [period_start, _capped_period_end(period_end), group_ids, *extra_params],
     )
     results = {row["groupId"]: _row_to_metrics(row, period_start, period_end) for row in cur.fetchall()}
     # Entities with zero matching rows (e.g. a learner with no expected
@@ -294,16 +328,18 @@ def fetch_attendance_metrics_grouped(
 
 
 def _fetch_metrics_by_string_key(
-    cur, *, key_sql: str, extra_join: str, period_start: date, period_end: date
+    cur, *, key_sql: str, extra_join: str, period_start: date, period_end: date, extra_where: str = ""
 ) -> dict[str, AttendanceMetrics]:
-    """Shared implementation behind the by-programme/by-level/by-employer
-    organisation-report breakdowns -- same formula/columns as every other
-    aggregate here, just GROUP BY a cohort/learner attribute string instead
-    of an entity id, and returning every distinct value seen (not a
-    pre-known id list, unlike fetch_attendance_metrics_grouped). Always
-    joins learners (even for the programme/level breakdowns, which don't
-    need it for the group key itself) so a deleted learner's minutes never
-    contribute to any breakdown."""
+    """Shared implementation behind the by-programme/by-level/by-employer/
+    by-subject organisation-report breakdowns -- same formula/columns as
+    every other aggregate here, just GROUP BY a cohort/learner attribute
+    string instead of an entity id, and returning every distinct value seen
+    (not a pre-known id list, unlike fetch_attendance_metrics_grouped).
+    Always joins learners (even for the programme/level breakdowns, which
+    don't need it for the group key itself) so a deleted learner's minutes
+    never contribute to any breakdown. extra_where, when given, must be a
+    trusted SQL condition composed by the caller (e.g. excluding a NULL
+    group key), never raw user input."""
     cur.execute(
         f"""
         SELECT {key_sql} AS "groupKey", {_METRICS_SELECT_COLUMNS}
@@ -315,11 +351,21 @@ def _fetch_metrics_by_string_key(
         LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
         WHERE s.status != 'cancelled' AND s.deleted_at IS NULL AND c.deleted_at IS NULL AND l.deleted_at IS NULL
           AND s.session_date >= %s AND s.session_date <= %s
+          {extra_where}
         GROUP BY {key_sql}
         """,
-        [period_start, period_end],
+        [period_start, _capped_period_end(period_end)],
     )
     return {row["groupKey"]: _row_to_metrics(row, period_start, period_end) for row in cur.fetchall()}
+
+
+def fetch_attendance_metrics_by_subject(cur, *, period_start: date, period_end: date) -> dict[str, AttendanceMetrics]:
+    """Math vs English (vs Both) Functional Skills attendance -- an ordinary
+    'primary' cohort has subject IS NULL and never contributes a row here."""
+    return _fetch_metrics_by_string_key(
+        cur, key_sql="c.subject", extra_join="", period_start=period_start, period_end=period_end,
+        extra_where="AND c.subject IS NOT NULL",
+    )
 
 
 def fetch_attendance_metrics_by_programme(cur, *, period_start: date, period_end: date) -> dict[str, AttendanceMetrics]:
@@ -381,7 +427,7 @@ def fetch_attendance_metrics_by_period_bucket(
         "s.session_date <= %s",
         scope_sql,
     ]
-    params: list = [period_start, period_end, *scope_params]
+    params: list = [period_start, _capped_period_end(period_end), *scope_params]
 
     cur.execute(
         f"""
@@ -424,9 +470,21 @@ def fetch_register_completion(
     scope_id: int | None,
     period_start: date,
     period_end: date,
+    learner_id: int | None = None,
 ) -> RegisterCompletionSummary:
+    """learner_id, when given, additionally narrows to sessions this one
+    learner was expected at -- independent of `scope`, so a caller can ask
+    "how complete are THIS cohort's registers, for THIS one learner" (e.g.
+    a per-cohort breakdown on a learner's own report, now that a learner can
+    be expected in more than one cohort via a Functional Skills secondary
+    enrollment) without that becoming a fifth Scope value."""
     scope_sql, scope_params = _register_completion_scope_clause(scope, scope_id)
+    clauses = [scope_sql]
     params: list = [period_start, period_end, *scope_params]
+    if learner_id is not None:
+        clauses.append("EXISTS (SELECT 1 FROM session_expected_learners sel WHERE sel.session_id = s.id AND sel.learner_id = %s)")
+        params.append(learner_id)
+    scope_sql = " AND ".join(clauses)
 
     # Mirrors routers/attendance.py::_compute_register_status's branch order
     # exactly (cancelled sessions are excluded from this query's WHERE

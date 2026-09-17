@@ -44,7 +44,7 @@ import {
   ChevronDown, Lock, Unlock, ShieldCheck, AlertTriangle, Trash2, UserCog, UserX,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { RegisterStatusBadge } from "@/components/status-badges";
+import { RegisterStatusBadge, FunctionalSkillsBadges } from "@/components/status-badges";
 import { RegisterHistoryPanel } from "@/components/register-history-panel";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetAttendanceSessionQueryKey } from "@workspace/api-client-react";
@@ -964,7 +964,10 @@ export default function RegisterPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium text-sm">{entry.learnerName}</div>
+                      <div className="font-medium text-sm flex items-center gap-2">
+                        {entry.learnerName}
+                        <FunctionalSkillsBadges subjects={entry.functionalSkillsSubjects} />
+                      </div>
                       <div className="text-xs text-muted-foreground font-mono mt-0.5">{entry.learnerRef}</div>
                       {isRowDirty(entry.learnerId) && (
                         <div className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Unsaved</div>

@@ -253,16 +253,28 @@ def classify_rows(cur, parsed_rows: list[dict[str, str]]) -> list[dict]:
 
 def resolve_cohort_names(cur, names: list[str]) -> dict[str, dict]:
     """Batched, case-insensitive resolution of CSV cohort_name values to
-    active cohorts. Returns a dict keyed by the original (trimmed) name the
-    caller passed in, one entry per distinct non-empty name, each with a
-    'status' of matched | zero_matches | ambiguous | inactive and a
-    'cohort' row (only present when status == 'matched')."""
+    active, 'primary' cohorts only. Returns a dict keyed by the original
+    (trimmed) name the caller passed in, one entry per distinct non-empty
+    name, each with a 'status' of
+    matched | zero_matches | ambiguous | inactive | secondary_cohort and a
+    'cohort' row (only present when status == 'matched').
+
+    A Functional Skills ('secondary' membership_type) cohort is deliberately
+    never matched here -- this resolution feeds _maybe_allocate_new_learner/
+    _maybe_apply_requested_transfer, both of which call apply_transfer, the
+    sole mechanism that MOVES a learner's home cohort. If a CSV's
+    cohort_name column happened to match an FS cohort's name, that would
+    silently detach the learner from their real home cohort instead of
+    adding them to the FS one. FS enrollment is a separate, dedicated,
+    add-only action (secondary_enrollment_lib) that CSV import never
+    triggers."""
     distinct = sorted({n.strip() for n in names if n and n.strip()})
     if not distinct:
         return {}
 
     cur.execute(
-        'SELECT id, name, tutor_id AS "tutorId", active FROM cohorts WHERE lower(name) = ANY(%s)',
+        'SELECT id, name, tutor_id AS "tutorId", active, membership_type AS "membershipType" '
+        'FROM cohorts WHERE lower(name) = ANY(%s)',
         ([n.lower() for n in distinct],),
     )
     by_lower: dict[str, list[dict]] = {}
@@ -276,6 +288,8 @@ def resolve_cohort_names(cur, names: list[str]) -> dict[str, dict]:
             resolved[name] = {"status": "zero_matches", "cohort": None}
         elif len(matches) > 1:
             resolved[name] = {"status": "ambiguous", "cohort": None}
+        elif matches[0]["membershipType"] == "secondary":
+            resolved[name] = {"status": "secondary_cohort", "cohort": None}
         elif not matches[0]["active"]:
             resolved[name] = {"status": "inactive", "cohort": None}
         else:
@@ -396,7 +410,12 @@ def create_import_job(
             cohort_status = outcome["status"]
             if outcome["cohort"]:
                 matched_cohort_id = outcome["cohort"]["id"]
-            if cohort_status != "matched":
+            if cohort_status == "secondary_cohort":
+                warnings.append(
+                    f"cohort_name '{cohort_name}' is a Functional Skills cohort -- CSV import never transfers a "
+                    "learner's home cohort to it; enroll them from the learner's profile instead"
+                )
+            elif cohort_status != "matched":
                 warnings.append(f"cohort_name '{cohort_name}' could not be resolved ({cohort_status.replace('_', ' ')})")
 
         # A row whose CSV cohort_name resolves cleanly to a *different*

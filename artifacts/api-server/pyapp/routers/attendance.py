@@ -25,6 +25,7 @@ from ..cover_tutor_lib import (
 )
 from ..db import get_cursor
 from ..rate_limit import check_and_record_rate_limit
+from ..secondary_enrollment_lib import functional_skills_subjects_sql
 from ..session_register_lib import (
     apply_register_refresh,
     bump_register_version,
@@ -358,13 +359,14 @@ def get_attendance_session(session_id: int, session: dict = Depends(require_auth
         full_session = _with_counts(cur, session_row)
 
         cur.execute(
-            """
+            f"""
             SELECT l.id AS "learnerId", concat(l.first_name, ' ', l.last_name) AS "learnerName",
                    l.learner_ref AS "learnerRef",
                    ar.id AS "recordId", ar.status, ar.hours_attended AS "hoursAttended",
                    ar.minutes_late AS "minutesLate", ar.notes, ar.override_reason AS "overrideReason",
                    ar.last_edited_by AS "lastEditedBy",
-                   CASE WHEN u.id IS NULL THEN NULL ELSE concat(u.first_name, ' ', u.last_name) END AS "lastEditedByName"
+                   CASE WHEN u.id IS NULL THEN NULL ELSE concat(u.first_name, ' ', u.last_name) END AS "lastEditedByName",
+                   {functional_skills_subjects_sql("l.id")} AS "functionalSkillsSubjects"
             FROM session_expected_learners sel
             JOIN learners l ON l.id = sel.learner_id
             LEFT JOIN attendance_records ar ON ar.learner_id = l.id AND ar.session_id = %s
@@ -396,9 +398,10 @@ def get_session_expected_learners(session_id: int, session: dict = Depends(requi
             cur, session_row["id"], session_row["cohortId"], session_row["sessionDate"], session.get("userId")
         )
         cur.execute(
-            """
+            f"""
             SELECT l.id AS "learnerId", concat(l.first_name, ' ', l.last_name) AS "learnerName",
-                   l.learner_ref AS "learnerRef"
+                   l.learner_ref AS "learnerRef",
+                   {functional_skills_subjects_sql("l.id")} AS "functionalSkillsSubjects"
             FROM session_expected_learners sel
             JOIN learners l ON l.id = sel.learner_id
             WHERE sel.session_id = %s

@@ -9,12 +9,14 @@ import type { CohortIdQueryParamParameter } from './cohortIdQueryParamParameter'
 import type { DateFromParamParameter } from './dateFromParamParameter';
 import type { DateToParamParameter } from './dateToParamParameter';
 import type { EmployerQueryParamParameter } from './employerQueryParamParameter';
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 import type { LearnerIdQueryParamParameter } from './learnerIdQueryParamParameter';
 import type { LevelQueryParamParameter } from './levelQueryParamParameter';
 import type { PageParamParameter } from './pageParamParameter';
 import type { PageSizeParamParameter } from './pageSizeParamParameter';
 import type { PeriodParamParameter } from './periodParamParameter';
 import type { ProgrammeQueryParamParameter } from './programmeQueryParamParameter';
+import type { SubjectQueryParamParameter } from './subjectQueryParamParameter';
 import type { TutorIdQueryParamParameter } from './tutorIdQueryParamParameter';
 
 export type GetLatenessReportParams = {
@@ -27,6 +29,10 @@ programme?: ProgrammeQueryParamParameter;
 level?: LevelQueryParamParameter;
 employer?: EmployerQueryParamParameter;
 learnerId?: LearnerIdQueryParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
 page?: PageParamParameter;
 pageSize?: PageSizeParamParameter;
 };

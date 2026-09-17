@@ -15,6 +15,7 @@ from datetime import date
 from typing import Literal
 
 from .allocation_lib import enrich_allocation_history
+from .secondary_enrollment_lib import learner_in_cohort_now_sql, learner_reachable_via_tutor_now_sql
 
 AbsenceType = Literal["absent_authorised", "absent_unauthorised"]
 RegisterStatusFilter = Literal["not_started", "in_progress", "completed", "locked", "cancelled"]
@@ -28,6 +29,7 @@ def _session_row_filters(
     level: str | None,
     employer: str | None,
     learner_id: int | None,
+    subject: str | None = None,
 ) -> tuple[list[str], dict]:
     clauses = []
     params: dict = {}
@@ -49,6 +51,12 @@ def _session_row_filters(
     if learner_id is not None:
         clauses.append("l.id = %(learnerId)s")
         params["learnerId"] = learner_id
+    if subject:
+        # A cohort's own subject (Math/English/Both) -- only ever set on a
+        # Functional Skills cohort, so this naturally scopes a report to
+        # Functional Skills sessions of that subject.
+        clauses.append("c.subject = %(subject)s")
+        params["subject"] = subject
     return clauses, params
 
 
@@ -130,15 +138,19 @@ def fetch_last_attendance_rows(
     (present/late) session, or NULL if they've never attended one. A
     learner with no attended sessions still appears here, deliberately:
     spotting exactly that is this report's whole purpose. Filters on the
-    learner's own tutor_id/cohort_id (their current assignment), not the
-    cohort's tutor, since this lists learners, not sessions."""
+    learner's own tutor_id/cohort_id (their current assignment) OR an active
+    Functional Skills secondary enrollment reaching that tutor/cohort, not
+    the cohort's tutor, since this lists learners, not sessions -- a learner
+    only ever enrolled in a Functional Skills cohort must still be
+    spottable as "assigned but never attended" on that cohort's/tutor's
+    view."""
     clauses = ["l.deleted_at IS NULL"]
     params: dict = {}
     if tutor_id is not None:
-        clauses.append("l.tutor_id = %(tutorId)s")
+        clauses.append(learner_reachable_via_tutor_now_sql("l", "%(tutorId)s"))
         params["tutorId"] = tutor_id
     if cohort_id is not None:
-        clauses.append("l.cohort_id = %(cohortId)s")
+        clauses.append(learner_in_cohort_now_sql("l", "%(cohortId)s"))
         params["cohortId"] = cohort_id
     if status:
         clauses.append("l.status = %(status)s")
@@ -200,11 +212,13 @@ def fetch_absence_rows(
     level: str | None = None,
     employer: str | None = None,
     learner_id: int | None = None,
+    subject: str | None = None,
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[dict], int]:
     extra_clauses, extra_params = _session_row_filters(
-        tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level, employer=employer, learner_id=learner_id
+        tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level, employer=employer,
+        learner_id=learner_id, subject=subject,
     )
     where = " AND ".join(
         ["s.status != 'cancelled'", "s.deleted_at IS NULL", "c.deleted_at IS NULL", "l.deleted_at IS NULL",
@@ -253,11 +267,13 @@ def fetch_lateness_rows(
     level: str | None = None,
     employer: str | None = None,
     learner_id: int | None = None,
+    subject: str | None = None,
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[dict], int]:
     extra_clauses, extra_params = _session_row_filters(
-        tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level, employer=employer, learner_id=learner_id
+        tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level, employer=employer,
+        learner_id=learner_id, subject=subject,
     )
     where = " AND ".join(
         ["s.status != 'cancelled'", "s.deleted_at IS NULL", "c.deleted_at IS NULL", "l.deleted_at IS NULL",

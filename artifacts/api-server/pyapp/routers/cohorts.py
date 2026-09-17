@@ -7,11 +7,14 @@ from pydantic import BaseModel, Field, model_validator
 from ..auth import deny_object_access, require_admin, require_auth, require_cohort_access
 from ..audit import write_audit_log
 from ..db import get_cursor
+from ..secondary_enrollment_lib import learner_in_cohort_now_sql
 from ..session_register_lib import ensure_expected_learners_snapshots_bulk
 
 router = APIRouter(tags=["cohorts"])
 
 DeliveryDay = Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+MembershipType = Literal["primary", "secondary"]
+CohortSubject = Literal["math", "english", "both"]
 
 
 def _parse_time(value: str, field: str) -> datetime:
@@ -42,6 +45,20 @@ def _validate_cohort_schedule(
         raise HTTPException(status_code=400, detail="endDate cannot be before startDate")
 
 
+def _check_subject_matches_membership_type(membership_type: str, subject: str | None) -> None:
+    """subject only means anything for a Functional Skills ('secondary')
+    cohort -- required there (so it can actually be reported on), and
+    disallowed on an ordinary ('primary') cohort so a stale/leftover value
+    can never linger on a cohort it doesn't apply to."""
+    if membership_type == "secondary" and subject is None:
+        raise HTTPException(
+            status_code=400,
+            detail="subject (Math, English, or Both) is required for a Functional Skills cohort",
+        )
+    if membership_type == "primary" and subject is not None:
+        raise HTTPException(status_code=400, detail="subject only applies to a Functional Skills cohort")
+
+
 def _ensure_tutor_active(cur, tutor_id: int | None) -> None:
     if tutor_id is None:
         return
@@ -57,6 +74,7 @@ COHORT_SELECT = """
            c.delivery_day AS "deliveryDay", c.session_start_time AS "sessionStartTime",
            c.session_end_time AS "sessionEndTime", c.start_date AS "startDate",
            c.end_date AS "endDate", c.active, c.external_system_id AS "externalSystemId",
+           c.membership_type AS "membershipType", c.subject,
            c.created_at AS "createdAt", c.updated_at AS "updatedAt",
            CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName"
     FROM cohorts c
@@ -76,10 +94,13 @@ class CohortInput(BaseModel):
     endDate: date | None = None
     active: bool = True
     externalSystemId: str | None = None
+    membershipType: MembershipType = "primary"
+    subject: CohortSubject | None = None
 
     @model_validator(mode="after")
     def _check_schedule(self) -> "CohortInput":
         _validate_cohort_schedule(self.sessionStartTime, self.sessionEndTime, self.startDate, self.endDate)
+        _check_subject_matches_membership_type(self.membershipType, self.subject)
         return self
 
 
@@ -95,6 +116,8 @@ class CohortUpdate(BaseModel):
     endDate: date | None = None
     active: bool | None = None
     externalSystemId: str | None = None
+    membershipType: MembershipType | None = None
+    subject: CohortSubject | None = None
 
 
 @router.get("/cohorts")
@@ -173,11 +196,18 @@ def list_cohort_summary(
         outstanding_counts: dict[int, int] = {}
 
         if cohort_ids:
+            # unnest(%s) rather than "cohort_id = ANY(%s)" -- a learner's
+            # active count must be attributed per specific cohort (their
+            # home cohort, or one of possibly several secondary
+            # enrollments), so each cohort_id in the filter list is checked
+            # against every learner individually via learner_in_cohort_now_sql.
             cur.execute(
-                """
-                SELECT cohort_id AS "cohortId", count(*)::int AS count
-                FROM learners WHERE cohort_id = ANY(%s) AND status = 'active' AND deleted_at IS NULL
-                GROUP BY cohort_id
+                f"""
+                SELECT cid AS "cohortId", count(*)::int AS count
+                FROM unnest(%s) AS cid
+                JOIN learners ON learners.status = 'active' AND learners.deleted_at IS NULL
+                    AND {learner_in_cohort_now_sql("learners", "cid")}
+                GROUP BY cid
                 """,
                 (cohort_ids,),
             )
@@ -238,8 +268,9 @@ def _create_cohort(cur, payload: CohortInput, request: Request, session: dict) -
     cur.execute(
         """
         INSERT INTO cohorts (name, programme, level, tutor_id, delivery_day, session_start_time,
-                              session_end_time, start_date, end_date, active, external_system_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
+                              session_end_time, start_date, end_date, active, external_system_id, membership_type,
+                              subject)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, *
         """,
         (
             payload.name,
@@ -253,6 +284,8 @@ def _create_cohort(cur, payload: CohortInput, request: Request, session: dict) -
             payload.endDate,
             payload.active,
             payload.externalSystemId,
+            payload.membershipType,
+            payload.subject,
         ),
     )
     created = cur.fetchone()
@@ -281,7 +314,11 @@ def get_cohort(cohort_id: int, session: dict = Depends(require_auth)):
             deny_object_access("cohort", cohort_id, "Not allowed to view this cohort")
 
         cur.execute(
-            "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND deleted_at IS NULL", (cohort_id,)
+            f"""
+            SELECT count(*)::int AS count FROM learners
+            WHERE {learner_in_cohort_now_sql("learners", "%s")} AND deleted_at IS NULL
+            """,
+            (cohort_id, cohort_id),
         )
         count = cur.fetchone()["count"]
 
@@ -320,6 +357,33 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, sessi
         if "tutorId" in updates:
             _ensure_tutor_active(cur, updates["tutorId"])
 
+        if "membershipType" in updates and updates["membershipType"] != existing["membership_type"]:
+            cur.execute(
+                "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND deleted_at IS NULL",
+                (cohort_id,),
+            )
+            has_home_learners = cur.fetchone()["count"] > 0
+            cur.execute(
+                "SELECT count(*)::int AS count FROM learner_cohort_enrollments WHERE cohort_id = %s AND status = 'active'",
+                (cohort_id,),
+            )
+            has_secondary_enrollments = cur.fetchone()["count"] > 0
+            if updates["membershipType"] == "secondary" and has_home_learners:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot change to a Functional Skills cohort while it still has home learners.",
+                )
+            if updates["membershipType"] == "primary" and has_secondary_enrollments:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot change back to a standard cohort while it still has active Functional Skills enrollments.",
+                )
+
+        if "membershipType" in updates or "subject" in updates:
+            final_membership_type = updates.get("membershipType", existing["membership_type"])
+            final_subject = updates["subject"] if "subject" in updates else existing["subject"]
+            _check_subject_matches_membership_type(final_membership_type, final_subject)
+
         column_map = {
             "name": "name",
             "programme": "programme",
@@ -332,6 +396,8 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, sessi
             "endDate": "end_date",
             "active": "active",
             "externalSystemId": "external_system_id",
+            "membershipType": "membership_type",
+            "subject": "subject",
         }
         set_clauses = [f"{column_map[k]} = %s" for k in updates]
         params = list(updates.values())
@@ -410,15 +476,22 @@ def delete_cohort(cohort_id: int, payload: CohortDeleteInput, request: Request, 
             (cohort_id,),
         )
         session_count = cur.fetchone()["count"]
-        if active_learner_count > 0 or session_count > 0:
+        cur.execute(
+            "SELECT count(*)::int AS count FROM learner_cohort_enrollments WHERE cohort_id = %s AND status = 'active'",
+            (cohort_id,),
+        )
+        active_secondary_enrollment_count = cur.fetchone()["count"]
+        if active_learner_count > 0 or session_count > 0 or active_secondary_enrollment_count > 0:
             raise HTTPException(
                 status_code=409,
                 detail={
                     "error": "cohort_not_empty",
-                    "message": "This cohort still has active learners or attendance sessions. "
-                               "Reassign/withdraw its learners and delete its sessions before deleting the cohort.",
+                    "message": "This cohort still has active learners, attendance sessions, or active Functional "
+                               "Skills enrollments. Reassign/withdraw its learners, end its enrollments, and "
+                               "delete its sessions before deleting the cohort.",
                     "activeLearnerCount": active_learner_count,
                     "sessionCount": session_count,
+                    "activeSecondaryEnrollmentCount": active_secondary_enrollment_count,
                 },
             )
 
@@ -445,5 +518,10 @@ def get_cohort_learners(cohort_id: int, session: dict = Depends(require_auth)):
 
     with get_cursor() as cur:
         require_cohort_access(cur, cohort_id, session)
-        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.cohort_id = %s AND l.deleted_at IS NULL", (cohort_id,))
+        cur.execute(
+            f"""{LEARNERS_WITH_NAMES_SELECT}
+            WHERE {learner_in_cohort_now_sql("l", "%s")} AND l.deleted_at IS NULL
+            """,
+            (cohort_id, cohort_id),
+        )
         return cur.fetchall()

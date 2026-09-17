@@ -2,8 +2,10 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetLearner, useCreateLearner, useUpdateLearner, useChangeLearnerStatus, useDeleteLearner,
-  useGetLearnerAllocationHistory, useGetCurrentUser, useListTutors, useAllocateLearners, LearnerStatus,
+  useGetLearnerAllocationHistory, useGetCurrentUser, useListTutors, useListCohorts, useAllocateLearners, LearnerStatus,
+  useListLearnerSecondaryEnrollments, useCreateLearnerSecondaryEnrollment, useEndLearnerSecondaryEnrollment,
   getGetLearnerQueryKey, getGetLearnerAllocationHistoryQueryKey, getListTutorsQueryKey,
+  getListLearnerSecondaryEnrollmentsQueryKey, getListCohortsQueryKey,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useForm } from "react-hook-form";
@@ -17,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -29,7 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2, Users } from "lucide-react";
+import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2, Users, GraduationCap, Plus, XCircle } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -78,6 +81,13 @@ export default function LearnerDetailPage() {
   const [reassignDialogOpen, setReassignDialogOpen] = React.useState(false);
   const [reassignTutorId, setReassignTutorId] = React.useState("");
   const [reassignReason, setReassignReason] = React.useState("");
+  const [enrollDialogOpen, setEnrollDialogOpen] = React.useState(false);
+  const [enrollCohortId, setEnrollCohortId] = React.useState("");
+  const [enrollDate, setEnrollDate] = React.useState(format(new Date(), "yyyy-MM-dd"));
+  const [enrollReason, setEnrollReason] = React.useState("");
+  const [endEnrollmentId, setEndEnrollmentId] = React.useState<number | null>(null);
+  const [endEnrollmentDate, setEndEnrollmentDate] = React.useState(format(new Date(), "yyyy-MM-dd"));
+  const [endEnrollmentReason, setEndEnrollmentReason] = React.useState("");
 
   const { data: currentUser } = useGetCurrentUser();
   const isAdmin = currentUser?.role === "admin";
@@ -94,11 +104,29 @@ export default function LearnerDetailPage() {
     query: { enabled: isAdmin && !isNew, queryKey: getListTutorsQueryKey({ active: true }) } // Only admins need the full list to reassign
   });
 
+  const { data: secondaryEnrollments = [] } = useListLearnerSecondaryEnrollments(learnerId, {
+    query: { enabled: !isNew, queryKey: getListLearnerSecondaryEnrollmentsQueryKey(learnerId) }
+  });
+  const { data: allCohorts = [] } = useListCohorts({ active: true }, {
+    query: { enabled: isAdmin && !isNew, queryKey: getListCohortsQueryKey({ active: true }) }
+  });
+  // Only Functional Skills cohorts the learner isn't already actively
+  // enrolled in are valid enroll targets -- their own home cohort is never
+  // a valid target either (backend independently rejects it too).
+  const activeEnrollmentCohortIds = new Set(
+    secondaryEnrollments.filter((e) => e.status === "active").map((e) => e.cohortId)
+  );
+  const enrollableCohorts = allCohorts.filter(
+    (c) => c.membershipType === "secondary" && c.id !== learner?.cohortId && !activeEnrollmentCohortIds.has(c.id)
+  );
+
   const createMutation = useCreateLearner();
   const updateMutation = useUpdateLearner();
   const changeStatusMutation = useChangeLearnerStatus();
   const deleteMutation = useDeleteLearner();
   const allocateMutation = useAllocateLearners();
+  const enrollMutation = useCreateLearnerSecondaryEnrollment();
+  const endEnrollmentMutation = useEndLearnerSecondaryEnrollment();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const form = useForm<z.infer<typeof learnerSchema>>({
@@ -228,6 +256,39 @@ export default function LearnerDetailPage() {
     });
   };
 
+  const onEnroll = () => {
+    if (!enrollCohortId) return;
+    enrollMutation.mutate({
+      id: learnerId,
+      data: { cohortId: Number(enrollCohortId), enrolledDate: enrollDate, reason: enrollReason.trim() || undefined },
+    }, {
+      onSuccess: () => {
+        toast({ title: "Enrolled in Functional Skills cohort" });
+        setEnrollDialogOpen(false);
+        setEnrollCohortId("");
+        setEnrollReason("");
+        queryClient.invalidateQueries({ queryKey: getListLearnerSecondaryEnrollmentsQueryKey(learnerId) });
+      },
+      onError: (err) => toast({ title: "Could not enroll learner", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const onEndEnrollment = () => {
+    if (endEnrollmentId == null) return;
+    endEnrollmentMutation.mutate({
+      id: endEnrollmentId,
+      data: { endDate: endEnrollmentDate, reason: endEnrollmentReason.trim() || undefined },
+    }, {
+      onSuccess: () => {
+        toast({ title: "Functional Skills enrollment ended" });
+        setEndEnrollmentId(null);
+        setEndEnrollmentReason("");
+        queryClient.invalidateQueries({ queryKey: getListLearnerSecondaryEnrollmentsQueryKey(learnerId) });
+      },
+      onError: (err) => toast({ title: "Could not end enrollment", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
   const onDeleteLearner = () => {
     deleteMutation.mutate({ id: learnerId, data: { reason: deleteReason.trim() } }, {
       onSuccess: () => {
@@ -293,9 +354,10 @@ export default function LearnerDetailPage() {
       <div className="page-transition-enter stagger-1">
         <Tabs defaultValue="details" className="w-full">
           {!isNew && (
-            <TabsList className="grid w-full grid-cols-2 max-w-md mb-6">
+            <TabsList className="grid w-full grid-cols-3 max-w-lg mb-6">
               <TabsTrigger value="details">Profile Details</TabsTrigger>
               <TabsTrigger value="history">Allocation History</TabsTrigger>
+              <TabsTrigger value="functional-skills">Functional Skills ({secondaryEnrollments.length})</TabsTrigger>
             </TabsList>
           )}
 
@@ -460,6 +522,87 @@ export default function LearnerDetailPage() {
               </Card>
             </TabsContent>
           )}
+
+          {!isNew && (
+            <TabsContent value="functional-skills">
+              <Card className="shadow-sm">
+                <CardHeader className="border-b bg-muted/10">
+                  <CardTitle className="flex items-center justify-between text-lg">
+                    <span className="flex items-center gap-2">
+                      <GraduationCap className="w-5 h-5 text-primary" /> Functional Skills Enrollments
+                    </span>
+                    {isAdmin && (
+                      <Button variant="outline" size="sm" onClick={() => setEnrollDialogOpen(true)}>
+                        <Plus className="w-4 h-4 mr-2" /> Enroll
+                      </Button>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    Additional English/Maths cohorts this learner attends alongside their home cohort
+                    ({learner?.cohortName || "unassigned"}). Enrolling here never changes their home cohort or tutor.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {secondaryEnrollments.length === 0 ? (
+                    <div className="p-12 text-center text-muted-foreground flex flex-col items-center">
+                      <GraduationCap className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                      <p>No Functional Skills enrollments yet.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Cohort</TableHead>
+                            <TableHead>Tutor</TableHead>
+                            <TableHead>Enrolled</TableHead>
+                            <TableHead>Ended</TableHead>
+                            <TableHead>Status</TableHead>
+                            {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {secondaryEnrollments.map((e) => (
+                            <TableRow key={e.id} className="hover:bg-muted/30">
+                              <TableCell className="font-medium">{e.cohortName}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{e.cohortTutorName || "Unassigned"}</TableCell>
+                              <TableCell className="text-sm">{format(parseISO(e.enrolledDate), "MMM d, yyyy")}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {e.endDate ? format(parseISO(e.endDate), "MMM d, yyyy") : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <span className={e.status === "active" ? "text-emerald-600 font-medium text-sm" : "text-muted-foreground text-sm"}>
+                                  {e.status === "active" ? "Active" : "Ended"}
+                                </span>
+                              </TableCell>
+                              {isAdmin && (
+                                <TableCell className="text-right">
+                                  {e.status === "active" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => {
+                                        setEndEnrollmentId(e.id);
+                                        setEndEnrollmentDate(format(new Date(), "yyyy-MM-dd"));
+                                        setEndEnrollmentReason("");
+                                      }}
+                                    >
+                                      <XCircle className="w-4 h-4 mr-1" /> End
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
@@ -515,6 +658,92 @@ export default function LearnerDetailPage() {
             <Button onClick={onReassignTutor} disabled={allocateMutation.isPending || !reassignTutorId || !reassignReason.trim()}>
               {allocateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Reassign Tutor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={enrollDialogOpen}
+        onOpenChange={(o) => { setEnrollDialogOpen(o); if (!o) { setEnrollCohortId(""); setEnrollReason(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enroll in Functional Skills Cohort</DialogTitle>
+            <DialogDescription>
+              This adds an additional cohort alongside this learner's home cohort -- it never changes
+              their home cohort or tutor. If the cohort's upcoming sessions already have registers
+              generated, use "Refresh Expected Learners" on those sessions afterwards.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="enroll-cohort-combobox">Functional Skills Cohort</Label>
+              <Combobox
+                id="enroll-cohort-combobox"
+                aria-label="Functional Skills Cohort"
+                options={enrollableCohorts.map((c) => ({ value: String(c.id), label: `${c.name} (${c.tutorName || "Unassigned"})` }))}
+                value={enrollCohortId}
+                onValueChange={setEnrollCohortId}
+                placeholder="Select a Functional Skills cohort..."
+                searchPlaceholder="Search cohorts..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="enroll-date">Enrolled Date</Label>
+              <Input id="enroll-date" type="date" value={enrollDate} onChange={(e) => setEnrollDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="enroll-reason">Reason (Optional)</Label>
+              <Textarea
+                id="enroll-reason"
+                value={enrollReason}
+                onChange={(e) => setEnrollReason(e.target.value)}
+                rows={3}
+                placeholder="Why does this learner need Functional Skills support?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnrollDialogOpen(false)}>Cancel</Button>
+            <Button onClick={onEnroll} disabled={enrollMutation.isPending || !enrollCohortId}>
+              {enrollMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Enroll
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={endEnrollmentId != null} onOpenChange={(o) => { if (!o) { setEndEnrollmentId(null); setEndEnrollmentReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>End Functional Skills Enrollment</DialogTitle>
+            <DialogDescription>
+              The learner stops being expected at this cohort's sessions from the end date onward. Past
+              attendance in this cohort is kept exactly as recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="end-enrollment-date">End Date</Label>
+              <Input id="end-enrollment-date" type="date" value={endEnrollmentDate} onChange={(e) => setEndEnrollmentDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="end-enrollment-reason">Reason (Optional)</Label>
+              <Textarea
+                id="end-enrollment-reason"
+                value={endEnrollmentReason}
+                onChange={(e) => setEndEnrollmentReason(e.target.value)}
+                rows={3}
+                placeholder="Why is this enrollment ending?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEndEnrollmentId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={onEndEnrollment} disabled={endEnrollmentMutation.isPending}>
+              {endEnrollmentMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              End Enrollment
             </Button>
           </DialogFooter>
         </DialogContent>

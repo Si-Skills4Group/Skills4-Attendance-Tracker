@@ -128,6 +128,30 @@ class TestRowLevelAccess:
             auth_module.require_learner_access(db, learner["id"], other["session"])
         assert exc.value.status_code == 403
 
+    def test_tutor_with_only_a_secondary_enrollment_can_access_the_learner(
+        self, db, learner_factory, tutor_factory, cohort_factory, secondary_enrollment_factory,
+    ):
+        home_tutor = tutor_factory()
+        fs_tutor = tutor_factory()
+        fs_cohort = cohort_factory(tutor_id=fs_tutor["tutorId"], membership_type="secondary")
+        learner = learner_factory(tutor_id=home_tutor["tutorId"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+
+        result = auth_module.require_learner_access(db, learner["id"], fs_tutor["session"])
+        assert result["id"] == learner["id"]
+
+    def test_a_tutor_with_no_relationship_at_all_is_still_denied(
+        self, db, learner_factory, tutor_factory, cohort_factory,
+    ):
+        home_tutor = tutor_factory()
+        unrelated_tutor = tutor_factory()
+        cohort_factory(tutor_id=unrelated_tutor["tutorId"], membership_type="secondary")
+        learner = learner_factory(tutor_id=home_tutor["tutorId"])
+
+        with pytest.raises(HTTPException) as exc:
+            auth_module.require_learner_access(db, learner["id"], unrelated_tutor["session"])
+        assert exc.value.status_code == 403
+
 
 class TestEndpointsRejectTutorsOverHttp:
     """These go through the real ASGI route (TestClient), so

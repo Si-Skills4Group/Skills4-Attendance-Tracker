@@ -10,8 +10,9 @@ const tutors = [
 ];
 
 const cohorts = [
-  { id: 5, name: 'Cohort A', tutorId: 10 },
-  { id: 6, name: 'Cohort B', tutorId: 20 },
+  { id: 5, name: 'Cohort A', tutorId: 10, membershipType: 'primary' },
+  { id: 6, name: 'Cohort B', tutorId: 20, membershipType: 'primary' },
+  { id: 7, name: 'Functional Skills Maths', tutorId: 20, membershipType: 'secondary' },
 ];
 
 function makeLearner(overrides: Record<string, any> = {}) {
@@ -121,13 +122,29 @@ describe('AllocationPage', () => {
     expect(applyButton).toBeEnabled();
   });
 
-  it('shows every cohort in the target picker when no target tutor is chosen', async () => {
+  it('shows every home cohort in the target picker when no target tutor is chosen', async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getByRole('combobox', { name: /target cohort/i }));
     expect(await screen.findByText('Cohort A')).toBeInTheDocument();
     expect(screen.getByText('Cohort B')).toBeInTheDocument();
+  });
+
+  it('excludes Functional Skills (secondary) cohorts from the target cohort picker', async () => {
+    // This panel MOVES a learner's home cohort/tutor -- a Functional Skills
+    // cohort is an additional, add-only assignment made from the learner's
+    // own profile, never a valid target here even for its own tutor.
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('combobox', { name: /target cohort/i }));
+    expect(screen.queryByText('Functional Skills Maths')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: /target tutor/i }));
+    await user.click(await screen.findByText('Cara Cover'));
+    await user.click(screen.getByRole('combobox', { name: /target cohort/i }));
+    expect(screen.queryByText('Functional Skills Maths')).not.toBeInTheDocument();
   });
 
   it('narrows the target cohort picker to the chosen target tutor\'s own cohorts', async () => {

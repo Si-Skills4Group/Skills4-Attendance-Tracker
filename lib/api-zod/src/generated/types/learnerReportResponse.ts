@@ -8,13 +8,17 @@
 import type { AttendanceMetrics } from './attendanceMetrics';
 import type { BudProgress } from './budProgress';
 import type { Learner } from './learner';
+import type { LearnerCohortBreakdownEntry } from './learnerCohortBreakdownEntry';
 import type { LearnerSessionHistoryListResponse } from './learnerSessionHistoryListResponse';
 import type { RegisterCompletionSummary } from './registerCompletionSummary';
 
 export interface LearnerReportResponse {
   learner: Learner;
+  /** The learner's HOME cohort figures specifically (identical to cohortBreakdown's "home" entry) -- never a blend across every cohort this learner is expected in. See cohortBreakdown for a Functional Skills secondary enrollment's own, separate figures. */
   metrics: AttendanceMetrics;
   registerCompletion: RegisterCompletionSummary;
+  /** One entry per cohort this learner is currently expected in -- their home cohort plus each active Functional Skills secondary enrollment -- each with its own, never-blended metrics. */
+  cohortBreakdown: LearnerCohortBreakdownEntry[];
   bud: BudProgress | null;
   sessionHistory: LearnerSessionHistoryListResponse;
 }

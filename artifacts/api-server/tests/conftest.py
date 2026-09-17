@@ -215,14 +215,16 @@ def cohort_factory(db):
             start_date="2026-01-01",
             end_date=None,
             active=True,
+            membership_type="primary",
+            subject=None,
         )
         defaults.update(overrides)
         db.execute(
             """
             INSERT INTO cohorts (name, programme, level, tutor_id, delivery_day, session_start_time,
-                                  session_end_time, start_date, end_date, active)
+                                  session_end_time, start_date, end_date, active, membership_type, subject)
             VALUES (%(name)s, %(programme)s, %(level)s, %(tutor_id)s, %(delivery_day)s, %(session_start_time)s,
-                    %(session_end_time)s, %(start_date)s, %(end_date)s, %(active)s)
+                    %(session_end_time)s, %(start_date)s, %(end_date)s, %(active)s, %(membership_type)s, %(subject)s)
             RETURNING id
             """,
             defaults,
@@ -235,6 +237,7 @@ def cohort_factory(db):
 
     for cohort_id in created_ids:
         db.execute("DELETE FROM bud_cohort_mapping WHERE cohort_id = %s", (cohort_id,))
+        db.execute("DELETE FROM learner_cohort_enrollments WHERE cohort_id = %s", (cohort_id,))
         db.execute("DELETE FROM cohorts WHERE id = %s", (cohort_id,))
 
 
@@ -282,8 +285,45 @@ def learner_factory(db):
         db.execute("DELETE FROM attendance_records WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM scheduled_allocations WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learner_allocation_history WHERE learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM learner_cohort_enrollments WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learners WHERE id = %s", (learner_id,))
+
+
+@pytest.fixture
+def secondary_enrollment_factory(db):
+    created_ids = []
+
+    def make(**overrides) -> dict:
+        defaults = dict(
+            enrolled_date="2026-01-01",
+            end_date=None,
+            status="active",
+            enrolled_by=1,
+            enrollment_reason=None,
+            ended_by=None,
+            end_reason=None,
+        )
+        defaults.update(overrides)
+        db.execute(
+            """
+            INSERT INTO learner_cohort_enrollments
+                (learner_id, cohort_id, enrolled_date, end_date, status, enrolled_by, enrollment_reason,
+                 ended_by, end_reason)
+            VALUES (%(learner_id)s, %(cohort_id)s, %(enrolled_date)s, %(end_date)s, %(status)s, %(enrolled_by)s,
+                    %(enrollment_reason)s, %(ended_by)s, %(end_reason)s)
+            RETURNING id
+            """,
+            defaults,
+        )
+        enrollment_id = db.fetchone()["id"]
+        created_ids.append(enrollment_id)
+        return {"id": enrollment_id, **defaults}
+
+    yield make
+
+    for enrollment_id in created_ids:
+        db.execute("DELETE FROM learner_cohort_enrollments WHERE id = %s", (enrollment_id,))
 
 
 @pytest.fixture

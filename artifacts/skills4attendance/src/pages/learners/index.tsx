@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Search, Plus, Upload, GraduationCap, Building2, User, ChevronLeft, ChevronRight } from "lucide-react";
-import { LearnerStatusBadge } from "@/components/status-badges";
+import { LearnerStatusBadge, FunctionalSkillsBadges } from "@/components/status-badges";
 import { useDebounce } from "@/hooks/use-debounce";
 
 const allValue = "__all__";
@@ -175,8 +175,9 @@ export default function LearnersPage() {
                   <TableRow key={learner.id} className="hover:bg-muted/20 transition-colors group">
                     <TableCell>
                       <Link href={`/learners/${learner.id}`}>
-                        <div className="font-semibold text-foreground group-hover:text-primary transition-colors cursor-pointer">
+                        <div className="font-semibold text-foreground group-hover:text-primary transition-colors cursor-pointer flex items-center gap-2">
                           {learner.firstName} {learner.lastName}
+                          <FunctionalSkillsBadges subjects={learner.functionalSkillsSubjects} />
                         </div>
                       </Link>
                       <div className="text-xs text-muted-foreground font-mono mt-0.5">{learner.learnerRef}</div>

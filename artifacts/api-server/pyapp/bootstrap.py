@@ -676,6 +676,58 @@ ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS cohort_mismatch boolean
 ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS transfer_requested boolean NOT NULL DEFAULT false;
 ALTER TABLE learner_import_rows ADD COLUMN IF NOT EXISTS transfer_applied boolean NOT NULL DEFAULT false;
 ALTER TABLE learner_import_jobs ADD COLUMN IF NOT EXISTS cohort_mismatch_count integer NOT NULL DEFAULT 0;
+
+-- Functional Skills secondary cohort enrollment: a learner can now be
+-- expected in a SECOND cohort (e.g. an English/Maths Functional Skills
+-- cohort run by a specialist tutor) concurrently with their home cohort,
+-- without touching learners.cohort_id/tutor_id, apply_transfer, or
+-- learner_allocation_history at all -- those remain the sole mechanism for
+-- a learner's single home cohort/tutor. membership_type marks which
+-- mechanism owns a given cohort's membership: 'primary' cohorts are
+-- enrolled the existing way (allocation screen/CSV import/Bud sync, all via
+-- apply_transfer); 'secondary' cohorts are enrolled only via
+-- learner_cohort_enrollments below, by an Administrator. No FK, matching
+-- every other table in this schema -- cohort/learner deletion here follows
+-- the same soft-delete-and-block pattern already used elsewhere, not a
+-- cascade.
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS membership_type text NOT NULL DEFAULT 'primary';
+CREATE INDEX IF NOT EXISTS idx_cohorts_membership_type ON cohorts (membership_type);
+
+CREATE TABLE IF NOT EXISTS learner_cohort_enrollments (
+  id serial PRIMARY KEY,
+  learner_id integer NOT NULL,
+  cohort_id integer NOT NULL,
+  enrolled_date date NOT NULL,
+  end_date date,
+  status text NOT NULL DEFAULT 'active',
+  enrolled_by integer NOT NULL,
+  enrollment_reason text,
+  ended_by integer,
+  end_reason text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_learner_cohort_enrollments_one_active
+  ON learner_cohort_enrollments (learner_id, cohort_id)
+  WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_learner_cohort_enrollments_learner ON learner_cohort_enrollments (learner_id);
+CREATE INDEX IF NOT EXISTS idx_learner_cohort_enrollments_cohort ON learner_cohort_enrollments (cohort_id);
+
+ALTER TABLE learner_cohort_enrollments DROP CONSTRAINT IF EXISTS learner_cohort_enrollments_status_check;
+ALTER TABLE learner_cohort_enrollments ADD CONSTRAINT learner_cohort_enrollments_status_check
+  CHECK (status IN ('active', 'ended'));
+
+-- Functional Skills subject: distinguishes Maths/English (or both) cohorts
+-- for reporting -- NULL for every ordinary 'primary' cohort, required for
+-- 'secondary' ones (enforced in the router, not a cross-column CHECK, to
+-- match this schema's existing convention of application-level validation
+-- for anything spanning more than one column).
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS subject text;
+CREATE INDEX IF NOT EXISTS idx_cohorts_subject ON cohorts (subject) WHERE subject IS NOT NULL;
+ALTER TABLE cohorts DROP CONSTRAINT IF EXISTS cohorts_subject_check;
+ALTER TABLE cohorts ADD CONSTRAINT cohorts_subject_check
+  CHECK (subject IS NULL OR subject IN ('math', 'english', 'both'));
 """
 
 

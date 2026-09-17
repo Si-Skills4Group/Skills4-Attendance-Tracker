@@ -14,6 +14,7 @@ from ..attendance_metrics import (
 )
 from ..auth import require_admin, require_auth
 from ..db import get_cursor
+from ..secondary_enrollment_lib import learner_in_cohort_now_sql, learner_reachable_via_tutor_now_sql
 from .cohorts import COHORT_SELECT
 from .tutors import TUTOR_SELECT
 
@@ -25,10 +26,27 @@ def _paginate(items: list, page: int, page_size: int) -> dict:
     return {"items": items[start : start + page_size], "total": len(items), "page": page, "pageSize": page_size}
 
 
-def _low_attendance_rows(cur, learners: list[dict], threshold: float, period_start: date, period_end: date) -> list[dict]:
+def _low_attendance_rows(
+    cur,
+    learners: list[dict],
+    threshold: float,
+    period_start: date,
+    period_end: date,
+    cohort_ids: list[int] | None = None,
+) -> list[dict]:
     """Batched (no N+1) replacement for the old per-learner-query
     implementation -- one aggregate query for every learner in `learners`,
     then filtered/shaped in Python from that single result set.
+
+    cohort_ids, when given, restricts each learner's attendance totals to
+    sessions in that specific cohort/set of cohorts (a tutor's own cohorts,
+    or one cohort) -- essential now that a learner can be expected in more
+    than one cohort (a home cohort plus a Functional Skills secondary
+    enrollment): without it, a tutor-scoped or cohort-scoped low-attendance
+    view would blend in a learner's unrelated attendance in a *different*
+    cohort/tutor's sessions. Omit it only for a genuinely organisation-wide
+    view, where a learner's overall picture across everything they're
+    expected in is the intended question.
 
     Bud progress is looked up separately (one batched query keyed on ULN,
     see bud_progress.py) and merged in purely for display -- it never
@@ -36,7 +54,12 @@ def _low_attendance_rows(cur, learners: list[dict], threshold: float, period_sta
     Bud match simply gets bud: None, never breaking this list."""
     learner_ids = [learner["id"] for learner in learners]
     metrics_by_learner = fetch_attendance_metrics_grouped(
-        cur, group_by="learner", group_ids=learner_ids, period_start=period_start, period_end=period_end
+        cur,
+        group_by="learner",
+        group_ids=learner_ids,
+        period_start=period_start,
+        period_end=period_end,
+        restrict_to_cohort_ids=cohort_ids,
     )
     flagged = [learner for learner in learners if is_low_attendance(metrics_by_learner[learner["id"]], threshold)]
     bud_by_uln = get_bud_progress_by_uln(cur, [learner.get("uln") for learner in flagged])
@@ -219,7 +242,11 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
         cohort_summaries = []
         for cohort in cohorts:
             cur.execute(
-                "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND deleted_at IS NULL", (cohort["id"],)
+                f"""
+                SELECT count(*)::int AS count FROM learners
+                WHERE {learner_in_cohort_now_sql("learners", "%s")} AND deleted_at IS NULL
+                """,
+                (cohort["id"], cohort["id"]),
             )
             learner_count = cur.fetchone()["count"]
             metrics = metrics_by_cohort.get(cohort["id"])
@@ -259,14 +286,18 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
         threshold = _get_threshold(cur)
 
         cur.execute(
-            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", '
-            'l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName" '
-            "FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id "
-            "WHERE l.tutor_id = %s AND l.status = 'active' AND l.deleted_at IS NULL",
-            (tutor_id,),
+            f"""
+            SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName",
+                   l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName"
+            FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id
+            WHERE {learner_reachable_via_tutor_now_sql("l", "%s")} AND l.status = 'active' AND l.deleted_at IS NULL
+            """,
+            (tutor_id, tutor_id),
         )
         active_learner_rows = cur.fetchall()
-        low_attendance = _low_attendance_rows(cur, active_learner_rows, threshold, month_start, month_end)
+        low_attendance = _low_attendance_rows(
+            cur, active_learner_rows, threshold, month_start, month_end, cohort_ids=cohort_ids
+        )
 
     return {
         "cohorts": cohort_summaries,
@@ -306,8 +337,11 @@ def get_tutor_dashboard_cohorts(
         rows = []
         for cohort in cohorts:
             cur.execute(
-                "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active' AND deleted_at IS NULL",
-                (cohort["id"],),
+                f"""
+                SELECT count(*)::int AS count FROM learners
+                WHERE {learner_in_cohort_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+                """,
+                (cohort["id"], cohort["id"]),
             )
             learner_count = cur.fetchone()["count"]
             cur.execute(
@@ -325,12 +359,16 @@ def get_tutor_dashboard_cohorts(
                 cur, scope="cohort", scope_id=cohort["id"], period_start=period_start, period_end=period_end
             )
             cur.execute(
-                "SELECT id, first_name AS \"firstName\", last_name AS \"lastName\", learner_ref AS \"learnerRef\", uln "
-                "FROM learners WHERE cohort_id = %s AND status = 'active' AND deleted_at IS NULL",
-                (cohort["id"],),
+                f"""
+                SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef", uln
+                FROM learners WHERE {learner_in_cohort_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+                """,
+                (cohort["id"], cohort["id"]),
             )
             cohort_learners = cur.fetchall()
-            low_attendance_count = len(_low_attendance_rows(cur, cohort_learners, threshold, period_start, period_end))
+            low_attendance_count = len(
+                _low_attendance_rows(cur, cohort_learners, threshold, period_start, period_end, cohort_ids=[cohort["id"]])
+            )
             metrics = metrics_by_cohort.get(cohort["id"])
             rows.append(
                 {
@@ -372,15 +410,19 @@ def get_tutor_low_attendance_learners(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         threshold = _get_threshold(cur)
+        cur.execute("SELECT id FROM cohorts WHERE tutor_id = %s AND deleted_at IS NULL", (tutor_id,))
+        cohort_ids = [r["id"] for r in cur.fetchall()]
         cur.execute(
-            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", '
-            'l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName" '
-            "FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id "
-            "WHERE l.tutor_id = %s AND l.status = 'active' AND l.deleted_at IS NULL",
-            (tutor_id,),
+            f"""
+            SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName",
+                   l.learner_ref AS "learnerRef", l.uln, c.name AS "cohortName"
+            FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id
+            WHERE {learner_reachable_via_tutor_now_sql("l", "%s")} AND l.status = 'active' AND l.deleted_at IS NULL
+            """,
+            (tutor_id, tutor_id),
         )
         learners = cur.fetchall()
-        rows = _low_attendance_rows(cur, learners, threshold, period_start, period_end)
+        rows = _low_attendance_rows(cur, learners, threshold, period_start, period_end, cohort_ids=cohort_ids)
     return _paginate(rows, page, pageSize)
 
 
@@ -407,25 +449,37 @@ def get_admin_dashboard_tutors(
         rows = []
         for tutor in tutors:
             cur.execute(
+                "SELECT id FROM cohorts WHERE tutor_id = %s AND deleted_at IS NULL",
+                (tutor["id"],),
+            )
+            tutor_cohort_ids = [r["id"] for r in cur.fetchall()]
+            cur.execute(
                 "SELECT count(*)::int AS count FROM cohorts WHERE tutor_id = %s AND active = true AND deleted_at IS NULL",
                 (tutor["id"],),
             )
             active_cohorts = cur.fetchone()["count"]
             cur.execute(
-                "SELECT count(*)::int AS count FROM learners WHERE tutor_id = %s AND status = 'active' AND deleted_at IS NULL",
-                (tutor["id"],),
+                f"""
+                SELECT count(*)::int AS count FROM learners
+                WHERE {learner_reachable_via_tutor_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+                """,
+                (tutor["id"], tutor["id"]),
             )
             active_learners = cur.fetchone()["count"]
             completion = fetch_register_completion(
                 cur, scope="tutor", scope_id=tutor["id"], period_start=period_start, period_end=period_end
             )
             cur.execute(
-                'SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef" '
-                "FROM learners WHERE tutor_id = %s AND status = 'active' AND deleted_at IS NULL",
-                (tutor["id"],),
+                f"""
+                SELECT id, first_name AS "firstName", last_name AS "lastName", learner_ref AS "learnerRef"
+                FROM learners WHERE {learner_reachable_via_tutor_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+                """,
+                (tutor["id"], tutor["id"]),
             )
             tutor_learners = cur.fetchall()
-            low_attendance_count = len(_low_attendance_rows(cur, tutor_learners, threshold, period_start, period_end))
+            low_attendance_count = len(
+                _low_attendance_rows(cur, tutor_learners, threshold, period_start, period_end, cohort_ids=tutor_cohort_ids)
+            )
             metrics = metrics_by_tutor.get(tutor["id"])
             rows.append(
                 {
@@ -463,8 +517,11 @@ def get_admin_dashboard_cohorts(
         rows = []
         for cohort in cohorts:
             cur.execute(
-                "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active' AND deleted_at IS NULL",
-                (cohort["id"],),
+                f"""
+                SELECT count(*)::int AS count FROM learners
+                WHERE {learner_in_cohort_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+                """,
+                (cohort["id"], cohort["id"]),
             )
             active_learners = cur.fetchone()["count"]
             completion = fetch_register_completion(

@@ -5,6 +5,7 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 import type { LearnerStatus } from './learnerStatus';
 
 export interface Learner {
@@ -38,6 +39,8 @@ export interface Learner {
   cohortName: string | null;
   /** @nullable */
   externalSystemId: string | null;
+  /** Distinct subjects of this learner's currently active Functional Skills secondary enrollments -- empty when they have none. */
+  functionalSkillsSubjects: FunctionalSkillsSubject[];
   createdAt: Date;
   updatedAt: Date;
 }

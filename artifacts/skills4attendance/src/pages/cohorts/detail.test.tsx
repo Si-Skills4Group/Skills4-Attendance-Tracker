@@ -164,6 +164,7 @@ describe('CohortDetailPage rename action for tutors', () => {
     expect(screen.getByLabelText('Programme')).toBeDisabled();
     expect(screen.getByLabelText('Level')).toBeDisabled();
     expect(screen.getByRole('combobox', { name: /primary tutor/i })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: /cohort type/i })).toBeDisabled();
   });
 
   it('offers a Save Changes button, but not Delete Cohort, for a tutor', () => {
@@ -186,5 +187,54 @@ describe('CohortDetailPage rename action for tutors', () => {
         expect.anything(),
       );
     });
+  });
+});
+
+describe('CohortDetailPage cohort type field', () => {
+  beforeEach(() => {
+    mockParams = { id: '5' };
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCohort = { data: cohort, isLoading: false };
+    mockUpdateMutate.mockReset();
+  });
+
+  it('defaults to Standard for an existing cohort with no membershipType set', () => {
+    renderWithQueryClient(<CohortDetailPage />);
+    expect(screen.getByRole('combobox', { name: /cohort type/i })).toHaveTextContent('Standard');
+  });
+
+  it('shows Functional Skills for an existing secondary cohort, without ever opening the dropdown', () => {
+    // Regression test: setting the Select's value programmatically after
+    // mount (an existing cohort's data arriving async) used to trigger a
+    // spurious change event from Radix's hidden native <select> mirror,
+    // clobbering the value back to "" a render later. Guards against that
+    // reappearing -- see the membershipTypeRemountKey comment in detail.tsx.
+    mockCohort = { data: { ...cohort, membershipType: 'secondary' }, isLoading: false };
+    renderWithQueryClient(<CohortDetailPage />);
+    expect(screen.getByRole('combobox', { name: /cohort type/i })).toHaveTextContent('Functional Skills');
+  });
+
+  it('saves the unchanged membershipType alongside other fields when an admin saves changes', async () => {
+    // Regression coverage for the field actually being wired into the form
+    // (as opposed to the dropdown-interaction itself, which Radix's Select
+    // does not expose reliably under jsdom): the submitted payload must
+    // carry membershipType like every other field, not silently drop it.
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 5, data: expect.objectContaining({ membershipType: 'primary' }) }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it('shows the subject for an existing secondary cohort with a subject already set', () => {
+    mockCohort = { data: { ...cohort, membershipType: 'secondary', subject: 'math' }, isLoading: false };
+    renderWithQueryClient(<CohortDetailPage />);
+    expect(screen.getByRole('combobox', { name: /subject/i })).toHaveTextContent('Math');
   });
 });

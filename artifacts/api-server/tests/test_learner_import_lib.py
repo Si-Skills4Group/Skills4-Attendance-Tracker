@@ -301,6 +301,19 @@ def test_resolve_cohort_names_ignores_blank_names(db):
     assert resolve_cohort_names(db, ["", "   ", None]) == {}
 
 
+def test_resolve_cohort_names_never_matches_a_functional_skills_secondary_cohort(db, cohort_factory):
+    """A CSV row's cohort_name must never resolve to a Functional Skills
+    ('secondary' membership_type) cohort -- doing so would feed
+    apply_transfer via _maybe_allocate_new_learner/_maybe_apply_requested_
+    transfer, silently MOVING a learner's home cohort to the FS one instead
+    of adding them to it."""
+    name = "Functional Skills Maths"
+    cohort_factory(name=name, membership_type="secondary")
+    resolved = resolve_cohort_names(db, [name])
+    assert resolved[name]["status"] == "secondary_cohort"
+    assert resolved[name]["cohort"] is None
+
+
 # ---------------------------------------------------------------------------
 # Job expiry / crash-recovery sweep
 # ---------------------------------------------------------------------------

@@ -25,9 +25,24 @@ const tutors = [
   { id: 20, firstName: 'Cara', lastName: 'Cover' },
 ];
 
+const cohorts = [
+  { id: 5, name: 'Cohort A', membershipType: 'primary', tutorId: 10, tutorName: 'Tam Tutor' },
+  { id: 7, name: 'Functional Skills Maths', membershipType: 'secondary', tutorId: 30, tutorName: 'Fran FS' },
+];
+
+const secondaryEnrollment = {
+  id: 100, learnerId: 42, cohortId: 7, cohortName: 'Functional Skills Maths',
+  cohortTutorId: 30, cohortTutorName: 'Fran FS', enrolledDate: '2026-02-01', endDate: null,
+  status: 'active', enrolledBy: 1, enrollmentReason: 'Needs Maths support', endedBy: null, endReason: null,
+  createdAt: '2026-02-01T00:00:00Z', updatedAt: '2026-02-01T00:00:00Z',
+};
+
 let mockCurrentUser: { data: any };
+let mockSecondaryEnrollments: { data: any[] };
 const mockDeleteMutate = vi.fn();
 const mockAllocateMutate = vi.fn();
+const mockEnrollMutate = vi.fn();
+const mockEndEnrollmentMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetLearner: () => ({ data: learner, isLoading: false }),
@@ -37,18 +52,27 @@ vi.mock('@workspace/api-client-react', () => ({
   useChangeLearnerStatus: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteLearner: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useListTutors: () => ({ data: tutors }),
+  useListCohorts: () => ({ data: cohorts }),
   useAllocateLearners: () => ({ mutate: mockAllocateMutate, isPending: false }),
+  useListLearnerSecondaryEnrollments: () => mockSecondaryEnrollments,
+  useCreateLearnerSecondaryEnrollment: () => ({ mutate: mockEnrollMutate, isPending: false }),
+  useEndLearnerSecondaryEnrollment: () => ({ mutate: mockEndEnrollmentMutate, isPending: false }),
   useGetCurrentUser: () => mockCurrentUser,
   getGetLearnerQueryKey: (id: number) => ['getLearner', id],
   getGetLearnerAllocationHistoryQueryKey: (id: number) => ['getLearnerAllocationHistory', id],
   getListTutorsQueryKey: (params: unknown) => ['listTutors', params],
+  getListCohortsQueryKey: (params: unknown) => ['listCohorts', params],
+  getListLearnerSecondaryEnrollmentsQueryKey: (id: number) => ['listLearnerSecondaryEnrollments', id],
 }));
 
 describe('LearnerDetailPage for an existing learner', () => {
   beforeEach(() => {
     mockCurrentUser = { data: { id: 1, role: 'admin' } };
+    mockSecondaryEnrollments = { data: [secondaryEnrollment] };
     mockDeleteMutate.mockReset();
     mockAllocateMutate.mockReset();
+    mockEnrollMutate.mockReset();
+    mockEndEnrollmentMutate.mockReset();
     mockSetLocation.mockReset();
   });
 
@@ -186,5 +210,64 @@ describe('LearnerDetailPage for an existing learner', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^reassign tutor$/i }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  describe('Functional Skills tab', () => {
+    it('lists existing enrollments and shows an Enroll action for admins', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+
+      expect(screen.getByText('Functional Skills Maths')).toBeInTheDocument();
+      expect(screen.getByText('Fran FS')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^enroll$/i })).toBeInTheDocument();
+    });
+
+    it('hides the Enroll and End actions for tutors', async () => {
+      mockCurrentUser = { data: { id: 2, role: 'tutor' } };
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+
+      expect(screen.getByText('Functional Skills Maths')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^enroll$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^end$/i })).not.toBeInTheDocument();
+    });
+
+    it('enrolls the learner into a Functional Skills cohort, excluding their own home cohort from the options', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+      await user.click(screen.getByRole('button', { name: /^enroll$/i }));
+
+      // Cohort A is the learner's own home cohort and Functional Skills
+      // Maths is already actively enrolled -- neither should be offered.
+      await user.click(screen.getByRole('combobox', { name: /functional skills cohort/i }));
+      expect(screen.queryByText('Cohort A')).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /functional skills maths/i })).not.toBeInTheDocument();
+    });
+
+    it('ends an active enrollment with a reason', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+      await user.click(screen.getByRole('button', { name: /^end$/i }));
+
+      const dialog = screen.getByRole('dialog');
+      await user.type(within(dialog).getByLabelText(/reason/i), 'Passed Functional Skills');
+      await user.click(within(dialog).getByRole('button', { name: /end enrollment/i }));
+
+      expect(mockEndEnrollmentMutate).toHaveBeenCalledWith(
+        {
+          id: 100,
+          data: expect.objectContaining({ reason: 'Passed Functional Skills' }),
+        },
+        expect.anything(),
+      );
+    });
   });
 });

@@ -51,6 +51,7 @@ beforeEach(() => {
       programmeBreakdown: [{ programme: 'Pharmacy', metrics: makeMetrics() }],
       levelBreakdown: [{ level: '3', metrics: makeMetrics() }],
       employerBreakdown: [{ employer: 'Acme Ltd', metrics: makeMetrics() }],
+      subjectBreakdown: [{ subject: 'math', metrics: makeMetrics() }],
     },
     isLoading: false, isError: false,
   };

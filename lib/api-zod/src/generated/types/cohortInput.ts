@@ -5,7 +5,9 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CohortMembershipType } from './cohortMembershipType';
 import type { DeliveryDay } from './deliveryDay';
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 
 export interface CohortInput {
   /** @minLength 1 */
@@ -24,4 +26,6 @@ export interface CohortInput {
   endDate?: Date;
   active?: boolean;
   externalSystemId?: string;
+  membershipType?: CohortMembershipType;
+  subject?: FunctionalSkillsSubject;
 }

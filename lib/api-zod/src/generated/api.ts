@@ -139,6 +139,8 @@ export const GetTutorDashboardResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
@@ -221,6 +223,8 @@ export const GetTutorDashboardCohortsResponseItem = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
@@ -390,6 +394,8 @@ export const GetAdminDashboardCohortsResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
@@ -530,7 +536,42 @@ export const GetLearnerAttendanceSummaryResponse = zod.object({
   "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
   "completionPercentage": zod.union([zod.number(),zod.null()])
 })
+}).and(zod.object({
+  "cohortBreakdown": zod.array(zod.object({
+  "cohortId": zod.number(),
+  "cohortName": zod.string().nullable(),
+  "relationship": zod.enum(['home', 'functional_skills']),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+}),
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
 })
+})).describe('One entry per cohort this learner is currently expected in -- home cohort plus each active Functional Skills secondary enrollment. metrics\/registerCompletion above are the HOME cohort\'s figures specifically, never a blend.')
+}))
 
 
 export const GetCohortAttendanceSummaryParams = zod.object({
@@ -999,6 +1040,7 @@ export const ListLearnersResponse = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })),
@@ -1055,6 +1097,7 @@ export const CreateLearnerResponse = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1299,6 +1342,7 @@ export const GetLearnerResponse = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1354,6 +1398,7 @@ export const UpdateLearnerResponse = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1390,6 +1435,7 @@ export const ChangeLearnerStatusResponse = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1434,6 +1480,111 @@ export const GetLearnerAllocationHistoryResponseItem = zod.object({
 export const GetLearnerAllocationHistoryResponse = zod.array(GetLearnerAllocationHistoryResponseItem)
 
 
+export const ListLearnerSecondaryEnrollmentsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListLearnerSecondaryEnrollmentsResponseItem = zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "cohortTutorId": zod.number().nullable(),
+  "cohortTutorName": zod.string().nullable(),
+  "enrolledDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'ended']),
+  "enrolledBy": zod.number(),
+  "enrollmentReason": zod.string().nullable(),
+  "endedBy": zod.number().nullable(),
+  "endReason": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A learner\'s Functional Skills secondary enrollment into a \'secondary\' membership_type cohort -- purely additive alongside their home cohort, never a transfer.')
+export const ListLearnerSecondaryEnrollmentsResponse = zod.array(ListLearnerSecondaryEnrollmentsResponseItem)
+
+
+export const CreateLearnerSecondaryEnrollmentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateLearnerSecondaryEnrollmentBody = zod.object({
+  "cohortId": zod.number(),
+  "enrolledDate": zod.coerce.date(),
+  "reason": zod.string().optional()
+})
+
+export const CreateLearnerSecondaryEnrollmentResponse = zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "cohortTutorId": zod.number().nullable(),
+  "cohortTutorName": zod.string().nullable(),
+  "enrolledDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'ended']),
+  "enrolledBy": zod.number(),
+  "enrollmentReason": zod.string().nullable(),
+  "endedBy": zod.number().nullable(),
+  "endReason": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A learner\'s Functional Skills secondary enrollment into a \'secondary\' membership_type cohort -- purely additive alongside their home cohort, never a transfer.')
+
+
+export const EndLearnerSecondaryEnrollmentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const EndLearnerSecondaryEnrollmentBody = zod.object({
+  "endDate": zod.coerce.date(),
+  "reason": zod.string().optional()
+})
+
+export const EndLearnerSecondaryEnrollmentResponse = zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "cohortTutorId": zod.number().nullable(),
+  "cohortTutorName": zod.string().nullable(),
+  "enrolledDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'ended']),
+  "enrolledBy": zod.number(),
+  "enrollmentReason": zod.string().nullable(),
+  "endedBy": zod.number().nullable(),
+  "endReason": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A learner\'s Functional Skills secondary enrollment into a \'secondary\' membership_type cohort -- purely additive alongside their home cohort, never a transfer.')
+
+
+export const ListCohortSecondaryEnrollmentsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListCohortSecondaryEnrollmentsResponseItem = zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "cohortTutorId": zod.number().nullable(),
+  "cohortTutorName": zod.string().nullable(),
+  "enrolledDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'ended']),
+  "enrolledBy": zod.number(),
+  "enrollmentReason": zod.string().nullable(),
+  "endedBy": zod.number().nullable(),
+  "endReason": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).describe('A learner\'s Functional Skills secondary enrollment into a \'secondary\' membership_type cohort -- purely additive alongside their home cohort, never a transfer.')
+export const ListCohortSecondaryEnrollmentsResponse = zod.array(ListCohortSecondaryEnrollmentsResponseItem)
+
+
 export const ListCohortsQueryParams = zod.object({
   "tutorId": zod.coerce.number().optional(),
   "active": zod.coerce.boolean().optional(),
@@ -1455,6 +1606,8 @@ export const ListCohortsResponseItem = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1467,6 +1620,7 @@ export const ListCohortsResponse = zod.array(ListCohortsResponseItem)
 
 
 export const createCohortBodyActiveDefault = true;
+export const createCohortBodyMembershipTypeDefault = `primary`;
 
 export const CreateCohortBody = zod.object({
   "name": zod.string().min(1),
@@ -1479,7 +1633,9 @@ export const CreateCohortBody = zod.object({
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date().optional(),
   "active": zod.boolean().default(createCohortBodyActiveDefault),
-  "externalSystemId": zod.string().optional()
+  "externalSystemId": zod.string().optional(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.').default(createCohortBodyMembershipTypeDefault),
+  "subject": zod.enum(['math', 'english', 'both']).optional()
 })
 
 export const CreateCohortResponse = zod.object({
@@ -1496,6 +1652,8 @@ export const CreateCohortResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1525,6 +1683,8 @@ export const ListCohortSummaryResponseItem = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }).and(zod.object({
@@ -1553,6 +1713,8 @@ export const GetCohortResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }).and(zod.object({
@@ -1582,7 +1744,9 @@ export const UpdateCohortBody = zod.object({
   "startDate": zod.coerce.date().optional(),
   "endDate": zod.coerce.date().nullish(),
   "active": zod.boolean().optional(),
-  "externalSystemId": zod.string().nullish()
+  "externalSystemId": zod.string().nullish(),
+  "membershipType": zod.enum(['primary', 'secondary']).optional().describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).optional().describe('Pass null to clear a previously-set subject (e.g. when switching back to a Standard cohort).')
 })
 
 export const UpdateCohortResponse = zod.object({
@@ -1599,6 +1763,8 @@ export const UpdateCohortResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1622,6 +1788,8 @@ export const ActivateCohortResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1645,6 +1813,8 @@ export const DeactivateCohortResponse = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1688,6 +1858,7 @@ export const GetCohortLearnersResponseItem = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1941,7 +2112,8 @@ export const GetAttendanceSessionResponse = zod.object({
   "notes": zod.string().nullable(),
   "overrideReason": zod.string().nullable(),
   "lastEditedBy": zod.number().nullable(),
-  "lastEditedByName": zod.string().nullable()
+  "lastEditedByName": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.')
 }))
 })
 
@@ -2082,7 +2254,8 @@ export const GetSessionExpectedLearnersParams = zod.object({
 export const GetSessionExpectedLearnersResponseItem = zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 })
 export const GetSessionExpectedLearnersResponse = zod.array(GetSessionExpectedLearnersResponseItem)
 
@@ -2147,33 +2320,39 @@ export const RefreshSessionRegisterResponse = zod.union([zod.object({
   "toAdd": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 })),
   "toRemove": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 })),
   "blocked": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 }))
 }),zod.object({
   "added": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 })),
   "removed": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 })),
   "blocked": zod.array(zod.object({
   "learnerId": zod.number(),
   "learnerName": zod.string(),
-  "learnerRef": zod.string().optional()
+  "learnerRef": zod.string().optional(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).optional().describe('Only present on the plain \"who\'s expected\" listing, not on a refresh diff\'s toAdd\/toRemove\/blocked entries.')
 }))
 })])
 
@@ -2254,7 +2433,8 @@ export const SaveAttendanceRegisterResponse = zod.object({
   "notes": zod.string().nullable(),
   "overrideReason": zod.string().nullable(),
   "lastEditedBy": zod.number().nullable(),
-  "lastEditedByName": zod.string().nullable()
+  "lastEditedByName": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.')
 }))
 })
 
@@ -2318,7 +2498,8 @@ export const CompleteRegisterResponse = zod.object({
   "notes": zod.string().nullable(),
   "overrideReason": zod.string().nullable(),
   "lastEditedBy": zod.number().nullable(),
-  "lastEditedByName": zod.string().nullable()
+  "lastEditedByName": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.')
 }))
 })
 
@@ -2596,7 +2777,8 @@ export const MarkAllPresentResponse = zod.object({
   "notes": zod.string().nullable(),
   "overrideReason": zod.string().nullable(),
   "lastEditedBy": zod.number().nullable(),
-  "lastEditedByName": zod.string().nullable()
+  "lastEditedByName": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.')
 }))
 })
 
@@ -2638,9 +2820,43 @@ export const GetLearnerReportV2Response = zod.object({
   "tutorName": zod.string().nullable(),
   "cohortName": zod.string().nullable(),
   "externalSystemId": zod.string().nullable(),
+  "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+}).describe('The learner\'s HOME cohort figures specifically (identical to cohortBreakdown\'s \"home\" entry) -- never a blend across every cohort this learner is expected in. See cohortBreakdown for a Functional Skills secondary enrollment\'s own, separate figures.'),
+  "registerCompletion": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "notStarted": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "locked": zod.number(),
+  "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
+  "completionPercentage": zod.union([zod.number(),zod.null()])
+}),
+  "cohortBreakdown": zod.array(zod.object({
+  "cohortId": zod.number(),
+  "cohortName": zod.string().nullable(),
+  "relationship": zod.enum(['home', 'functional_skills']),
   "metrics": zod.object({
   "periodStart": zod.coerce.date(),
   "periodEnd": zod.coerce.date(),
@@ -2669,7 +2885,8 @@ export const GetLearnerReportV2Response = zod.object({
   "locked": zod.number(),
   "outstanding": zod.number().describe('Not-started\/in-progress registers whose session date has already passed.'),
   "completionPercentage": zod.union([zod.number(),zod.null()])
-}),
+})
+})).describe('One entry per cohort this learner is currently expected in -- their home cohort plus each active Functional Skills secondary enrollment -- each with its own, never-blended metrics.'),
   "bud": zod.union([zod.object({
   "activityProgress": zod.union([zod.number(),zod.null()]).optional(),
   "activitiesOverdue": zod.union([zod.number(),zod.null()]).optional(),
@@ -2747,6 +2964,8 @@ export const GetCohortReportV2Response = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
@@ -2899,6 +3118,8 @@ export const GetTutorReportV2Response = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
@@ -3055,6 +3276,8 @@ export const GetOrganisationReportV2Response = zod.object({
   "endDate": zod.coerce.date().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),
@@ -3143,7 +3366,29 @@ export const GetOrganisationReportV2Response = zod.object({
   "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
   "calculatedAt": zod.coerce.date()
 })
-}))
+})),
+  "subjectBreakdown": zod.array(zod.object({
+  "subject": zod.enum(['math', 'english', 'both']),
+  "metrics": zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedMinutes": zod.number(),
+  "attendedMinutes": zod.number(),
+  "authorisedAbsenceMinutes": zod.number(),
+  "authorisedAbsenceSessions": zod.number(),
+  "unauthorisedAbsenceMinutes": zod.number(),
+  "unauthorisedAbsenceSessions": zod.number(),
+  "lateMinutes": zod.number(),
+  "lateSessionCount": zod.number(),
+  "averageMinutesLate": zod.union([zod.number(),zod.null()]),
+  "missingRecordCount": zod.number(),
+  "completedRegisterRowCount": zod.number(),
+  "attendancePercentage": zod.union([zod.number(),zod.null()]).describe('Null when expectedMinutes is zero -- never a fabricated 0%.'),
+  "attendanceDataCompleteness": zod.union([zod.number(),zod.null()]).describe('Percentage of applicable register rows that have an actual recorded status (vs missing).'),
+  "insufficientData": zod.boolean().describe('True when there isn\'t enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).'),
+  "calculatedAt": zod.coerce.date()
+})
+})).describe('Math vs English (vs Both) Functional Skills attendance -- a \'primary\' cohort never contributes a row.')
 })
 
 
@@ -3154,7 +3399,7 @@ export const ExportOrganisationReportQueryParams = zod.object({
   "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportOrganisationReportQueryPeriodDefault),
   "dateFrom": zod.date().optional(),
   "dateTo": zod.date().optional(),
-  "breakdown": zod.enum(['tutor', 'cohort', 'programme', 'level', 'employer']).default(exportOrganisationReportQueryBreakdownDefault)
+  "breakdown": zod.enum(['tutor', 'cohort', 'programme', 'level', 'employer', 'subject']).default(exportOrganisationReportQueryBreakdownDefault)
 })
 
 export const ExportOrganisationReportResponse = zod.unknown()
@@ -3175,6 +3420,7 @@ export const GetAbsenceReportQueryParams = zod.object({
   "level": zod.coerce.string().optional(),
   "employer": zod.coerce.string().optional(),
   "learnerId": zod.coerce.number().optional(),
+  "subject": zod.enum(['math', 'english', 'both']).optional().describe('Filters to a Functional Skills cohort\'s subject (math\/english\/both) -- a \'primary\' cohort\'s sessions never match.'),
   "page": zod.coerce.number().default(getAbsenceReportQueryPageDefault),
   "pageSize": zod.coerce.number().default(getAbsenceReportQueryPageSizeDefault)
 })
@@ -3230,7 +3476,8 @@ export const ExportAbsenceReportQueryParams = zod.object({
   "programme": zod.coerce.string().optional(),
   "level": zod.coerce.string().optional(),
   "employer": zod.coerce.string().optional(),
-  "learnerId": zod.coerce.number().optional()
+  "learnerId": zod.coerce.number().optional(),
+  "subject": zod.enum(['math', 'english', 'both']).optional().describe('Filters to a Functional Skills cohort\'s subject (math\/english\/both) -- a \'primary\' cohort\'s sessions never match.')
 })
 
 export const ExportAbsenceReportResponse = zod.unknown()
@@ -3250,6 +3497,7 @@ export const GetLatenessReportQueryParams = zod.object({
   "level": zod.coerce.string().optional(),
   "employer": zod.coerce.string().optional(),
   "learnerId": zod.coerce.number().optional(),
+  "subject": zod.enum(['math', 'english', 'both']).optional().describe('Filters to a Functional Skills cohort\'s subject (math\/english\/both) -- a \'primary\' cohort\'s sessions never match.'),
   "page": zod.coerce.number().default(getLatenessReportQueryPageDefault),
   "pageSize": zod.coerce.number().default(getLatenessReportQueryPageSizeDefault)
 })
@@ -3304,7 +3552,8 @@ export const ExportLatenessReportQueryParams = zod.object({
   "programme": zod.coerce.string().optional(),
   "level": zod.coerce.string().optional(),
   "employer": zod.coerce.string().optional(),
-  "learnerId": zod.coerce.number().optional()
+  "learnerId": zod.coerce.number().optional(),
+  "subject": zod.enum(['math', 'english', 'both']).optional().describe('Filters to a Functional Skills cohort\'s subject (math\/english\/both) -- a \'primary\' cohort\'s sessions never match.')
 })
 
 export const ExportLatenessReportResponse = zod.unknown()

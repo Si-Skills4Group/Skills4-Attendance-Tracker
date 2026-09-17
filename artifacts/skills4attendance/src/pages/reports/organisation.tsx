@@ -17,7 +17,9 @@ import { downloadCsv } from "@/lib/csv-download";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, Building2, ShieldAlert } from "lucide-react";
 
-type Breakdown = "tutor" | "cohort" | "programme" | "level" | "employer";
+type Breakdown = "tutor" | "cohort" | "programme" | "level" | "employer" | "subject";
+
+const SUBJECT_LABELS: Record<string, string> = { math: "Math", english: "English", both: "Both" };
 
 function MetricsRow({ label, metrics }: { label: string; metrics: { attendancePercentage: number | null; attendedMinutes: number; expectedMinutes: number } }) {
   return (
@@ -110,15 +112,21 @@ export default function OrganisationReportPage() {
             <CardHeader><CardTitle className="text-base">Breakdown</CardTitle></CardHeader>
             <CardContent className="pt-0">
               <Tabs value={breakdown} onValueChange={(v) => setBreakdown(v as Breakdown)}>
-                <TabsList className="grid grid-cols-5 mb-4 max-w-xl">
+                <TabsList className="grid grid-cols-3 sm:grid-cols-6 mb-4 max-w-2xl">
                   <TabsTrigger value="tutor">Tutor</TabsTrigger>
                   <TabsTrigger value="cohort">Cohort</TabsTrigger>
                   <TabsTrigger value="programme">Programme</TabsTrigger>
                   <TabsTrigger value="level">Level</TabsTrigger>
                   <TabsTrigger value="employer">Employer</TabsTrigger>
+                  <TabsTrigger value="subject">Subject</TabsTrigger>
                 </TabsList>
-                {(["tutor", "cohort", "programme", "level", "employer"] as Breakdown[]).map((dim) => (
+                {(["tutor", "cohort", "programme", "level", "employer", "subject"] as Breakdown[]).map((dim) => (
                   <TabsContent key={dim} value={dim} className="overflow-x-auto">
+                    {dim === "subject" && (
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Functional Skills attendance by subject -- a standard cohort never contributes a row here.
+                      </p>
+                    )}
                     <Table>
                       <TableHeader className="bg-muted/30">
                         <TableRow>
@@ -133,8 +141,12 @@ export default function OrganisationReportPage() {
                         {dim === "programme" && report.programmeBreakdown.map((r) => <MetricsRow key={r.programme} label={r.programme} metrics={r.metrics} />)}
                         {dim === "level" && report.levelBreakdown.map((r) => <MetricsRow key={r.level} label={r.level} metrics={r.metrics} />)}
                         {dim === "employer" && report.employerBreakdown.map((r) => <MetricsRow key={r.employer} label={r.employer} metrics={r.metrics} />)}
+                        {dim === "subject" && report.subjectBreakdown.map((r) => <MetricsRow key={r.subject} label={SUBJECT_LABELS[r.subject] ?? r.subject} metrics={r.metrics} />)}
                       </TableBody>
                     </Table>
+                    {dim === "subject" && report.subjectBreakdown.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-6">No Functional Skills cohorts in this period.</p>
+                    )}
                   </TabsContent>
                 ))}
               </Tabs>

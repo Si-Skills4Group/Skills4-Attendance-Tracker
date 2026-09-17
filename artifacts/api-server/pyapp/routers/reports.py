@@ -24,6 +24,7 @@ from ..attendance_metrics import (
     fetch_attendance_metrics_by_level,
     fetch_attendance_metrics_by_period_bucket,
     fetch_attendance_metrics_by_programme,
+    fetch_attendance_metrics_by_subject,
     fetch_attendance_metrics_grouped,
     fetch_register_completion,
 )
@@ -40,6 +41,11 @@ from ..report_rows import (
     fetch_lateness_rows,
     fetch_learner_session_history,
     fetch_register_completion_rows,
+)
+from ..secondary_enrollment_lib import (
+    learner_in_cohort_now_sql,
+    learner_reachable_via_tutor_now_sql,
+    list_secondary_enrollments_for_learner,
 )
 from .cohorts import COHORT_SELECT
 from .dashboard import _get_threshold, _low_attendance_rows, _resolve_period_or_400
@@ -138,6 +144,43 @@ LAST_ATTENDANCE_COLUMNS = ["learnerName", "learnerRef", "cohortName", "tutorName
 # ---------------------------------------------------------------------------
 
 
+def _learner_cohort_breakdown(cur, learner: dict, period_start: date, period_end: date) -> list[dict]:
+    """One entry per cohort this learner is currently expected in -- their
+    home cohort plus each active Functional Skills secondary enrollment --
+    each with its OWN metrics/registerCompletion, never blended together.
+    Uses fetch_attendance_metrics_grouped's fixed_cohort_id (a single-
+    learner grouped call) rather than scope="learner", since scope="learner"
+    has no cohort restriction and would report this learner's lifetime
+    total across every cohort they're expected in."""
+    entries = []
+    if learner.get("cohortId") is not None:
+        entries.append(("home", learner["cohortId"], learner.get("cohortName")))
+    for enrollment in list_secondary_enrollments_for_learner(cur, learner["id"]):
+        if enrollment["status"] == "active":
+            entries.append(("functional_skills", enrollment["cohortId"], enrollment["cohortName"]))
+
+    breakdown = []
+    for relationship, cohort_id, cohort_name in entries:
+        metrics = fetch_attendance_metrics_grouped(
+            cur, group_by="learner", group_ids=[learner["id"]], period_start=period_start, period_end=period_end,
+            fixed_cohort_id=cohort_id,
+        )[learner["id"]]
+        completion = fetch_register_completion(
+            cur, scope="cohort", scope_id=cohort_id, learner_id=learner["id"],
+            period_start=period_start, period_end=period_end,
+        )
+        breakdown.append(
+            {
+                "cohortId": cohort_id,
+                "cohortName": cohort_name,
+                "relationship": relationship,
+                "metrics": metrics,
+                "registerCompletion": completion,
+            }
+        )
+    return breakdown
+
+
 @router.get("/reports/learner/{learner_id}")
 def get_learner_report(
     learner_id: int,
@@ -156,8 +199,21 @@ def get_learner_report(
         if not learner:
             raise HTTPException(status_code=404, detail="Learner not found")
 
-        metrics = fetch_attendance_metrics(cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end)
-        completion = fetch_register_completion(cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end)
+        # cohortBreakdown gives each cohort this learner is expected in (home
+        # + any active Functional Skills enrollments) its own, never-blended
+        # metrics/registerCompletion. The top-level metrics/registerCompletion
+        # below stay the HOME cohort's figures specifically (identical to
+        # today's numbers for the vast majority of learners who have no
+        # secondary enrollment at all) rather than a lifetime blend across
+        # every cohort -- "separate, never blended" applies here too.
+        cohort_breakdown = _learner_cohort_breakdown(cur, learner, period_start, period_end)
+        home_entry = next((e for e in cohort_breakdown if e["relationship"] == "home"), None)
+        if home_entry is not None:
+            metrics, completion = home_entry["metrics"], home_entry["registerCompletion"]
+        else:
+            metrics = fetch_attendance_metrics(cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end)
+            completion = fetch_register_completion(cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end)
+
         history_rows, history_total = fetch_learner_session_history(
             cur, learner_id=learner_id, period_start=period_start, period_end=period_end, page=page, page_size=pageSize
         )
@@ -167,6 +223,7 @@ def get_learner_report(
         "learner": learner,
         "metrics": metrics,
         "registerCompletion": completion,
+        "cohortBreakdown": cohort_breakdown,
         "bud": bud,
         "sessionHistory": {"items": history_rows, "total": history_total, "page": page, "pageSize": pageSize},
     }
@@ -268,8 +325,11 @@ def get_cohort_report(
         metrics = fetch_attendance_metrics(cur, scope="cohort", scope_id=cohort_id, period_start=period_start, period_end=period_end)
         completion = fetch_register_completion(cur, scope="cohort", scope_id=cohort_id, period_start=period_start, period_end=period_end)
         cur.execute(
-            "SELECT count(*)::int AS count FROM learners WHERE cohort_id = %s AND status = 'active' AND deleted_at IS NULL",
-            (cohort_id,),
+            f"""
+            SELECT count(*)::int AS count FROM learners
+            WHERE {learner_in_cohort_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+            """,
+            (cohort_id, cohort_id),
         )
         active_learner_count = cur.fetchone()["count"]
 
@@ -346,20 +406,27 @@ def get_tutor_report(
         cohort_breakdown = [{"cohort": c, "metrics": metrics_by_cohort[c["id"]]} for c in cohorts]
 
         cur.execute(
-            "SELECT count(*)::int AS count FROM learners WHERE tutor_id = %s AND status = 'active' AND deleted_at IS NULL",
-            (tutor_id,),
+            f"""
+            SELECT count(*)::int AS count FROM learners
+            WHERE {learner_reachable_via_tutor_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+            """,
+            (tutor_id, tutor_id),
         )
         active_learners = cur.fetchone()["count"]
 
         threshold = _get_threshold(cur)
         cur.execute(
-            'SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", l.learner_ref AS "learnerRef", '
-            'l.uln, c.name AS "cohortName" FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id '
-            "WHERE l.tutor_id = %s AND l.status = 'active' AND l.deleted_at IS NULL",
-            (tutor_id,),
+            f"""
+            SELECT l.id, l.first_name AS "firstName", l.last_name AS "lastName", l.learner_ref AS "learnerRef",
+                   l.uln, c.name AS "cohortName" FROM learners l LEFT JOIN cohorts c ON l.cohort_id = c.id
+            WHERE {learner_reachable_via_tutor_now_sql("l", "%s")} AND l.status = 'active' AND l.deleted_at IS NULL
+            """,
+            (tutor_id, tutor_id),
         )
         tutor_learners = cur.fetchall()
-        low_attendance = _low_attendance_rows(cur, tutor_learners, threshold, period_start, period_end)
+        low_attendance = _low_attendance_rows(
+            cur, tutor_learners, threshold, period_start, period_end, cohort_ids=[c["id"] for c in cohorts]
+        )
 
     return {
         "tutor": tutor,
@@ -430,9 +497,13 @@ def _organisation_breakdowns(cur, period_start: date, period_end: date) -> dict:
     employer_breakdown = [
         {"employer": k, "metrics": v} for k, v in fetch_attendance_metrics_by_employer(cur, period_start=period_start, period_end=period_end).items()
     ]
+    subject_breakdown = [
+        {"subject": k, "metrics": v} for k, v in fetch_attendance_metrics_by_subject(cur, period_start=period_start, period_end=period_end).items()
+    ]
     return {
         "tutorBreakdown": tutor_breakdown, "cohortBreakdown": cohort_breakdown,
         "programmeBreakdown": programme_breakdown, "levelBreakdown": level_breakdown, "employerBreakdown": employer_breakdown,
+        "subjectBreakdown": subject_breakdown,
     }
 
 
@@ -480,7 +551,7 @@ def export_organisation_report(
     period: Period = "current_month",
     dateFrom: date | None = None,
     dateTo: date | None = None,
-    breakdown: Literal["tutor", "cohort", "programme", "level", "employer"] = "tutor",
+    breakdown: Literal["tutor", "cohort", "programme", "level", "employer", "subject"] = "tutor",
     _session: dict = Depends(require_admin),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -493,6 +564,7 @@ def export_organisation_report(
         "programme": ("programmeBreakdown", lambda r: {"key": r["programme"], "label": r["programme"]}),
         "level": ("levelBreakdown", lambda r: {"key": r["level"], "label": r["level"]}),
         "employer": ("employerBreakdown", lambda r: {"key": r["employer"], "label": r["employer"]}),
+        "subject": ("subjectBreakdown", lambda r: {"key": r["subject"], "label": r["subject"]}),
     }
     field, label_fn = key_map[breakdown]
     rows = [_flatten(label_fn(r), r["metrics"]) for r in breakdowns[field]]
@@ -520,6 +592,7 @@ def get_absence_report(
     level: str | None = None,
     employer: str | None = None,
     learnerId: int | None = None,
+    subject: str | None = None,
     page: int = 1,
     pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
@@ -531,7 +604,7 @@ def get_absence_report(
         rows, total = fetch_absence_rows(
             cur, absence_type=status, period_start=period_start, period_end=period_end,
             tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level,
-            employer=employer, learner_id=learner_id, page=page, page_size=pageSize,
+            employer=employer, learner_id=learner_id, subject=subject, page=page, page_size=pageSize,
         )
         scope, scope_id = _pick_scope(tutor_id, cohort_id, learner_id)
         metrics = fetch_attendance_metrics(cur, scope=scope, scope_id=scope_id, period_start=period_start, period_end=period_end, programme=programme)
@@ -551,6 +624,7 @@ def export_absence_report(
     level: str | None = None,
     employer: str | None = None,
     learnerId: int | None = None,
+    subject: str | None = None,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -562,13 +636,13 @@ def export_absence_report(
         return fetch_absence_rows(
             cur, absence_type=status, period_start=period_start, period_end=period_end,
             tutor_id=tutor_id, cohort_id=cohort_id, programme=programme, level=level,
-            employer=employer, learner_id=learner_id, page=page, page_size=page_size,
+            employer=employer, learner_id=learner_id, subject=subject, page=page, page_size=page_size,
         )
 
     return stream_report_csv(
         request, report_type="absence", columns=ABSENCE_COLUMNS, filename=f"absence-{absenceType}-report.csv",
         fetch_page=fetch_page, date_from=period_start, date_to=period_end,
-        filters={"absenceType": absenceType, "tutorId": tutor_id, "cohortId": cohort_id, "learnerId": learner_id, "programme": programme, "employer": employer},
+        filters={"absenceType": absenceType, "tutorId": tutor_id, "cohortId": cohort_id, "learnerId": learner_id, "programme": programme, "employer": employer, "subject": subject},
     )
 
 
@@ -588,6 +662,7 @@ def get_lateness_report(
     level: str | None = None,
     employer: str | None = None,
     learnerId: int | None = None,
+    subject: str | None = None,
     page: int = 1,
     pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     session: dict = Depends(require_auth),
@@ -597,7 +672,8 @@ def get_lateness_report(
         tutor_id, cohort_id, learner_id = _enforce_tutor_scope(cur, session, tutorId, cohortId, learnerId)
         rows, total = fetch_lateness_rows(
             cur, period_start=period_start, period_end=period_end, tutor_id=tutor_id, cohort_id=cohort_id,
-            programme=programme, level=level, employer=employer, learner_id=learner_id, page=page, page_size=pageSize,
+            programme=programme, level=level, employer=employer, learner_id=learner_id, subject=subject,
+            page=page, page_size=pageSize,
         )
         scope, scope_id = _pick_scope(tutor_id, cohort_id, learner_id)
         metrics = fetch_attendance_metrics(cur, scope=scope, scope_id=scope_id, period_start=period_start, period_end=period_end, programme=programme)
@@ -616,6 +692,7 @@ def export_lateness_report(
     level: str | None = None,
     employer: str | None = None,
     learnerId: int | None = None,
+    subject: str | None = None,
     session: dict = Depends(require_auth),
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
@@ -625,13 +702,14 @@ def export_lateness_report(
     def fetch_page(cur, page, page_size):
         return fetch_lateness_rows(
             cur, period_start=period_start, period_end=period_end, tutor_id=tutor_id, cohort_id=cohort_id,
-            programme=programme, level=level, employer=employer, learner_id=learner_id, page=page, page_size=page_size,
+            programme=programme, level=level, employer=employer, learner_id=learner_id, subject=subject,
+            page=page, page_size=page_size,
         )
 
     return stream_report_csv(
         request, report_type="lateness", columns=LATENESS_COLUMNS, filename="lateness-report.csv",
         fetch_page=fetch_page, date_from=period_start, date_to=period_end,
-        filters={"tutorId": tutor_id, "cohortId": cohort_id, "learnerId": learner_id, "programme": programme, "employer": employer},
+        filters={"tutorId": tutor_id, "cohortId": cohort_id, "learnerId": learner_id, "programme": programme, "employer": employer, "subject": subject},
     )
 
 
@@ -674,21 +752,31 @@ def _attendance_hours_items(cur, session: dict, *, groupBy: AttendanceHoursGroup
         return [{"key": str(c["id"]), "label": c["name"], "metrics": data[c["id"]]} for c in cohorts]
 
     # groupBy == "learner"
+    tutor_cohort_ids: list[int] | None = None
     if cohort_id:
         cur.execute(
-            'SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners '
-            "WHERE cohort_id = %s AND status = %s AND deleted_at IS NULL", (cohort_id, "active"),
+            f"""SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners
+            WHERE {learner_in_cohort_now_sql("learners", "%s")} AND status = %s AND deleted_at IS NULL""",
+            (cohort_id, cohort_id, "active"),
         )
     elif tutor_id:
+        cur.execute("SELECT id FROM cohorts WHERE tutor_id = %s AND deleted_at IS NULL", (tutor_id,))
+        tutor_cohort_ids = [r["id"] for r in cur.fetchall()]
         cur.execute(
-            'SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners '
-            "WHERE tutor_id = %s AND status = %s AND deleted_at IS NULL", (tutor_id, "active"),
+            f"""SELECT id, first_name AS "firstName", last_name AS "lastName" FROM learners
+            WHERE {learner_reachable_via_tutor_now_sql("learners", "%s")} AND status = %s AND deleted_at IS NULL""",
+            (tutor_id, tutor_id, "active"),
         )
     else:
         raise HTTPException(status_code=400, detail="groupBy=learner requires a tutorId or cohortId filter")
     learners = cur.fetchall()
+    # cohort_id-scoped: fixed_cohort_id (single cohort). tutor_id-scoped (no
+    # cohort_id): restrict_to_cohort_ids across all of that tutor's own
+    # cohorts -- never a learner's lifetime blend across cohorts unrelated
+    # to the tutor/cohort actually being reported on.
     data = fetch_attendance_metrics_grouped(
-        cur, group_by="learner", group_ids=[l["id"] for l in learners], period_start=period_start, period_end=period_end, fixed_cohort_id=cohort_id
+        cur, group_by="learner", group_ids=[l["id"] for l in learners], period_start=period_start, period_end=period_end,
+        fixed_cohort_id=cohort_id, restrict_to_cohort_ids=tutor_cohort_ids,
     )
     return [{"key": str(l["id"]), "label": f"{l['firstName']} {l['lastName']}", "metrics": data[l["id"]]} for l in learners]
 

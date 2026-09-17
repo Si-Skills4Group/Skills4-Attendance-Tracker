@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FunctionalSkillsBadges } from "@/components/status-badges";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { getErrorMessage } from "@/lib/errors";
@@ -47,10 +48,15 @@ export default function AllocationPage() {
   // Once a target tutor is chosen, only that tutor's own cohorts make sense
   // as a target cohort -- an unfiltered list would let an admin pick a
   // combination the backend would reject (or silently mismatch) anyway.
+  // Functional Skills cohorts are excluded entirely: this panel MOVES a
+  // learner's single home cohort/tutor, whereas an FS cohort is an
+  // additional, add-only assignment made from the learner's own profile --
+  // picking one here would detach the learner from their real home cohort.
   const targetTutorIdNum = targetTutorId ? Number(targetTutorId) : null;
+  const homeCohorts = cohorts.filter((c) => c.membershipType !== "secondary");
   const targetCohortOptions = targetTutorIdNum
-    ? cohorts.filter((c) => c.tutorId === targetTutorIdNum)
-    : cohorts;
+    ? homeCohorts.filter((c) => c.tutorId === targetTutorIdNum)
+    : homeCohorts;
 
   const handleTargetTutorChange = (value: string) => {
     setTargetTutorId(value);
@@ -265,7 +271,10 @@ export default function AllocationPage() {
                           />
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium text-sm text-foreground">{learner.firstName} {learner.lastName}</div>
+                          <div className="font-medium text-sm text-foreground flex items-center gap-2">
+                            {learner.firstName} {learner.lastName}
+                            <FunctionalSkillsBadges subjects={learner.functionalSkillsSubjects} />
+                          </div>
                           <div className="text-xs text-muted-foreground font-mono mt-0.5">{learner.learnerRef}</div>
                         </TableCell>
                         <TableCell>

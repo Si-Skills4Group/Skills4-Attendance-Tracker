@@ -5,9 +5,12 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 
 export interface ExpectedLearner {
   learnerId: number;
   learnerName: string;
   learnerRef?: string;
+  /** Only present on the plain "who's expected" listing, not on a refresh diff's toAdd/toRemove/blocked entries. */
+  functionalSkillsSubjects?: FunctionalSkillsSubject[];
 }

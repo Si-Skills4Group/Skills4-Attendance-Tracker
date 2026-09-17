@@ -34,12 +34,26 @@ def _ensure_tutor_active(cur, tutor_id: int | None) -> None:
 def _ensure_cohort_active(cur, cohort_id: int | None) -> None:
     if cohort_id is None:
         return
-    cur.execute("SELECT active FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
+    cur.execute(
+        'SELECT active, membership_type AS "membershipType" FROM cohorts WHERE id = %s AND deleted_at IS NULL',
+        (cohort_id,),
+    )
     cohort = cur.fetchone()
     if not cohort:
         raise HTTPException(status_code=400, detail="Cohort not found")
     if not cohort["active"]:
         raise HTTPException(status_code=400, detail="Cannot allocate a learner to an inactive cohort")
+    # A Functional Skills (secondary) cohort is not a valid HOME cohort --
+    # this endpoint moves a learner's single home tutor/cohort via
+    # apply_transfer, which would otherwise silently detach them from their
+    # actual home cohort. Enroll into a secondary cohort via the dedicated
+    # secondary-enrollments endpoints instead, which add rather than move.
+    if cohort["membershipType"] == "secondary":
+        raise HTTPException(
+            status_code=400,
+            detail="This is a Functional Skills cohort -- use the Functional Skills enrollment action on the "
+                   "learner's profile instead of allocating their home cohort here.",
+        )
 
 
 @router.post("/allocation/allocate")

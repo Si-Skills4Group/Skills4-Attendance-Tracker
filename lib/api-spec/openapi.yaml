@@ -16,6 +16,7 @@ tags:
   - name: learners
   - name: cohorts
   - name: allocation
+  - name: secondary-enrollments
   - name: attendance
   - name: attendance-summary
   - name: reports
@@ -240,7 +241,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AttendanceSummaryResponse"
+                $ref: "#/components/schemas/LearnerAttendanceSummaryDetailResponse"
         "400":
           description: Invalid period/date range
           content:
@@ -1022,6 +1023,108 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AllocationHistoryEntry" }
+
+  # ---------- Functional Skills secondary cohort enrollment ----------
+  /learners/{id}/secondary-enrollments:
+    get:
+      operationId: listLearnerSecondaryEnrollments
+      tags: [secondary-enrollments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A learner's Functional Skills secondary enrollments (active and past)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SecondaryEnrollment" }
+    post:
+      operationId: createLearnerSecondaryEnrollment
+      tags: [secondary-enrollments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecondaryEnrollmentInput" }
+      responses:
+        "201":
+          description: Enrolled the learner into a Functional Skills cohort
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecondaryEnrollment" }
+        "404":
+          description: Learner not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Already actively enrolled in this cohort
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422":
+          description: Target cohort is not a Functional Skills cohort, or is the learner's own home cohort
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /secondary-enrollments/{id}/end:
+    post:
+      operationId: endLearnerSecondaryEnrollment
+      tags: [secondary-enrollments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecondaryEnrollmentEndInput" }
+      responses:
+        "200":
+          description: Ended the secondary enrollment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecondaryEnrollment" }
+        "400":
+          description: This enrollment has already ended
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Secondary enrollment not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /cohorts/{id}/secondary-enrollments:
+    get:
+      operationId: listCohortSecondaryEnrollments
+      tags: [secondary-enrollments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: A Functional Skills cohort's secondary enrollments (active and past)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SecondaryEnrollment" }
 
   # ---------- Cohorts ----------
   /cohorts:
@@ -2092,7 +2195,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [tutor, cohort, programme, level, employer]
+            enum: [tutor, cohort, programme, level, employer, subject]
             default: tutor
       responses:
         "200":
@@ -2124,6 +2227,7 @@ paths:
         - $ref: "#/components/parameters/LevelQueryParam"
         - $ref: "#/components/parameters/EmployerQueryParam"
         - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/SubjectQueryParam"
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
       responses:
@@ -2155,6 +2259,7 @@ paths:
         - $ref: "#/components/parameters/LevelQueryParam"
         - $ref: "#/components/parameters/EmployerQueryParam"
         - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/SubjectQueryParam"
       responses:
         "200":
           description: CSV export of the absence listing (streamed)
@@ -2186,6 +2291,7 @@ paths:
         - $ref: "#/components/parameters/LevelQueryParam"
         - $ref: "#/components/parameters/EmployerQueryParam"
         - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/SubjectQueryParam"
         - $ref: "#/components/parameters/PageParam"
         - $ref: "#/components/parameters/PageSizeParam"
       responses:
@@ -2213,6 +2319,7 @@ paths:
         - $ref: "#/components/parameters/LevelQueryParam"
         - $ref: "#/components/parameters/EmployerQueryParam"
         - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - $ref: "#/components/parameters/SubjectQueryParam"
       responses:
         "200":
           description: CSV export of the lateness listing (streamed)
@@ -3105,6 +3212,11 @@ components:
       name: employer
       in: query
       schema: { type: string }
+    SubjectQueryParam:
+      name: subject
+      in: query
+      description: Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+      schema: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
   schemas:
     HealthStatus:
       type: object
@@ -3294,6 +3406,7 @@ components:
           tutorName,
           cohortName,
           externalSystemId,
+          functionalSkillsSubjects,
           createdAt,
           updatedAt,
         ]
@@ -3317,8 +3430,18 @@ components:
         tutorName: { type: ["string", "null"] }
         cohortName: { type: ["string", "null"] }
         externalSystemId: { type: ["string", "null"] }
+        functionalSkillsSubjects:
+          type: array
+          items: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
+          description: >-
+            Distinct subjects of this learner's currently active Functional
+            Skills secondary enrollments -- empty when they have none.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    FunctionalSkillsSubject:
+      type: string
+      enum: [math, english, both]
 
     LearnerInput:
       type: object
@@ -3736,6 +3859,8 @@ components:
           endDate,
           active,
           externalSystemId,
+          membershipType,
+          subject,
           createdAt,
           updatedAt,
         ]
@@ -3753,8 +3878,27 @@ components:
         endDate: { type: ["string", "null"], format: date }
         active: { type: boolean }
         externalSystemId: { type: ["string", "null"] }
+        membershipType:
+          $ref: "#/components/schemas/CohortMembershipType"
+        subject:
+          oneOf:
+            - $ref: "#/components/schemas/FunctionalSkillsSubject"
+            - type: "null"
+          description: >-
+            Only meaningful (and required) on a 'secondary' cohort -- always
+            null on a 'primary' one.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    CohortMembershipType:
+      type: string
+      enum: [primary, secondary]
+      description: >-
+        'primary' is a learner's normal home cohort, enrolled/transferred via
+        the Allocation screen. 'secondary' is a Functional Skills cohort --
+        learners are added to it via a dedicated secondary-enrollment action
+        (see /learners/{learnerId}/secondary-enrollments) alongside, never
+        instead of, their home cohort.
 
     CohortCardSummary:
       allOf:
@@ -3798,6 +3942,11 @@ components:
         endDate: { type: string, format: date }
         active: { type: boolean, default: true }
         externalSystemId: { type: string }
+        membershipType:
+          allOf: [{ $ref: "#/components/schemas/CohortMembershipType" }]
+          default: primary
+        subject:
+          $ref: "#/components/schemas/FunctionalSkillsSubject"
 
     CohortUpdate:
       type: object
@@ -3813,12 +3962,77 @@ components:
         endDate: { type: ["string", "null"], format: date }
         active: { type: boolean }
         externalSystemId: { type: ["string", "null"] }
+        membershipType:
+          $ref: "#/components/schemas/CohortMembershipType"
+        subject:
+          oneOf:
+            - $ref: "#/components/schemas/FunctionalSkillsSubject"
+            - type: "null"
+          description: Pass null to clear a previously-set subject (e.g. when switching back to a Standard cohort).
 
     CohortDeleteInput:
       type: object
       required: [reason]
       properties:
         reason: { type: string, minLength: 1 }
+
+    SecondaryEnrollment:
+      description: >-
+        A learner's Functional Skills secondary enrollment into a
+        'secondary' membership_type cohort -- purely additive alongside
+        their home cohort, never a transfer.
+      type: object
+      required:
+        [
+          id,
+          learnerId,
+          cohortId,
+          cohortName,
+          cohortTutorId,
+          cohortTutorName,
+          enrolledDate,
+          endDate,
+          status,
+          enrolledBy,
+          enrollmentReason,
+          endedBy,
+          endReason,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: integer }
+        learnerId: { type: integer }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        cohortTutorId: { type: ["integer", "null"] }
+        cohortTutorName: { type: ["string", "null"] }
+        enrolledDate: { type: string, format: date }
+        endDate: { type: ["string", "null"], format: date }
+        status:
+          type: string
+          enum: [active, ended]
+        enrolledBy: { type: integer }
+        enrollmentReason: { type: ["string", "null"] }
+        endedBy: { type: ["integer", "null"] }
+        endReason: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SecondaryEnrollmentInput:
+      type: object
+      required: [cohortId, enrolledDate]
+      properties:
+        cohortId: { type: integer }
+        enrolledDate: { type: string, format: date }
+        reason: { type: string }
+
+    SecondaryEnrollmentEndInput:
+      type: object
+      required: [endDate]
+      properties:
+        endDate: { type: string, format: date }
+        reason: { type: string }
 
     AllocationHistoryEntry:
       type: object
@@ -4081,6 +4295,12 @@ components:
         learnerId: { type: integer }
         learnerName: { type: string }
         learnerRef: { type: string }
+        functionalSkillsSubjects:
+          type: array
+          items: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
+          description: >-
+            Only present on the plain "who's expected" listing, not on a
+            refresh diff's toAdd/toRemove/blocked entries.
 
     RegisterRefreshDiff:
       type: object
@@ -4125,6 +4345,7 @@ components:
           recordId,
           lastEditedBy,
           lastEditedByName,
+          functionalSkillsSubjects,
         ]
       properties:
         recordId: { type: ["integer", "null"] }
@@ -4141,6 +4362,12 @@ components:
         overrideReason: { type: ["string", "null"] }
         lastEditedBy: { type: ["integer", "null"] }
         lastEditedByName: { type: ["string", "null"] }
+        functionalSkillsSubjects:
+          type: array
+          items: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
+          description: >-
+            Distinct subjects of this learner's currently active Functional
+            Skills secondary enrollments -- empty when they have none.
 
     RegisterEntryInput:
       type: object
@@ -4234,16 +4461,41 @@ components:
 
     LearnerReportResponse:
       type: object
-      required: [learner, metrics, registerCompletion, bud, sessionHistory]
+      required: [learner, metrics, registerCompletion, cohortBreakdown, bud, sessionHistory]
       properties:
         learner: { $ref: "#/components/schemas/Learner" }
-        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        metrics:
+          allOf: [{ $ref: "#/components/schemas/AttendanceMetrics" }]
+          description: >-
+            The learner's HOME cohort figures specifically (identical to
+            cohortBreakdown's "home" entry) -- never a blend across every
+            cohort this learner is expected in. See cohortBreakdown for a
+            Functional Skills secondary enrollment's own, separate figures.
         registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        cohortBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/LearnerCohortBreakdownEntry" }
+          description: >-
+            One entry per cohort this learner is currently expected in --
+            their home cohort plus each active Functional Skills secondary
+            enrollment -- each with its own, never-blended metrics.
         bud:
           oneOf:
             - $ref: "#/components/schemas/BudProgress"
             - type: "null"
         sessionHistory: { $ref: "#/components/schemas/LearnerSessionHistoryListResponse" }
+
+    LearnerCohortBreakdownEntry:
+      type: object
+      required: [cohortId, cohortName, relationship, metrics, registerCompletion]
+      properties:
+        cohortId: { type: integer }
+        cohortName: { type: ["string", "null"] }
+        relationship:
+          type: string
+          enum: [home, functional_skills]
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
 
     CohortLearnerBreakdownRow:
       type: object
@@ -4344,6 +4596,13 @@ components:
         employer: { type: string }
         metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
 
+    SubjectBreakdownRow:
+      type: object
+      required: [subject, metrics]
+      properties:
+        subject: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
     OrganisationReportResponse:
       type: object
       required:
@@ -4359,6 +4618,7 @@ components:
           programmeBreakdown,
           levelBreakdown,
           employerBreakdown,
+          subjectBreakdown,
         ]
       properties:
         activeLearners: { type: integer }
@@ -4382,6 +4642,10 @@ components:
         employerBreakdown:
           type: array
           items: { $ref: "#/components/schemas/EmployerBreakdownRow" }
+        subjectBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/SubjectBreakdownRow" }
+          description: Math vs English (vs Both) Functional Skills attendance -- a 'primary' cohort never contributes a row.
 
     AbsenceRow:
       type: object
@@ -4792,6 +5056,21 @@ components:
       properties:
         metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
         registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+
+    LearnerAttendanceSummaryDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/AttendanceSummaryResponse"
+        - type: object
+          required: [cohortBreakdown]
+          properties:
+            cohortBreakdown:
+              type: array
+              items: { $ref: "#/components/schemas/LearnerCohortBreakdownEntry" }
+              description: >-
+                One entry per cohort this learner is currently expected in --
+                home cohort plus each active Functional Skills secondary
+                enrollment. metrics/registerCompletion above are the HOME
+                cohort's figures specifically, never a blend.
 
     BudProgress:
       description: Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.

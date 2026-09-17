@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,13 +41,18 @@ const cohortSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().optional(),
   active: z.boolean().default(true),
-  externalSystemId: z.string().optional()
+  externalSystemId: z.string().optional(),
+  membershipType: z.enum(["primary", "secondary"]).default("primary"),
+  subject: z.enum(["math", "english", "both"]).optional(),
 }).refine((data) => data.sessionEndTime > data.sessionStartTime, {
   message: "End time must be after start time",
   path: ["sessionEndTime"],
 }).refine((data) => !data.endDate || data.endDate > data.startDate, {
   message: "End date cannot be before start date",
   path: ["endDate"],
+}).refine((data) => data.membershipType !== "secondary" || !!data.subject, {
+  message: "Subject is required for a Functional Skills cohort",
+  path: ["subject"],
 });
 
 export default function CohortDetailPage() {
@@ -102,11 +108,27 @@ export default function CohortDetailPage() {
       startDate: format(new Date(), "yyyy-MM-dd"),
       endDate: "",
       active: true,
-      externalSystemId: ""
+      externalSystemId: "",
+      membershipType: "primary",
+      subject: undefined,
     }
   });
 
   const initializedForId = React.useRef<number | null>(null);
+  // Bumped alongside form.reset() below, and used as both the Cohort Type
+  // and Subject <Select>s' key: Radix's Select mirrors its value into a hidden native
+  // <select> for form/autofill compatibility, but that mirror's <option>s
+  // only exist once the (portaled, closed-by-default) dropdown has been
+  // opened at least once. Updating the Select's value programmatically
+  // after mount -- exactly what happens here when an existing cohort's
+  // data arrives async -- fires the native mirror's own change event with
+  // no matching option, which Radix propagates back as an empty string,
+  // silently clobbering the value we just set. Forcing a fresh remount
+  // (via key) at the same moment sidesteps this entirely: the Select
+  // initializes with the correct value from its very first render, so
+  // there's never a mid-lifecycle external update to desync from.
+  const [membershipTypeRemountKey, setMembershipTypeRemountKey] = React.useState(0);
+  const watchedMembershipType = form.watch("membershipType");
   React.useEffect(() => {
     if (cohort && initializedForId.current !== cohortId) {
       initializedForId.current = cohortId;
@@ -121,8 +143,11 @@ export default function CohortDetailPage() {
         startDate: cohort.startDate.split('T')[0],
         endDate: cohort.endDate ? cohort.endDate.split('T')[0] : "",
         active: cohort.active,
-        externalSystemId: cohort.externalSystemId || ""
+        externalSystemId: cohort.externalSystemId || "",
+        membershipType: (cohort.membershipType as any) || "primary",
+        subject: (cohort.subject as any) || undefined,
       });
+      setMembershipTypeRemountKey((k) => k + 1);
     }
   }, [cohort, cohortId, form]);
 
@@ -138,7 +163,10 @@ export default function CohortDetailPage() {
         sessionEndTime: formatTime(values.sessionEndTime),
         tutorId: values.tutorId ? Number(values.tutorId) : undefined,
         endDate: values.endDate || undefined,
-        externalSystemId: values.externalSystemId || undefined
+        externalSystemId: values.externalSystemId || undefined,
+        // subject only ever applies to a Functional Skills cohort -- never
+        // send a stale value left over from switching the type back.
+        subject: values.membershipType === "secondary" ? values.subject : undefined,
       };
       createMutation.mutate({ data: payload as any }, {
         onSuccess: () => {
@@ -158,7 +186,12 @@ export default function CohortDetailPage() {
         sessionEndTime: formatTime(values.sessionEndTime),
         tutorId: values.tutorId ? Number(values.tutorId) : undefined,
         endDate: values.endDate || undefined,
-        externalSystemId: values.externalSystemId || undefined
+        externalSystemId: values.externalSystemId || undefined,
+        // Explicit null (not undefined, which JSON.stringify would drop
+        // entirely) so switching back to Standard actually clears a
+        // previously-set subject server-side, rather than leaving it stale
+        // and tripping the backend's membershipType/subject consistency check.
+        subject: values.membershipType === "secondary" ? (values.subject ?? null) : null,
       };
       updateMutation.mutate({ id: cohortId, data: rest }, {
         onSuccess: () => {
@@ -304,6 +337,58 @@ export default function CohortDetailPage() {
                           <FormMessage />
                         </FormItem>
                       )} />
+                      <FormField control={form.control} name="membershipType" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>Cohort Type</FormLabel>
+                          <Select
+                            key={membershipTypeRemountKey}
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            disabled={readOnly}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="primary">Standard</SelectItem>
+                              <SelectItem value="secondary">Functional Skills</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Functional Skills cohorts hold learners who already belong to a different home
+                            cohort and are enrolled here as an additional (not a replacement) assignment,
+                            from the learner's own profile.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      {watchedMembershipType === "secondary" && (
+                        <FormField control={form.control} name="subject" render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Subject</FormLabel>
+                            <Select
+                              key={membershipTypeRemountKey}
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              disabled={readOnly}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a subject..." />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="math">Math</SelectItem>
+                                <SelectItem value="english">English</SelectItem>
+                                <SelectItem value="both">Both</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      )}
                       {isNew ? (
                         <FormField control={form.control} name="active" render={({ field }) => (
                           <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">

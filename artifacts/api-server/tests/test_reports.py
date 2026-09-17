@@ -121,6 +121,77 @@ class TestLearnerReport:
         assert response.status_code == 400
 
 
+class TestLearnerReportSecondaryCohortSeparation:
+    """A learner enrolled in both a home cohort and a Functional Skills
+    secondary cohort must get separate, never-blended metrics for each --
+    both in the new cohortBreakdown and in the top-level (home-only)
+    metrics field."""
+
+    def test_home_and_secondary_metrics_never_blend(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+        secondary_enrollment_factory,
+    ):
+        home = cohort_factory()
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=home["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-01-01")
+
+        home_session = attendance_session_factory(
+            cohort_id=home["id"], session_date="2026-01-06", planned_duration_hours=6, created_by=admin_user["userId"]
+        )
+        _snapshot(db, home_session)
+        _record(db, home_session["id"], learner["id"], "present", hours_attended=6)
+
+        fs_session = attendance_session_factory(
+            cohort_id=fs_cohort["id"], session_date="2026-01-07", planned_duration_hours=2, created_by=admin_user["userId"]
+        )
+        _snapshot(db, fs_session)
+        _record(db, fs_session["id"], learner["id"], "absent_unauthorised")
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/learner/{learner['id']}?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
+
+        # Top-level metrics stay the HOME cohort's figures only.
+        assert body["metrics"]["expectedMinutes"] == 360
+        assert body["metrics"]["attendedMinutes"] == 360
+
+        breakdown = {e["relationship"]: e for e in body["cohortBreakdown"]}
+        assert breakdown["home"]["cohortId"] == home["id"]
+        assert breakdown["home"]["metrics"]["attendedMinutes"] == 360
+        assert breakdown["functional_skills"]["cohortId"] == fs_cohort["id"]
+        assert breakdown["functional_skills"]["metrics"]["expectedMinutes"] == 120
+        assert breakdown["functional_skills"]["metrics"]["attendedMinutes"] == 0
+
+    def test_functional_skills_tutor_with_no_home_relationship_can_access_the_report(
+        self, client, monkeypatch, db, admin_user, tutor_factory, cohort_factory, learner_factory,
+        secondary_enrollment_factory,
+    ):
+        home_tutor = tutor_factory()
+        fs_tutor = tutor_factory()
+        home = cohort_factory(tutor_id=home_tutor["tutorId"])
+        fs_cohort = cohort_factory(tutor_id=fs_tutor["tutorId"], membership_type="secondary")
+        learner = learner_factory(tutor_id=home_tutor["tutorId"], cohort_id=home["id"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-01-01")
+
+        _as_tutor(client, monkeypatch, fs_tutor["tutorId"])
+        response = client.get(f"/api/reports/learner/{learner['id']}?{PERIOD_QS}")
+        assert response.status_code == 200
+
+    def test_unrelated_tutor_is_still_denied(
+        self, client, monkeypatch, tutor_factory, cohort_factory, learner_factory,
+    ):
+        home_tutor = tutor_factory()
+        unrelated_tutor = tutor_factory()
+        home = cohort_factory(tutor_id=home_tutor["tutorId"])
+        learner = learner_factory(tutor_id=home_tutor["tutorId"], cohort_id=home["id"])
+
+        _as_tutor(client, monkeypatch, unrelated_tutor["tutorId"])
+        response = client.get(f"/api/reports/learner/{learner['id']}?{PERIOD_QS}")
+        assert response.status_code == 403
+
+
 class TestCohortReport:
     def test_learner_breakdown_reconciles_with_cohort_total(
         self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory
@@ -245,6 +316,38 @@ class TestOrganisationReport:
         tutor_ids = {tutor_a["tutorId"], tutor_b["tutorId"]}
         assert tutor_ids <= {t["tutorId"] for t in body["tutorBreakdown"]}
 
+    def test_subject_breakdown_separates_math_from_english(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        home = cohort_factory()
+        maths_cohort = cohort_factory(membership_type="secondary", subject="math")
+        english_cohort = cohort_factory(membership_type="secondary", subject="english")
+        learner = learner_factory(cohort_id=home["id"])
+
+        maths_session = attendance_session_factory(cohort_id=maths_cohort["id"], session_date="2026-01-06", planned_duration_hours=2, created_by=admin_user["userId"])
+        english_session = attendance_session_factory(cohort_id=english_cohort["id"], session_date="2026-01-07", planned_duration_hours=2, created_by=admin_user["userId"])
+        db.execute(
+            "INSERT INTO session_expected_learners (session_id, learner_id, cohort_id) VALUES (%s, %s, %s)",
+            (maths_session["id"], learner["id"], maths_cohort["id"]),
+        )
+        db.execute(
+            "INSERT INTO session_expected_learners (session_id, learner_id, cohort_id) VALUES (%s, %s, %s)",
+            (english_session["id"], learner["id"], english_cohort["id"]),
+        )
+        _record(db, maths_session["id"], learner["id"], "present", hours_attended=2)
+        _record(db, english_session["id"], learner["id"], "absent_unauthorised")
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/organisation?{PERIOD_QS}")
+        assert response.status_code == 200
+        breakdown = {row["subject"]: row["metrics"] for row in response.json()["subjectBreakdown"]}
+
+        assert breakdown["math"]["attendedMinutes"] == 120
+        assert breakdown["english"]["attendedMinutes"] == 0
+        assert breakdown["english"]["expectedMinutes"] == 120
+        # A standard (non-Functional Skills) cohort never contributes a row.
+        assert None not in breakdown
+
 
 class TestAbsenceAndLatenessReports:
     def test_absence_report_separates_authorised_from_unauthorised(
@@ -267,6 +370,31 @@ class TestAbsenceAndLatenessReports:
         unauth_resp = client.get(f"/api/reports/absence?absenceType=unauthorised&{PERIOD_QS}&cohortId={cohort['id']}")
         unauth_ids = {r["learnerId"] for r in unauth_resp.json()["items"]}
         assert unauth_ids == {learner_unauth["id"]}
+
+    def test_absence_report_can_be_filtered_to_a_functional_skills_subject(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        maths_cohort = cohort_factory(membership_type="secondary", subject="math")
+        english_cohort = cohort_factory(membership_type="secondary", subject="english")
+        learner = learner_factory(cohort_id=cohort_factory()["id"])
+        maths_session = attendance_session_factory(cohort_id=maths_cohort["id"], session_date="2026-01-06", planned_duration_hours=2, created_by=admin_user["userId"])
+        english_session = attendance_session_factory(cohort_id=english_cohort["id"], session_date="2026-01-07", planned_duration_hours=2, created_by=admin_user["userId"])
+        db.execute(
+            "INSERT INTO session_expected_learners (session_id, learner_id, cohort_id) VALUES (%s, %s, %s)",
+            (maths_session["id"], learner["id"], maths_cohort["id"]),
+        )
+        db.execute(
+            "INSERT INTO session_expected_learners (session_id, learner_id, cohort_id) VALUES (%s, %s, %s)",
+            (english_session["id"], learner["id"], english_cohort["id"]),
+        )
+        _record(db, maths_session["id"], learner["id"], "absent_unauthorised")
+        _record(db, english_session["id"], learner["id"], "absent_unauthorised")
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/absence?absenceType=unauthorised&{PERIOD_QS}&subject=math")
+        assert response.status_code == 200
+        items = response.json()["items"]
+        assert {r["sessionId"] for r in items} == {maths_session["id"]}
 
     def test_tutor_scope_cannot_be_widened_via_learner_id_filter(self, client, monkeypatch, tutor_factory, learner_factory):
         owner = tutor_factory()

@@ -463,6 +463,93 @@ class TestFetchAttendanceMetrics:
         assert metrics.attendancePercentage == pytest.approx(100 / 3, rel=1e-6)
 
 
+class TestFutureSessionsExcludedFromAttendancePercentage:
+    """A session dated after today cannot possibly have any attendance
+    recorded yet, so it must never dilute the percentage for a period
+    (e.g. "Current Month") that hasn't finished. Only sessions up to and
+    including today count toward expected/attended minutes -- see
+    attendance_metrics._capped_period_end."""
+
+    def test_a_learner_perfect_so_far_is_not_dragged_down_by_a_not_yet_run_session(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        today = date.today()
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+
+        past_session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date=today.isoformat(), planned_duration_hours=7,
+            created_by=admin_user["userId"],
+        )
+        _snapshot(db, past_session)
+        _record(db, past_session["id"], learner["id"], "present", hours_attended=7)
+
+        future_session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date=(today + timedelta(days=1)).isoformat(), planned_duration_hours=7,
+            created_by=admin_user["userId"],
+        )
+        # Registers are generated lazily, but nothing stops one being
+        # pre-generated for a future session (e.g. the cohort-summary
+        # endpoint's bulk snapshot sweep) -- the cap must hold even though
+        # a real session_expected_learners row already exists for it.
+        _snapshot(db, future_session)
+
+        # A custom window straddling today, entirely under this test's
+        # control (not "current month", which can roll over unpredictably
+        # depending on which day of the month the suite happens to run).
+        metrics = fetch_attendance_metrics(
+            db, scope="learner", scope_id=learner["id"],
+            period_start=today - timedelta(days=5), period_end=today + timedelta(days=5),
+        )
+        assert metrics.expectedMinutes == 420
+        assert metrics.attendedMinutes == 420
+        assert metrics.attendancePercentage == 100.0
+
+    def test_grouped_metrics_apply_the_same_cutoff(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        today = date.today()
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+
+        past_session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date=today.isoformat(), planned_duration_hours=7,
+            created_by=admin_user["userId"],
+        )
+        _snapshot(db, past_session)
+        _record(db, past_session["id"], learner["id"], "present", hours_attended=7)
+
+        future_session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date=(today + timedelta(days=5)).isoformat(), planned_duration_hours=7,
+            created_by=admin_user["userId"],
+        )
+        _snapshot(db, future_session)
+
+        results = fetch_attendance_metrics_grouped(
+            db, group_by="learner", group_ids=[learner["id"]],
+            period_start=today - timedelta(days=30), period_end=today + timedelta(days=30),
+        )
+        assert results[learner["id"]].expectedMinutes == 420
+        assert results[learner["id"]].attendancePercentage == 100.0
+
+    def test_a_custom_period_entirely_in_the_past_is_unaffected(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory(cohort_id=cohort["id"])
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "present", hours_attended=7)
+
+        metrics = fetch_attendance_metrics(
+            db, scope="learner", scope_id=learner["id"], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert metrics.expectedMinutes == 420
+        assert metrics.attendedMinutes == 420
+
+
 class TestFetchAttendanceMetricsGrouped:
     def test_batches_multiple_learners_in_one_query(
         self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory

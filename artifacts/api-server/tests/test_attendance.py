@@ -144,6 +144,80 @@ class TestLearnerEligibilityRespectsLifecycle:
         assert db.fetchone()["count"] == len(expected_ids)
 
 
+class TestSecondaryCohortEnrollmentEligibility:
+    """learners_expected_in_cohort_as_of/expected_learners_count_sql must
+    also resolve a learner who has an active Functional Skills secondary
+    enrollment into a cohort -- alongside, never instead of, their home
+    cohort's own resolution."""
+
+    def test_secondarily_enrolled_learner_is_expected_in_the_secondary_cohort(
+        self, db, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        home_cohort = cohort_factory()
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=home_cohort["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01")
+
+        assert learners_expected_in_cohort_as_of(db, fs_cohort["id"], datetime.date(2026, 3, 1)) == [learner["id"]]
+
+    def test_secondary_enrollment_does_not_affect_home_cohort_resolution(
+        self, db, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        home_cohort = cohort_factory()
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=home_cohort["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01")
+
+        assert learners_expected_in_cohort_as_of(db, home_cohort["id"], datetime.date(2026, 3, 1)) == [learner["id"]]
+
+    def test_learner_not_yet_enrolled_is_excluded(self, db, cohort_factory, learner_factory, secondary_enrollment_factory):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01")
+
+        assert learners_expected_in_cohort_as_of(db, fs_cohort["id"], datetime.date(2026, 1, 15)) == []
+
+    def test_ended_enrollment_excludes_from_dates_after_the_end_date(
+        self, db, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(
+            learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01",
+            end_date="2026-04-01", status="ended",
+        )
+
+        assert learners_expected_in_cohort_as_of(db, fs_cohort["id"], datetime.date(2026, 3, 1)) == [learner["id"]]
+        assert learners_expected_in_cohort_as_of(db, fs_cohort["id"], datetime.date(2026, 5, 1)) == []
+
+    def test_deleted_learner_is_excluded_from_secondary_cohort_too(
+        self, db, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01")
+        db.execute("UPDATE learners SET deleted_at = now() WHERE id = %s", (learner["id"],))
+
+        assert learners_expected_in_cohort_as_of(db, fs_cohort["id"], datetime.date(2026, 3, 1)) == []
+
+    def test_expected_learners_count_sql_agrees_for_secondary_enrollment(
+        self, db, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], start_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-02-01")
+
+        as_of = datetime.date(2026, 3, 1)
+        expected_ids = learners_expected_in_cohort_as_of(db, fs_cohort["id"], as_of)
+        assert expected_ids == [learner["id"]]
+
+        db.execute(
+            f"SELECT {expected_learners_count_sql('%(cohort_id)s', '%(as_of)s')} AS count",
+            {"cohort_id": fs_cohort["id"], "as_of": as_of},
+        )
+        assert db.fetchone()["count"] == 1
+
+
 class TestHistoricalAttendanceImmutability:
     """The core regression this phase exists to prevent: a cohort transfer
     must never move, copy, delete, or recalculate existing attendance."""

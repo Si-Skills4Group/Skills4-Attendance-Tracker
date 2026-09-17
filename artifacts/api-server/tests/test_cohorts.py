@@ -9,6 +9,8 @@ from pyapp.routers.cohorts import (
     deactivate_cohort,
     delete_cohort,
     get_cohort,
+    get_cohort_learners,
+    list_cohort_summary,
     list_cohorts,
     update_cohort,
 )
@@ -286,3 +288,134 @@ def test_cohort_delete_is_audited(db, request_factory, admin_user, cohort_factor
     row = db.fetchone()
     assert row is not None
     assert "Duplicate cohort" in row["new_value"]
+
+
+class TestFunctionalSkillsSecondaryCohorts:
+    """A learner secondarily enrolled in a 'secondary' membership_type
+    cohort must show up wherever a cohort's roster/learner count is read,
+    without ever appearing in learners.cohort_id for that cohort."""
+
+    def test_secondarily_enrolled_learner_appears_in_cohort_roster(
+        self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+
+        roster = get_cohort_learners(fs_cohort["id"], session=admin_user)
+        assert {r["id"] for r in roster} == {learner["id"]}
+
+    def test_secondarily_enrolled_learner_counts_toward_learner_count(
+        self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], status="active")
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+
+        detail = get_cohort(fs_cohort["id"], session=admin_user)
+        assert detail["learnerCount"] == 1
+
+        summary = list_cohort_summary(session=admin_user)
+        fs_summary = next(row for row in summary if row["id"] == fs_cohort["id"])
+        assert fs_summary["activeLearnerCount"] == 1
+
+    def test_ended_enrollment_no_longer_counts(
+        self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"], status="active")
+        secondary_enrollment_factory(
+            learner_id=learner["id"], cohort_id=fs_cohort["id"], status="ended", end_date="2026-03-01",
+        )
+
+        detail = get_cohort(fs_cohort["id"], session=admin_user)
+        assert detail["learnerCount"] == 0
+
+    def test_deleting_a_secondary_cohort_with_active_enrollments_is_blocked(
+        self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+
+        with pytest.raises(HTTPException) as exc:
+            delete_cohort(fs_cohort["id"], CohortDeleteInput(reason="Try anyway"), request_factory(), admin_user)
+        assert exc.value.status_code == 409
+        assert exc.value.detail["activeSecondaryEnrollmentCount"] == 1
+
+    def test_cannot_switch_to_secondary_while_it_has_home_learners(
+        self, request_factory, admin_user, cohort_factory, learner_factory,
+    ):
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"])
+
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(cohort["id"], CohortUpdate(membershipType="secondary"), request_factory(), admin_user)
+        assert exc.value.status_code == 409
+
+    def test_cannot_switch_back_to_primary_while_it_has_active_enrollments(
+        self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory(cohort_id=cohort_factory()["id"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(fs_cohort["id"], CohortUpdate(membershipType="primary"), request_factory(), admin_user)
+        assert exc.value.status_code == 409
+
+    def test_new_cohorts_default_to_primary(self, db, request_factory, admin_user, cohort_factory):
+        created = create_cohort(CohortInput(**_base_cohort_kwargs()), request_factory(), admin_user)
+        assert created["membershipType"] == "primary"
+        _cleanup(db, created["id"])
+
+    def test_creating_a_secondary_cohort_requires_a_subject(self):
+        with pytest.raises(HTTPException) as exc:
+            CohortInput(**_base_cohort_kwargs(membershipType="secondary"))
+        assert exc.value.status_code == 400
+
+    def test_creating_a_primary_cohort_rejects_a_subject(self):
+        with pytest.raises(HTTPException) as exc:
+            CohortInput(**_base_cohort_kwargs(membershipType="primary", subject="math"))
+        assert exc.value.status_code == 400
+
+    def test_creating_a_secondary_cohort_with_a_subject_succeeds(self, db, request_factory, admin_user):
+        created = create_cohort(
+            CohortInput(**_base_cohort_kwargs(membershipType="secondary", subject="english")),
+            request_factory(), admin_user,
+        )
+        assert created["membershipType"] == "secondary"
+        assert created["subject"] == "english"
+        _cleanup(db, created["id"])
+
+    def test_cannot_switch_to_secondary_without_providing_a_subject(self, request_factory, admin_user, cohort_factory):
+        cohort = cohort_factory()
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(cohort["id"], CohortUpdate(membershipType="secondary"), request_factory(), admin_user)
+        assert exc.value.status_code == 400
+
+    def test_can_switch_to_secondary_when_subject_is_provided_in_the_same_request(
+        self, request_factory, admin_user, cohort_factory,
+    ):
+        cohort = cohort_factory()
+        result = update_cohort(
+            cohort["id"], CohortUpdate(membershipType="secondary", subject="both"), request_factory(), admin_user,
+        )
+        assert result["membershipType"] == "secondary"
+        assert result["subject"] == "both"
+
+    def test_switching_back_to_primary_clears_a_previously_set_subject(
+        self, request_factory, admin_user, cohort_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary", subject="math")
+        result = update_cohort(
+            fs_cohort["id"], CohortUpdate(membershipType="primary", subject=None), request_factory(), admin_user,
+        )
+        assert result["membershipType"] == "primary"
+        assert result["subject"] is None
+
+    def test_cannot_set_a_subject_on_a_standard_cohort_via_update(self, request_factory, admin_user, cohort_factory):
+        cohort = cohort_factory()
+        with pytest.raises(HTTPException) as exc:
+            update_cohort(cohort["id"], CohortUpdate(subject="math"), request_factory(), admin_user)
+        assert exc.value.status_code == 400

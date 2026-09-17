@@ -12,6 +12,7 @@ import type { OrganisationCohortBreakdownRow } from './organisationCohortBreakdo
 import type { OrganisationTutorBreakdownRow } from './organisationTutorBreakdownRow';
 import type { ProgrammeBreakdownRow } from './programmeBreakdownRow';
 import type { RegisterCompletionSummary } from './registerCompletionSummary';
+import type { SubjectBreakdownRow } from './subjectBreakdownRow';
 
 export interface OrganisationReportResponse {
   activeLearners: number;
@@ -25,4 +26,6 @@ export interface OrganisationReportResponse {
   programmeBreakdown: ProgrammeBreakdownRow[];
   levelBreakdown: LevelBreakdownRow[];
   employerBreakdown: EmployerBreakdownRow[];
+  /** Math vs English (vs Both) Functional Skills attendance -- a 'primary' cohort never contributes a row. */
+  subjectBreakdown: SubjectBreakdownRow[];
 }

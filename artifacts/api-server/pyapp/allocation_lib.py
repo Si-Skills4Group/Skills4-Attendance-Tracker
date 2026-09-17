@@ -56,26 +56,47 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
     (the cohort they were in before their first-ever transfer); else the
     learner's current cohort_id (never transferred).
 
+    Also matches a learner whose *secondary* (Functional Skills) cohort
+    enrollment covers this cohort as of this date -- learner_cohort_
+    enrollments is a purely additive second membership that never touches
+    learners.cohort_id/tutor_id or learner_allocation_history, so a learner
+    can be expected in their home cohort's resolution above AND, separately,
+    in a secondary cohort's sessions via this EXISTS check, with neither
+    affecting the other. Deliberately date-range-based (enrolled_date/
+    end_date), not status-based, since this function re-resolves eligibility
+    as of an arbitrary historical or future date, not "right now".
+
     Also excludes learners who, as of that date, hadn't started yet, or had
     already withdrawn/completed -- cohort-history resolution alone doesn't
     know about a learner's own start/end lifecycle. And excludes learners an
     admin has since deleted -- the sole gatekeeper for whether a deleted
     learner keeps getting added to a *future* session's expected roster;
     without this, deleting a learner wouldn't stop them being expected
-    tomorrow."""
+    tomorrow. These exclusions apply uniformly to both the home-cohort and
+    secondary-enrollment match, so a deleted/withdrawn/completed learner
+    disappears from every register, primary or secondary, with no extra
+    code."""
     cur.execute(
         """
         SELECT l.id
         FROM learners l
-        WHERE COALESCE(
-            (SELECT h.new_cohort_id FROM learner_allocation_history h
-             WHERE h.learner_id = l.id AND h.effective_date <= %(as_of)s
-             ORDER BY h.effective_date DESC, h.id DESC LIMIT 1),
-            (SELECT h.previous_cohort_id FROM learner_allocation_history h
-             WHERE h.learner_id = l.id
-             ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
-            l.cohort_id
-        ) = %(cohort_id)s
+        WHERE (
+            COALESCE(
+                (SELECT h.new_cohort_id FROM learner_allocation_history h
+                 WHERE h.learner_id = l.id AND h.effective_date <= %(as_of)s
+                 ORDER BY h.effective_date DESC, h.id DESC LIMIT 1),
+                (SELECT h.previous_cohort_id FROM learner_allocation_history h
+                 WHERE h.learner_id = l.id
+                 ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
+                l.cohort_id
+            ) = %(cohort_id)s
+            OR EXISTS (
+                SELECT 1 FROM learner_cohort_enrollments e
+                WHERE e.learner_id = l.id AND e.cohort_id = %(cohort_id)s
+                  AND e.enrolled_date <= %(as_of)s
+                  AND (e.end_date IS NULL OR e.end_date > %(as_of)s)
+            )
+        )
         AND l.start_date <= %(as_of)s
         AND l.deleted_at IS NULL
         AND NOT (l.status = 'withdrawn' AND l.withdrawal_date IS NOT NULL AND l.withdrawal_date <= %(as_of)s)
@@ -93,17 +114,27 @@ def expected_learners_count_sql(cohort_id_column: str, as_of_date_column: str) -
     process many sessions/cohorts at once (e.g. dashboard aggregates),
     where calling the Python helper per row would mean N+1 queries.
     cohort_id_column/as_of_date_column must be trusted SQL column
-    references composed by the caller, never raw user input."""
+    references composed by the caller, never raw user input. Mirrors the
+    home-cohort-or-secondary-enrollment disjunction in
+    learners_expected_in_cohort_as_of -- see that function's docstring."""
     return f"""(
         SELECT count(*) FROM learners exp_l
-        WHERE COALESCE(
-            (SELECT h.new_cohort_id FROM learner_allocation_history h
-             WHERE h.learner_id = exp_l.id AND h.effective_date <= {as_of_date_column}
-             ORDER BY h.effective_date DESC, h.id DESC LIMIT 1),
-            (SELECT h.previous_cohort_id FROM learner_allocation_history h
-             WHERE h.learner_id = exp_l.id ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
-            exp_l.cohort_id
-        ) = {cohort_id_column}
+        WHERE (
+            COALESCE(
+                (SELECT h.new_cohort_id FROM learner_allocation_history h
+                 WHERE h.learner_id = exp_l.id AND h.effective_date <= {as_of_date_column}
+                 ORDER BY h.effective_date DESC, h.id DESC LIMIT 1),
+                (SELECT h.previous_cohort_id FROM learner_allocation_history h
+                 WHERE h.learner_id = exp_l.id ORDER BY h.effective_date ASC, h.id ASC LIMIT 1),
+                exp_l.cohort_id
+            ) = {cohort_id_column}
+            OR EXISTS (
+                SELECT 1 FROM learner_cohort_enrollments exp_e
+                WHERE exp_e.learner_id = exp_l.id AND exp_e.cohort_id = {cohort_id_column}
+                  AND exp_e.enrolled_date <= {as_of_date_column}
+                  AND (exp_e.end_date IS NULL OR exp_e.end_date > {as_of_date_column})
+            )
+        )
         AND exp_l.start_date <= {as_of_date_column}
         AND exp_l.deleted_at IS NULL
         AND NOT (exp_l.status = 'withdrawn' AND exp_l.withdrawal_date IS NOT NULL AND exp_l.withdrawal_date <= {as_of_date_column})

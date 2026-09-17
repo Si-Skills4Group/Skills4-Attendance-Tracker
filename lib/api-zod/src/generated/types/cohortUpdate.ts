@@ -5,7 +5,9 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CohortMembershipType } from './cohortMembershipType';
 import type { DeliveryDay } from './deliveryDay';
+import type { FunctionalSkillsSubject } from './functionalSkillsSubject';
 
 export interface CohortUpdate {
   /** @minLength 1 */
@@ -27,4 +29,7 @@ export interface CohortUpdate {
   active?: boolean;
   /** @nullable */
   externalSystemId?: string | null;
+  membershipType?: CohortMembershipType;
+  /** Pass null to clear a previously-set subject (e.g. when switching back to a Standard cohort). */
+  subject?: FunctionalSkillsSubject | null;
 }

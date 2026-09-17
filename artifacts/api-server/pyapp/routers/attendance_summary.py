@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..attendance_metrics import Period, fetch_attendance_metrics, fetch_register_completion, resolve_period
 from ..auth import require_auth, require_cohort_access, require_learner_access, require_tutor_access
 from ..db import get_cursor
+from ..learners_query import LEARNERS_WITH_NAMES_SELECT
+from .reports import _learner_cohort_breakdown
 
 router = APIRouter(tags=["attendance-summary"])
 
@@ -27,13 +29,30 @@ def get_learner_attendance_summary(
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
         require_learner_access(cur, learner_id, session)
-        metrics = fetch_attendance_metrics(
-            cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end
-        )
-        completion = fetch_register_completion(
-            cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end
-        )
-    return {"metrics": metrics, "registerCompletion": completion}
+        cur.execute(f"{LEARNERS_WITH_NAMES_SELECT} WHERE l.id = %s AND l.deleted_at IS NULL", (learner_id,))
+        learner = cur.fetchone()
+        if not learner:
+            raise HTTPException(status_code=404, detail="Learner not found")
+
+        # cohortBreakdown gives each cohort this learner is currently
+        # expected in (home + any active Functional Skills enrollments) its
+        # own, never-blended metrics/registerCompletion -- see
+        # routers/reports.py::get_learner_report for the same pattern. The
+        # top-level metrics/registerCompletion stay the HOME cohort's
+        # figures (unchanged from today for the vast majority of learners,
+        # who have no secondary enrollment).
+        cohort_breakdown = _learner_cohort_breakdown(cur, learner, period_start, period_end)
+        home_entry = next((e for e in cohort_breakdown if e["relationship"] == "home"), None)
+        if home_entry is not None:
+            metrics, completion = home_entry["metrics"], home_entry["registerCompletion"]
+        else:
+            metrics = fetch_attendance_metrics(
+                cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end
+            )
+            completion = fetch_register_completion(
+                cur, scope="learner", scope_id=learner_id, period_start=period_start, period_end=period_end
+            )
+    return {"metrics": metrics, "registerCompletion": completion, "cohortBreakdown": cohort_breakdown}
 
 
 @router.get("/attendance-summary/cohorts/{cohort_id}")

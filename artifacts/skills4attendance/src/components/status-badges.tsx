@@ -1,6 +1,7 @@
 import * as React from "react";
-import { LearnerStatus, AttendanceStatus, SessionStatus, RegisterStatus } from "@workspace/api-client-react";
+import { LearnerStatus, AttendanceStatus, SessionStatus, RegisterStatus, FunctionalSkillsSubject } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
+import { GraduationCap } from "lucide-react";
 
 export function LearnerStatusBadge({ status }: { status: LearnerStatus }) {
   const variants: Record<LearnerStatus, { className: string, label: string }> = {
@@ -50,4 +51,30 @@ export function RegisterStatusBadge({ status }: { status: RegisterStatus }) {
 
   const v = variants[status] || variants.not_started;
   return <Badge variant="outline" className={`${v.className} bg-opacity-50 font-medium px-2 py-0`}>{v.label}</Badge>;
+}
+
+/** Next to a learner's name wherever they're listed -- flags an active
+ * Functional Skills secondary enrollment, and which subject(s), without
+ * implying anything about their home cohort/tutor shown alongside it. */
+export function FunctionalSkillsBadges({ subjects }: { subjects?: FunctionalSkillsSubject[] | null }) {
+  if (!subjects || subjects.length === 0) return null;
+
+  const variants: Record<FunctionalSkillsSubject, { className: string, label: string }> = {
+    math: { className: "bg-sky-100 text-sky-800 border-sky-200", label: "FS: Math" },
+    english: { className: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200", label: "FS: English" },
+    both: { className: "bg-violet-100 text-violet-800 border-violet-200", label: "FS: Math & English" },
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {subjects.map((subject) => {
+        const v = variants[subject];
+        return (
+          <Badge key={subject} variant="outline" className={`${v.className} bg-opacity-50 font-medium px-1.5 py-0 text-[10px] gap-1`}>
+            <GraduationCap className="w-3 h-3" /> {v.label}
+          </Badge>
+        );
+      })}
+    </span>
+  );
 }

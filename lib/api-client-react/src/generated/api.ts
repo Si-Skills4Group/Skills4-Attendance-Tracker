@@ -102,6 +102,7 @@ import type {
   LastAttendanceReportResponse,
   LatenessReportResponse,
   Learner,
+  LearnerAttendanceSummaryDetailResponse,
   LearnerAttendanceSummaryListResponse,
   LearnerDeleteInput,
   LearnerImportJob,
@@ -137,6 +138,9 @@ import type {
   RegisterRefreshDiff,
   RegisterRefreshResult,
   RemoveCoverTutorInput,
+  SecondaryEnrollment,
+  SecondaryEnrollmentEndInput,
+  SecondaryEnrollmentInput,
   SessionCancelInput,
   SessionDeleteInput,
   SettingsUpdate,
@@ -1171,9 +1175,9 @@ export const getGetLearnerAttendanceSummaryUrl = (learnerId: number,
 }
 
 export const getLearnerAttendanceSummary = async (learnerId: number,
-    params?: GetLearnerAttendanceSummaryParams, options?: RequestInit): Promise<AttendanceSummaryResponse> => {
+    params?: GetLearnerAttendanceSummaryParams, options?: RequestInit): Promise<LearnerAttendanceSummaryDetailResponse> => {
 
-  return customFetch<AttendanceSummaryResponse>(getGetLearnerAttendanceSummaryUrl(learnerId,params),
+  return customFetch<LearnerAttendanceSummaryDetailResponse>(getGetLearnerAttendanceSummaryUrl(learnerId,params),
   {
     ...options,
     method: 'GET'
@@ -3415,6 +3419,280 @@ export function useGetLearnerAllocationHistory<TData = Awaited<ReturnType<typeof
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLearnerAllocationHistoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListLearnerSecondaryEnrollmentsUrl = (id: number,) => {
+
+
+
+
+  return `/api/learners/${id}/secondary-enrollments`
+}
+
+export const listLearnerSecondaryEnrollments = async (id: number, options?: RequestInit): Promise<SecondaryEnrollment[]> => {
+
+  return customFetch<SecondaryEnrollment[]>(getListLearnerSecondaryEnrollmentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLearnerSecondaryEnrollmentsQueryKey = (id: number,) => {
+    return [
+    `/api/learners/${id}/secondary-enrollments`
+    ] as const;
+    }
+
+
+export const getListLearnerSecondaryEnrollmentsQueryOptions = <TData = Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLearnerSecondaryEnrollmentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>> = ({ signal }) => listLearnerSecondaryEnrollments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLearnerSecondaryEnrollmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>>
+export type ListLearnerSecondaryEnrollmentsQueryError = ErrorType<unknown>
+
+
+
+export function useListLearnerSecondaryEnrollments<TData = Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLearnerSecondaryEnrollments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLearnerSecondaryEnrollmentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateLearnerSecondaryEnrollmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/learners/${id}/secondary-enrollments`
+}
+
+export const createLearnerSecondaryEnrollment = async (id: number,
+    secondaryEnrollmentInput: SecondaryEnrollmentInput, options?: RequestInit): Promise<SecondaryEnrollment> => {
+
+  return customFetch<SecondaryEnrollment>(getCreateLearnerSecondaryEnrollmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(secondaryEnrollmentInput)
+  }
+);}
+
+
+
+
+
+export const getCreateLearnerSecondaryEnrollmentMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLearnerSecondaryEnrollment>>, TError,{id: number;data: BodyType<SecondaryEnrollmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createLearnerSecondaryEnrollment>>, TError,{id: number;data: BodyType<SecondaryEnrollmentInput>}, TContext> => {
+
+const mutationKey = ['createLearnerSecondaryEnrollment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLearnerSecondaryEnrollment>>, {id: number;data: BodyType<SecondaryEnrollmentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createLearnerSecondaryEnrollment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateLearnerSecondaryEnrollmentMutationResult = NonNullable<Awaited<ReturnType<typeof createLearnerSecondaryEnrollment>>>
+    export type CreateLearnerSecondaryEnrollmentMutationBody = BodyType<SecondaryEnrollmentInput>
+    export type CreateLearnerSecondaryEnrollmentMutationError = ErrorType<ErrorResponse>
+
+    export const useCreateLearnerSecondaryEnrollment = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLearnerSecondaryEnrollment>>, TError,{id: number;data: BodyType<SecondaryEnrollmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createLearnerSecondaryEnrollment>>,
+        TError,
+        {id: number;data: BodyType<SecondaryEnrollmentInput>},
+        TContext
+      > => {
+      return useMutation(getCreateLearnerSecondaryEnrollmentMutationOptions(options));
+    }
+
+export const getEndLearnerSecondaryEnrollmentUrl = (id: number,) => {
+
+
+
+
+  return `/api/secondary-enrollments/${id}/end`
+}
+
+export const endLearnerSecondaryEnrollment = async (id: number,
+    secondaryEnrollmentEndInput: SecondaryEnrollmentEndInput, options?: RequestInit): Promise<SecondaryEnrollment> => {
+
+  return customFetch<SecondaryEnrollment>(getEndLearnerSecondaryEnrollmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(secondaryEnrollmentEndInput)
+  }
+);}
+
+
+
+
+
+export const getEndLearnerSecondaryEnrollmentMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endLearnerSecondaryEnrollment>>, TError,{id: number;data: BodyType<SecondaryEnrollmentEndInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof endLearnerSecondaryEnrollment>>, TError,{id: number;data: BodyType<SecondaryEnrollmentEndInput>}, TContext> => {
+
+const mutationKey = ['endLearnerSecondaryEnrollment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endLearnerSecondaryEnrollment>>, {id: number;data: BodyType<SecondaryEnrollmentEndInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  endLearnerSecondaryEnrollment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EndLearnerSecondaryEnrollmentMutationResult = NonNullable<Awaited<ReturnType<typeof endLearnerSecondaryEnrollment>>>
+    export type EndLearnerSecondaryEnrollmentMutationBody = BodyType<SecondaryEnrollmentEndInput>
+    export type EndLearnerSecondaryEnrollmentMutationError = ErrorType<ErrorResponse>
+
+    export const useEndLearnerSecondaryEnrollment = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endLearnerSecondaryEnrollment>>, TError,{id: number;data: BodyType<SecondaryEnrollmentEndInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof endLearnerSecondaryEnrollment>>,
+        TError,
+        {id: number;data: BodyType<SecondaryEnrollmentEndInput>},
+        TContext
+      > => {
+      return useMutation(getEndLearnerSecondaryEnrollmentMutationOptions(options));
+    }
+
+export const getListCohortSecondaryEnrollmentsUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/secondary-enrollments`
+}
+
+export const listCohortSecondaryEnrollments = async (id: number, options?: RequestInit): Promise<SecondaryEnrollment[]> => {
+
+  return customFetch<SecondaryEnrollment[]>(getListCohortSecondaryEnrollmentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCohortSecondaryEnrollmentsQueryKey = (id: number,) => {
+    return [
+    `/api/cohorts/${id}/secondary-enrollments`
+    ] as const;
+    }
+
+
+export const getListCohortSecondaryEnrollmentsQueryOptions = <TData = Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCohortSecondaryEnrollmentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>> = ({ signal }) => listCohortSecondaryEnrollments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCohortSecondaryEnrollmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>>
+export type ListCohortSecondaryEnrollmentsQueryError = ErrorType<unknown>
+
+
+
+export function useListCohortSecondaryEnrollments<TData = Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCohortSecondaryEnrollments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCohortSecondaryEnrollmentsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
