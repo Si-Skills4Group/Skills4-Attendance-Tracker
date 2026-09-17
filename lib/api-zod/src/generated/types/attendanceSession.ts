@@ -34,6 +34,9 @@ export interface AttendanceSession {
   registerStatus: RegisterStatus;
   registerVersion: number;
   /** @nullable */
+  rosterSyncedAt?: Date | null;
+  rosterMayHaveChanged?: boolean;
+  /** @nullable */
   completedAt: Date | null;
   /** @nullable */
   completedBy: number | null;

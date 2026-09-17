@@ -728,6 +728,26 @@ CREATE INDEX IF NOT EXISTS idx_cohorts_subject ON cohorts (subject) WHERE subjec
 ALTER TABLE cohorts DROP CONSTRAINT IF EXISTS cohorts_subject_check;
 ALTER TABLE cohorts ADD CONSTRAINT cohorts_subject_check
   CHECK (subject IS NULL OR subject IN ('math', 'english', 'both'));
+
+-- Proactive "cohort membership may have changed since this register was
+-- generated" nudge (register.tsx banner). roster_synced_at tracks the last
+-- point at which session_expected_learners was confirmed to match current
+-- cohort membership -- either because ensure_expected_learners_snapshot
+-- just generated it fresh, or because apply_register_refresh (confirm=true)
+-- just reconciled it, even if that reconciliation's diff turned out to be
+-- empty. A mere preview (confirm=false) never advances this -- the roster
+-- doesn't actually match reality until an apply lands.
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS roster_synced_at timestamptz;
+UPDATE attendance_sessions SET roster_synced_at = register_generated_at
+  WHERE roster_synced_at IS NULL AND register_generated_at IS NOT NULL;
+
+-- Supports has_cohort_membership_changed_since's OR-of-two-columns lookup
+-- via a BitmapOr of these two indexes instead of a seq scan of the whole
+-- allocation-history table on every register page load.
+CREATE INDEX IF NOT EXISTS idx_allocation_history_previous_cohort_changed
+  ON learner_allocation_history (previous_cohort_id, changed_date);
+CREATE INDEX IF NOT EXISTS idx_allocation_history_new_cohort_changed
+  ON learner_allocation_history (new_cohort_id, changed_date);
 """
 
 

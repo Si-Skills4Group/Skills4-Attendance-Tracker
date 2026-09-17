@@ -349,6 +349,125 @@ class TestOrganisationReport:
         assert None not in breakdown
 
 
+class TestFunctionalSkillsReport:
+    def test_admin_only(self, client, monkeypatch, tutor_factory):
+        tutor = tutor_factory()
+        _as_tutor(client, monkeypatch, tutor["tutorId"])
+        response = client.get("/api/reports/functional-skills")
+        assert response.status_code == 403
+
+    def test_home_cohort_attendance_never_leaks_into_fs_figures(
+        self, client, monkeypatch, db, admin_user, tutor_factory, cohort_factory, learner_factory,
+        attendance_session_factory, secondary_enrollment_factory,
+    ):
+        fs_tutor = tutor_factory()
+        home_cohort = cohort_factory()
+        fs_cohort = cohort_factory(membership_type="secondary", subject="math", tutor_id=fs_tutor["tutorId"])
+        learner = learner_factory(cohort_id=home_cohort["id"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-01-01")
+
+        # Perfect at home, absent every time in the FS cohort.
+        home_session = attendance_session_factory(
+            cohort_id=home_cohort["id"], session_date="2026-01-05", planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, home_session)
+        _record(db, home_session["id"], learner["id"], "present", hours_attended=7)
+
+        fs_sessions = [
+            attendance_session_factory(cohort_id=fs_cohort["id"], session_date=d, planned_duration_hours=2, created_by=admin_user["userId"])
+            for d in ("2026-01-06", "2026-01-13", "2026-01-20")
+        ]
+        for s in fs_sessions:
+            _snapshot(db, s)
+            _record(db, s["id"], learner["id"], "absent_unauthorised")
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/functional-skills?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
+
+        assert body["metrics"]["attendedMinutes"] == 0
+        assert body["metrics"]["expectedMinutes"] == 360
+        subject_breakdown = {row["subject"]: row["metrics"] for row in body["subjectBreakdown"]}
+        assert subject_breakdown["math"]["attendedMinutes"] == 0
+        cohort_row = next(r for r in body["cohortBreakdown"] if r["cohort"]["id"] == fs_cohort["id"])
+        assert cohort_row["metrics"]["attendancePercentage"] == 0.0
+        assert cohort_row["activeLearnerCount"] == 1
+
+        at_risk_ids = {r["learnerId"] for r in body["atRiskLearners"]}
+        assert learner["id"] in at_risk_ids
+        at_risk_row = next(r for r in body["atRiskLearners"] if r["learnerId"] == learner["id"])
+        assert at_risk_row["metrics"]["attendancePercentage"] == 0.0
+        assert at_risk_row["subject"] == "math"
+
+    def test_subject_filter_narrows_cohort_breakdown_and_at_risk_but_not_subject_breakdown(
+        self, client, monkeypatch, db, admin_user, tutor_factory, cohort_factory, learner_factory,
+        attendance_session_factory, secondary_enrollment_factory,
+    ):
+        tutor = tutor_factory()
+        maths_cohort = cohort_factory(membership_type="secondary", subject="math", tutor_id=tutor["tutorId"])
+        english_cohort = cohort_factory(membership_type="secondary", subject="english", tutor_id=tutor["tutorId"])
+        maths_learner = learner_factory()
+        english_learner = learner_factory()
+        secondary_enrollment_factory(learner_id=maths_learner["id"], cohort_id=maths_cohort["id"], enrolled_date="2026-01-01")
+        secondary_enrollment_factory(learner_id=english_learner["id"], cohort_id=english_cohort["id"], enrolled_date="2026-01-01")
+
+        maths_session = attendance_session_factory(cohort_id=maths_cohort["id"], session_date="2026-01-06", planned_duration_hours=2, created_by=admin_user["userId"])
+        english_session = attendance_session_factory(cohort_id=english_cohort["id"], session_date="2026-01-07", planned_duration_hours=2, created_by=admin_user["userId"])
+        _snapshot(db, maths_session)
+        _snapshot(db, english_session)
+        _record(db, maths_session["id"], maths_learner["id"], "present", hours_attended=2)
+        _record(db, english_session["id"], english_learner["id"], "present", hours_attended=2)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/functional-skills?{PERIOD_QS}&subject=math&tutorId={tutor['tutorId']}")
+        assert response.status_code == 200
+        body = response.json()
+
+        assert {c["cohort"]["id"] for c in body["cohortBreakdown"]} == {maths_cohort["id"]}
+        # subjectBreakdown reflects every subject for the tutor filter, not
+        # collapsed down to just the subject filter.
+        assert {row["subject"] for row in body["subjectBreakdown"]} == {"math", "english"}
+
+
+class TestFunctionalSkillsReportExport:
+    def test_cohort_breakdown_export(
+        self, client, monkeypatch, db, admin_user, cohort_factory, attendance_session_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary", subject="both")
+        attendance_session_factory(cohort_id=fs_cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/functional-skills/export?{PERIOD_QS}&breakdown=cohort")
+        assert response.status_code == 200
+        assert "cohortName" in response.text
+        assert fs_cohort["name"] in response.text
+
+    def test_subject_breakdown_export(self, client, monkeypatch, cohort_factory):
+        cohort_factory(membership_type="secondary", subject="english")
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/functional-skills/export?{PERIOD_QS}&breakdown=subject")
+        assert response.status_code == 200
+        assert "key" in response.text or "label" in response.text
+
+    def test_learner_breakdown_export(
+        self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory,
+        attendance_session_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary", subject="math")
+        learner = learner_factory()
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date="2026-01-01")
+        session = attendance_session_factory(cohort_id=fs_cohort["id"], session_date="2026-01-06", planned_duration_hours=2, created_by=admin_user["userId"])
+        _snapshot(db, session)
+        _record(db, session["id"], learner["id"], "present", hours_attended=2)
+
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/functional-skills/export?{PERIOD_QS}&breakdown=learner")
+        assert response.status_code == 200
+        assert "atRisk" in response.text
+        assert learner["learner_ref"] in response.text
+
+
 class TestAbsenceAndLatenessReports:
     def test_absence_report_separates_authorised_from_unauthorised(
         self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory

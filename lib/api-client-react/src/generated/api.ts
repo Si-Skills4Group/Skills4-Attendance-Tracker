@@ -72,12 +72,14 @@ import type {
   ExportAllocationHistoryReportParams,
   ExportAttendanceHoursReportParams,
   ExportCohortReportParams,
+  ExportFunctionalSkillsReportParams,
   ExportLastAttendanceReportParams,
   ExportLatenessReportParams,
   ExportLearnerReportParams,
   ExportOrganisationReportParams,
   ExportRegisterCompletionReportParams,
   ExportTutorReportParams,
+  FunctionalSkillsReportResponse,
   GetAbsenceReportParams,
   GetAdminDashboardCohortsParams,
   GetAdminDashboardTutorsParams,
@@ -87,6 +89,7 @@ import type {
   GetAttendanceHoursReportParams,
   GetCohortAttendanceSummaryParams,
   GetCohortReportV2Params,
+  GetFunctionalSkillsReportParams,
   GetLastAttendanceReportParams,
   GetLatenessReportParams,
   GetLearnerAttendanceSummaryParams,
@@ -6345,6 +6348,162 @@ export function useExportOrganisationReport<TData = Awaited<ReturnType<typeof ex
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportOrganisationReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFunctionalSkillsReportUrl = (params?: GetFunctionalSkillsReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/functional-skills?${stringifiedParams}` : `/api/reports/functional-skills`
+}
+
+export const getFunctionalSkillsReport = async (params?: GetFunctionalSkillsReportParams, options?: RequestInit): Promise<FunctionalSkillsReportResponse> => {
+
+  return customFetch<FunctionalSkillsReportResponse>(getGetFunctionalSkillsReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFunctionalSkillsReportQueryKey = (params?: GetFunctionalSkillsReportParams,) => {
+    return [
+    `/api/reports/functional-skills`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFunctionalSkillsReportQueryOptions = <TData = Awaited<ReturnType<typeof getFunctionalSkillsReport>>, TError = ErrorType<ErrorResponse>>(params?: GetFunctionalSkillsReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFunctionalSkillsReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFunctionalSkillsReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFunctionalSkillsReport>>> = ({ signal }) => getFunctionalSkillsReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFunctionalSkillsReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFunctionalSkillsReportQueryResult = NonNullable<Awaited<ReturnType<typeof getFunctionalSkillsReport>>>
+export type GetFunctionalSkillsReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetFunctionalSkillsReport<TData = Awaited<ReturnType<typeof getFunctionalSkillsReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetFunctionalSkillsReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFunctionalSkillsReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFunctionalSkillsReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportFunctionalSkillsReportUrl = (params?: ExportFunctionalSkillsReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/functional-skills/export?${stringifiedParams}` : `/api/reports/functional-skills/export`
+}
+
+export const exportFunctionalSkillsReport = async (params?: ExportFunctionalSkillsReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportFunctionalSkillsReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportFunctionalSkillsReportQueryKey = (params?: ExportFunctionalSkillsReportParams,) => {
+    return [
+    `/api/reports/functional-skills/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportFunctionalSkillsReportQueryOptions = <TData = Awaited<ReturnType<typeof exportFunctionalSkillsReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportFunctionalSkillsReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportFunctionalSkillsReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportFunctionalSkillsReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportFunctionalSkillsReport>>> = ({ signal }) => exportFunctionalSkillsReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportFunctionalSkillsReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportFunctionalSkillsReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportFunctionalSkillsReport>>>
+export type ExportFunctionalSkillsReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportFunctionalSkillsReport<TData = Awaited<ReturnType<typeof exportFunctionalSkillsReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportFunctionalSkillsReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportFunctionalSkillsReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportFunctionalSkillsReportQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

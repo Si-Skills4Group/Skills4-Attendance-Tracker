@@ -34,6 +34,7 @@ from ..session_register_lib import (
     ensure_expected_learners_snapshot,
     ensure_expected_learners_snapshots_bulk,
     find_duplicate_session,
+    has_cohort_membership_changed_since,
     lock_register,
     session_date_outside_cohort_range,
     unlock_register,
@@ -204,11 +205,24 @@ def _with_counts(cur, session_row: dict) -> dict:
     register_status = _compute_register_status(
         session_row["status"], recorded_count, expected_count, session_row["registerLockedAt"]
     )
+    cur.execute(
+        'SELECT roster_synced_at AS "rosterSyncedAt" FROM attendance_sessions WHERE id = %s', (session_row["id"],)
+    )
+    # Fetched fresh rather than trusted off session_row -- in most callers
+    # session_row was SELECTed *before* ensure_expected_learners_snapshot
+    # ran earlier in the same request, so it can still hold the
+    # pre-generation NULL.
+    roster_synced_at = cur.fetchone()["rosterSyncedAt"]
+    roster_may_have_changed = has_cohort_membership_changed_since(
+        cur, session_row["cohortId"], roster_synced_at
+    )
     return {
         **session_row,
         "recordedCount": recorded_count,
         "expectedCount": expected_count,
         "registerStatus": register_status,
+        "rosterSyncedAt": roster_synced_at,
+        "rosterMayHaveChanged": roster_may_have_changed,
     }
 
 

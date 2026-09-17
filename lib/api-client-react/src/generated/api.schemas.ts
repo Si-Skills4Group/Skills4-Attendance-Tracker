@@ -801,6 +801,9 @@ export interface AttendanceSession {
   registerStatus: RegisterStatus;
   registerVersion: number;
   /** @nullable */
+  rosterSyncedAt?: string | null;
+  rosterMayHaveChanged?: boolean;
+  /** @nullable */
   completedAt: string | null;
   /** @nullable */
   completedBy: number | null;
@@ -1199,6 +1202,37 @@ export interface EmployerBreakdownRow {
 export interface SubjectBreakdownRow {
   subject: FunctionalSkillsSubject;
   metrics: AttendanceMetrics;
+}
+
+export interface FunctionalSkillsCohortBreakdownRow {
+  cohort: Cohort;
+  activeLearnerCount: number;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+}
+
+export interface FunctionalSkillsLearnerRow {
+  learnerId: number;
+  learnerName: string;
+  learnerRef: string;
+  cohortId: number;
+  cohortName: string;
+  subject: FunctionalSkillsSubject;
+  tutorName: string;
+  metrics: AttendanceMetrics;
+  /** Null when no Bud sync match exists yet -- never breaks the row. */
+  bud: BudProgress | null;
+}
+
+export interface FunctionalSkillsReportResponse {
+  activeFsCohorts: number;
+  activeFsLearners: number;
+  lowAttendanceThreshold: number;
+  metrics: AttendanceMetrics;
+  registerCompletion: RegisterCompletionSummary;
+  subjectBreakdown: SubjectBreakdownRow[];
+  cohortBreakdown: FunctionalSkillsCohortBreakdownRow[];
+  atRiskLearners: FunctionalSkillsLearnerRow[];
 }
 
 export interface OrganisationReportResponse {
@@ -2031,6 +2065,38 @@ export const ExportOrganisationReportBreakdown = {
   level: 'level',
   employer: 'employer',
   subject: 'subject',
+} as const;
+
+export type GetFunctionalSkillsReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+};
+
+export type ExportFunctionalSkillsReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+/**
+ * Filters to a Functional Skills cohort's subject (math/english/both) -- a 'primary' cohort's sessions never match.
+ */
+subject?: SubjectQueryParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+breakdown?: ExportFunctionalSkillsReportBreakdown;
+};
+
+export type ExportFunctionalSkillsReportBreakdown = typeof ExportFunctionalSkillsReportBreakdown[keyof typeof ExportFunctionalSkillsReportBreakdown];
+
+
+export const ExportFunctionalSkillsReportBreakdown = {
+  subject: 'subject',
+  cohort: 'cohort',
+  learner: 'learner',
 } as const;
 
 export type GetAbsenceReportParams = {

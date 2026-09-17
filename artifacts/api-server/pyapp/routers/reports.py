@@ -25,8 +25,11 @@ from ..attendance_metrics import (
     fetch_attendance_metrics_by_period_bucket,
     fetch_attendance_metrics_by_programme,
     fetch_attendance_metrics_by_subject,
+    fetch_attendance_metrics_for_cohort_ids,
     fetch_attendance_metrics_grouped,
     fetch_register_completion,
+    fetch_register_completion_for_cohort_ids,
+    is_low_attendance,
 )
 from ..auth import require_admin, require_auth, require_cohort_access, require_learner_access, require_tutor_access
 from ..bud_progress import get_bud_progress_by_uln
@@ -572,6 +575,229 @@ def export_organisation_report(
         request, report_type="organisation", rows=rows, columns=METRICS_ROW_COLUMNS,
         filename=f"organisation-{breakdown}-report.csv", date_from=period_start, date_to=period_end,
         filters={"period": period, "breakdown": breakdown},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Functional Skills report -- the one place a manager sees FS (Math/English)
+# attendance health: overall + per-subject metrics, every FS cohort's own
+# numbers, and at-risk FS learners. Every calculation here is scoped to FS
+# ("secondary") cohorts specifically, via the same restrict_to_cohort_ids/
+# fixed-cohort-list mechanism the rest of this codebase already uses to keep
+# FS attendance from ever blending with a learner's home-cohort attendance.
+# ---------------------------------------------------------------------------
+
+FUNCTIONAL_SKILLS_COHORT_COLUMNS = [
+    "cohortId", "cohortName", "subject", "tutorName", "activeLearnerCount",
+    "registerCompletionPercentage", *METRICS_ROW_COLUMNS[2:],
+]
+FUNCTIONAL_SKILLS_LEARNER_COLUMNS = [
+    "learnerId", "learnerName", "learnerRef", "cohortId", "cohortName", "subject", "tutorName", "atRisk",
+    *METRICS_ROW_COLUMNS[2:],
+]
+
+
+def _fs_cohort_rows(cur, *, subject: str | None, tutor_id: int | None) -> list[dict]:
+    clauses = ["c.membership_type = 'secondary'", "c.deleted_at IS NULL"]
+    params: list = []
+    if subject:
+        clauses.append("c.subject = %s")
+        params.append(subject)
+    if tutor_id is not None:
+        clauses.append("c.tutor_id = %s")
+        params.append(tutor_id)
+    cur.execute(f"{COHORT_SELECT} WHERE {' AND '.join(clauses)}", params)
+    return cur.fetchall()
+
+
+def _fs_cohort_breakdown(cur, cohorts: list[dict], period_start: date, period_end: date) -> list[dict]:
+    metrics_by_cohort = fetch_attendance_metrics_grouped(
+        cur, group_by="cohort", group_ids=[c["id"] for c in cohorts], period_start=period_start, period_end=period_end
+    )
+    rows = []
+    for cohort in cohorts:
+        cur.execute(
+            f"""
+            SELECT count(*)::int AS count FROM learners
+            WHERE {learner_in_cohort_now_sql("learners", "%s")} AND status = 'active' AND deleted_at IS NULL
+            """,
+            (cohort["id"], cohort["id"]),
+        )
+        active_learner_count = cur.fetchone()["count"]
+        completion = fetch_register_completion(
+            cur, scope="cohort", scope_id=cohort["id"], period_start=period_start, period_end=period_end
+        )
+        rows.append(
+            {
+                "cohort": cohort,
+                "activeLearnerCount": active_learner_count,
+                "metrics": metrics_by_cohort[cohort["id"]],
+                "registerCompletion": completion,
+            }
+        )
+    return rows
+
+
+def _fs_learner_rows(cur, *, cohort_ids: list[int], period_start: date, period_end: date) -> list[dict]:
+    """One row per learner with an active Functional Skills enrollment in
+    one of `cohort_ids` -- their most recently enrolled FS cohort wins for
+    display if they're concurrently enrolled in more than one. metrics are
+    restricted (via restrict_to_cohort_ids) to ANY of `cohort_ids`, exactly
+    like _low_attendance_rows' own cohort-scoping, so a learner's home-
+    cohort attendance never contributes here."""
+    if not cohort_ids:
+        return []
+    cur.execute(
+        """
+        SELECT DISTINCT ON (l.id)
+               l.id, l.first_name AS "firstName", l.last_name AS "lastName",
+               l.learner_ref AS "learnerRef", l.uln,
+               c.id AS "cohortId", c.name AS "cohortName", c.subject,
+               CASE WHEN t.id IS NULL THEN 'Unassigned' ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName"
+        FROM learner_cohort_enrollments e
+        JOIN learners l ON l.id = e.learner_id
+        JOIN cohorts c ON c.id = e.cohort_id
+        LEFT JOIN tutors t ON c.tutor_id = t.id
+        WHERE e.status = 'active' AND c.id = ANY(%s) AND l.deleted_at IS NULL
+        ORDER BY l.id, e.enrolled_date DESC, e.id DESC
+        """,
+        (cohort_ids,),
+    )
+    learners = cur.fetchall()
+    if not learners:
+        return []
+    metrics_by_learner = fetch_attendance_metrics_grouped(
+        cur, group_by="learner", group_ids=[l["id"] for l in learners],
+        period_start=period_start, period_end=period_end, restrict_to_cohort_ids=cohort_ids,
+    )
+    bud_by_uln = get_bud_progress_by_uln(cur, [l.get("uln") for l in learners])
+    return [
+        {
+            "learnerId": l["id"],
+            "learnerName": f"{l['firstName']} {l['lastName']}",
+            "learnerRef": l["learnerRef"],
+            "cohortId": l["cohortId"],
+            "cohortName": l["cohortName"],
+            "subject": l["subject"],
+            "tutorName": l["tutorName"],
+            "metrics": metrics_by_learner[l["id"]],
+            "bud": bud_by_uln.get(l.get("uln")),
+        }
+        for l in learners
+    ]
+
+
+@router.get("/reports/functional-skills")
+def get_functional_skills_report(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    subject: str | None = None,
+    tutorId: int | None = None,
+    _session: dict = Depends(require_admin),
+):
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        threshold = _get_threshold(cur)
+        # Two cohort lists: subject_breakdown always reflects every subject
+        # for the chosen tutor (so a tutor filter alone doesn't collapse it
+        # to a single row), while everything else narrows to the subject
+        # filter too.
+        tutor_scoped_cohorts = _fs_cohort_rows(cur, subject=None, tutor_id=tutorId)
+        filtered_cohorts = _fs_cohort_rows(cur, subject=subject, tutor_id=tutorId)
+        cohort_ids = [c["id"] for c in filtered_cohorts]
+
+        metrics = fetch_attendance_metrics_for_cohort_ids(
+            cur, cohort_ids=cohort_ids, period_start=period_start, period_end=period_end
+        )
+        completion = fetch_register_completion_for_cohort_ids(
+            cur, cohort_ids=cohort_ids, period_start=period_start, period_end=period_end
+        )
+        subject_breakdown = [
+            {"subject": k, "metrics": v}
+            for k, v in fetch_attendance_metrics_by_subject(
+                cur, period_start=period_start, period_end=period_end,
+                cohort_ids=[c["id"] for c in tutor_scoped_cohorts],
+            ).items()
+        ]
+        cohort_breakdown = _fs_cohort_breakdown(cur, filtered_cohorts, period_start, period_end)
+        fs_learners = _fs_learner_rows(cur, cohort_ids=cohort_ids, period_start=period_start, period_end=period_end)
+        at_risk_learners = [r for r in fs_learners if is_low_attendance(r["metrics"], threshold)]
+
+    return {
+        "activeFsCohorts": sum(1 for c in filtered_cohorts if c["active"]),
+        "activeFsLearners": len(fs_learners),
+        "lowAttendanceThreshold": threshold,
+        "metrics": metrics,
+        "registerCompletion": completion,
+        "subjectBreakdown": subject_breakdown,
+        "cohortBreakdown": cohort_breakdown,
+        "atRiskLearners": at_risk_learners,
+    }
+
+
+@router.get("/reports/functional-skills/export")
+def export_functional_skills_report(
+    request: Request,
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    subject: str | None = None,
+    tutorId: int | None = None,
+    breakdown: Literal["subject", "cohort", "learner"] = "cohort",
+    _session: dict = Depends(require_admin),
+):
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        tutor_scoped_cohorts = _fs_cohort_rows(cur, subject=None, tutor_id=tutorId)
+        filtered_cohorts = _fs_cohort_rows(cur, subject=subject, tutor_id=tutorId)
+        cohort_ids = [c["id"] for c in filtered_cohorts]
+
+        if breakdown == "subject":
+            subject_breakdown = [
+                {"subject": k, "metrics": v}
+                for k, v in fetch_attendance_metrics_by_subject(
+                    cur, period_start=period_start, period_end=period_end,
+                    cohort_ids=[c["id"] for c in tutor_scoped_cohorts],
+                ).items()
+            ]
+            rows = [_flatten({"key": r["subject"], "label": r["subject"]}, r["metrics"]) for r in subject_breakdown]
+            columns = METRICS_ROW_COLUMNS
+        elif breakdown == "cohort":
+            cohort_breakdown = _fs_cohort_breakdown(cur, filtered_cohorts, period_start, period_end)
+            rows = [
+                _flatten(
+                    {
+                        "cohortId": r["cohort"]["id"], "cohortName": r["cohort"]["name"],
+                        "subject": r["cohort"]["subject"], "tutorName": r["cohort"]["tutorName"],
+                        "activeLearnerCount": r["activeLearnerCount"],
+                        "registerCompletionPercentage": r["registerCompletion"].completionPercentage,
+                    },
+                    r["metrics"],
+                )
+                for r in cohort_breakdown
+            ]
+            columns = FUNCTIONAL_SKILLS_COHORT_COLUMNS
+        else:
+            threshold = _get_threshold(cur)
+            fs_learners = _fs_learner_rows(cur, cohort_ids=cohort_ids, period_start=period_start, period_end=period_end)
+            rows = [
+                _flatten(
+                    {
+                        "learnerId": r["learnerId"], "learnerName": r["learnerName"], "learnerRef": r["learnerRef"],
+                        "cohortId": r["cohortId"], "cohortName": r["cohortName"], "subject": r["subject"],
+                        "tutorName": r["tutorName"], "atRisk": is_low_attendance(r["metrics"], threshold),
+                    },
+                    r["metrics"],
+                )
+                for r in fs_learners
+            ]
+            columns = FUNCTIONAL_SKILLS_LEARNER_COLUMNS
+
+    return export_csv_response(
+        request, report_type="functional_skills", rows=rows, columns=columns,
+        filename=f"functional-skills-{breakdown}-report.csv", date_from=period_start, date_to=period_end,
+        filters={"period": period, "subject": subject, "tutorId": tutorId, "breakdown": breakdown},
     )
 
 

@@ -142,6 +142,33 @@ export default function RegisterPage() {
   const [rowErrors, setRowErrors] = React.useState<Record<number, string[]>>({});
   const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved">("idle");
 
+  // A tutor opening a register whose cohort roster has moved since it was
+  // last synced (a transfer, a Functional Skills enrollment change, or a
+  // learner's status changing) gets a hard-to-miss popup on load, not just
+  // a banner they can scroll past. Fires once per freshly-loaded session --
+  // rosterAlertShownForRef stops it re-popping on every unrelated refetch
+  // (e.g. after saving attendance) as long as the session id hasn't changed.
+  const [rosterChangeAlertOpen, setRosterChangeAlertOpen] = React.useState(false);
+  const rosterAlertShownForRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    const s = register?.session;
+    if (!s || !s.rosterMayHaveChanged || rosterAlertShownForRef.current === s.id) return;
+    // Mirrors canRefresh below (declared after the loading guard, so this
+    // effect -- which must run unconditionally, before that guard -- can't
+    // reference it directly). Keep the two in sync by hand if either changes.
+    const isCancelled = s.status === "cancelled";
+    const isLocked = s.registerLockedAt != null;
+    const isCompleted = s.registerStatus === "completed";
+    const hasCover = s.coverTutorId != null;
+    const isOriginalTutorWhileCoverActive = !isAdmin && hasCover
+      && currentUser?.tutorId != null && currentUser.tutorId === s.tutorId && currentUser.tutorId !== s.coverTutorId;
+    const canRefreshNow = !isCancelled && !isLocked && !isOriginalTutorWhileCoverActive && (!isCompleted || isAdmin);
+    if (canRefreshNow) {
+      rosterAlertShownForRef.current = s.id;
+      setRosterChangeAlertOpen(true);
+    }
+  }, [register, isAdmin, currentUser]);
+
   const savedIdleTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => () => {
     if (savedIdleTimeoutRef.current) clearTimeout(savedIdleTimeoutRef.current);
@@ -1110,6 +1137,23 @@ export default function RegisterPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Proactive roster-change nudge -- pops up on load rather than a
+          banner that's easy to scroll past. */}
+      <AlertDialog open={rosterChangeAlertOpen} onOpenChange={setRosterChangeAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2"><RefreshCw className="w-4 h-4" /> This cohort's roster may have changed</AlertDialogTitle>
+            <AlertDialogDescription>
+              A learner has been added to or removed from this cohort since this register's expected learners were last synced. Review the changes to keep this register accurate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Not Now</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setRosterChangeAlertOpen(false); openRefreshDialog(); }}>Review Roster Changes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Bulk-action overwrite confirm */}
       <AlertDialog open={!!bulkConfirm} onOpenChange={(o) => { if (!o) setBulkConfirm(null); }}>
         <AlertDialogContent>
@@ -1346,12 +1390,11 @@ export default function RegisterPage() {
               onClick={confirmRefresh}
               disabled={
                 !refreshDiff || refreshMutation.isPending
-                || (refreshDiff.toAdd.length === 0 && refreshDiff.toRemove.length === 0)
                 || (isHistorical && !refreshReasonInput.trim())
               }
             >
               {refreshMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Apply Changes
+              {refreshDiff && refreshDiff.toAdd.length === 0 && refreshDiff.toRemove.length === 0 ? "Mark Reviewed" : "Apply Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

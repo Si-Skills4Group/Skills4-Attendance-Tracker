@@ -15,6 +15,7 @@ import {
   History,
   UserX,
   ArrowRight,
+  BookOpenCheck,
 } from "lucide-react";
 
 interface ReportCard {
@@ -30,6 +31,7 @@ const CARDS: ReportCard[] = [
   { href: "/reports/cohorts", title: "Cohort Attendance", description: "Attendance totals for a cohort, broken down learner by learner.", icon: Users2 },
   { href: "/reports/tutors", title: "Tutor Attendance", description: "A tutor's attendance totals across their assigned cohorts.", icon: UserCog },
   { href: "/reports/organisation", title: "Organisation Overview", description: "Organisation-wide attendance by tutor, cohort, programme, level and employer.", icon: Building2, adminOnly: true },
+  { href: "/reports/functional-skills", title: "Functional Skills", description: "Math/English Functional Skills attendance, cohorts and at-risk learners.", icon: BookOpenCheck, adminOnly: true },
   { href: "/reports/attendance-hours", title: "Attendance Hours", description: "Expected vs attended time grouped by learner, cohort, tutor or time period.", icon: CalendarClock },
   { href: "/reports/absence", title: "Absence Analysis", description: "Authorised and unauthorised absences, with the same filters as every other report.", icon: CalendarX },
   { href: "/reports/lateness", title: "Late Attendance", description: "Late arrivals and how many minutes were missed.", icon: Clock },

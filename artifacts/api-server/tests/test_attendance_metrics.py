@@ -9,8 +9,10 @@ import pytest
 from pyapp.attendance_metrics import (
     MIN_COMPLETED_ROWS_FOR_ATTENDANCE_FLAG,
     fetch_attendance_metrics,
+    fetch_attendance_metrics_for_cohort_ids,
     fetch_attendance_metrics_grouped,
     fetch_register_completion,
+    fetch_register_completion_for_cohort_ids,
     is_low_attendance,
     resolve_period,
 )
@@ -585,6 +587,67 @@ class TestFetchAttendanceMetricsGrouped:
         assert fetch_attendance_metrics_grouped(
             db, group_by="learner", group_ids=[], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
         ) == {}
+
+
+class TestFetchAttendanceMetricsForCohortIds:
+    def test_empty_cohort_ids_returns_zero_metrics(self, db):
+        result = fetch_attendance_metrics_for_cohort_ids(
+            db, cohort_ids=[], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert result.expectedMinutes == 0
+        assert result.insufficientData is True
+
+    def test_sums_only_the_given_cohorts_never_a_home_cohort(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary", subject="math")
+        home_cohort = cohort_factory()
+        learner = learner_factory(cohort_id=home_cohort["id"])
+
+        home_session = attendance_session_factory(
+            cohort_id=home_cohort["id"], planned_duration_hours=7, created_by=admin_user["userId"]
+        )
+        _snapshot(db, home_session)
+        _record(db, home_session["id"], learner["id"], "present", hours_attended=7)
+
+        fs_session = attendance_session_factory(
+            cohort_id=fs_cohort["id"], planned_duration_hours=2, created_by=admin_user["userId"]
+        )
+        db.execute(
+            "INSERT INTO learner_cohort_enrollments (learner_id, cohort_id, enrolled_date, status, enrolled_by) "
+            "VALUES (%s, %s, '2026-01-01', 'active', %s)",
+            (learner["id"], fs_cohort["id"], admin_user["userId"]),
+        )
+        _snapshot(db, fs_session)
+        _record(db, fs_session["id"], learner["id"], "absent_unauthorised")
+
+        result = fetch_attendance_metrics_for_cohort_ids(
+            db, cohort_ids=[fs_cohort["id"]], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert result.expectedMinutes == 120
+        assert result.attendedMinutes == 0
+
+
+class TestFetchRegisterCompletionForCohortIds:
+    def test_empty_cohort_ids_returns_no_sessions(self, db):
+        result = fetch_register_completion_for_cohort_ids(
+            db, cohort_ids=[], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert result.completionPercentage is None
+        assert result.notStarted == 0
+
+    def test_counts_only_the_given_cohorts(
+        self, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary", subject="english")
+        other_cohort = cohort_factory()
+        attendance_session_factory(cohort_id=fs_cohort["id"], created_by=admin_user["userId"])
+        attendance_session_factory(cohort_id=other_cohort["id"], created_by=admin_user["userId"])
+
+        result = fetch_register_completion_for_cohort_ids(
+            db, cohort_ids=[fs_cohort["id"]], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31)
+        )
+        assert result.notStarted + result.inProgress + result.completed + result.locked == 1
 
 
 class TestIsLowAttendance:

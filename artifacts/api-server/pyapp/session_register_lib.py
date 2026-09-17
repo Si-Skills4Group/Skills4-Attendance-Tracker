@@ -15,6 +15,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from .allocation_lib import learners_expected_in_cohort_as_of
+from .secondary_enrollment_lib import learner_in_cohort_now_sql
 
 
 def ensure_expected_learners_snapshot(
@@ -30,7 +31,7 @@ def ensure_expected_learners_snapshot(
     snapshot."""
     cur.execute(
         """
-        UPDATE attendance_sessions SET register_generated_at = now()
+        UPDATE attendance_sessions SET register_generated_at = now(), roster_synced_at = now()
         WHERE id = %s AND register_generated_at IS NULL
         RETURNING id
         """,
@@ -62,7 +63,7 @@ def ensure_expected_learners_snapshots_bulk(cur, session_ids: list[int]) -> None
         return
     cur.execute(
         """
-        UPDATE attendance_sessions SET register_generated_at = now()
+        UPDATE attendance_sessions SET register_generated_at = now(), roster_synced_at = now()
         WHERE id = ANY(%s) AND register_generated_at IS NULL
         RETURNING id, cohort_id AS "cohortId", session_date AS "sessionDate"
         """,
@@ -106,6 +107,74 @@ def session_date_outside_cohort_range(cohort: dict, session_date: date) -> bool:
     if cohort["endDate"] is not None and session_date > cohort["endDate"]:
         return True
     return False
+
+
+def has_cohort_membership_changed_since(cur, cohort_id: int, since) -> bool:
+    """Cheap, coarse per-cohort "has anything moved since `since`" signal
+    used only to decide whether to show a tutor a proactive "roster may
+    have changed" nudge on the register page -- NOT a guarantee that
+    compute_register_refresh would produce a non-empty diff for any
+    particular session (a change dated outside a given session's own date
+    can still trip this signal; that's an accepted false positive -- the
+    banner says "may have changed", and the refresh dialog above remains
+    the source of truth for what, if anything, actually needs applying).
+
+    Three independent ways a cohort's eligible roster can change, each with
+    its own timestamp source, since none of them touch a common table:
+    - A home-cohort transfer (allocation_lib.apply_transfer) -- recorded in
+      learner_allocation_history.
+    - A Functional Skills secondary enrollment starting or ending
+      (secondary_enrollment_lib) -- recorded on the learner_cohort_enrollments
+      row itself.
+    - A learner's own lifecycle changing -- becoming withdrawn/completed/
+      paused (a Break in Learning), or being reactivated back to active --
+      for any learner currently reachable from this cohort (home cohort_id
+      or an active secondary enrollment, via the same
+      learner_in_cohort_now_sql used for "currently" reads elsewhere).
+      Detected as any learners.updated_at bump, not narrowed to a specific
+      resulting status: status/withdrawalDate/actualEndDate can be written
+      by _change_learner_status, the general learner-update endpoint
+      (LearnerUpdate also carries these fields), *and* the Bud sync trial's
+      automatic status-change application -- three different call sites
+      with three different audit-log action names, so there is no reliable
+      "was this specifically a lifecycle change" signal short of comparing
+      old vs. new status, which nothing here has. A previous, narrower
+      version only fired when the CURRENT status was withdrawn/completed/
+      paused -- which correctly avoided popping for an unrelated profile
+      edit, but as a direct consequence also missed a *reactivation*
+      (withdrawn/completed/paused -> active), since withdrawal_date/
+      actual_end_date are never cleared by _change_learner_status and the
+      resulting current status alone can't distinguish "just reactivated"
+      from "left long ago". Catching reactivation matters more than
+      avoiding the rarer benign-edit false positive, so this branch is
+      deliberately coarse again -- the same accepted tradeoff as the other
+      two branches above.
+
+    since=None (a roster that has, defensively, never been synced) is
+    treated as changed rather than silently reporting False. A scheduled
+    but not-yet-applied transfer never trips this, since
+    learner_allocation_history isn't written until it's lazily applied."""
+    if since is None:
+        return True
+    cur.execute(
+        f"""
+        SELECT EXISTS (
+            SELECT 1 FROM learner_allocation_history
+            WHERE changed_date > %(since)s
+              AND (previous_cohort_id = %(cohort_id)s OR new_cohort_id = %(cohort_id)s)
+            UNION ALL
+            SELECT 1 FROM learner_cohort_enrollments
+            WHERE cohort_id = %(cohort_id)s
+              AND (created_at > %(since)s OR updated_at > %(since)s)
+            UNION ALL
+            SELECT 1 FROM learners l
+            WHERE {learner_in_cohort_now_sql("l", "%(cohort_id)s")}
+              AND l.updated_at > %(since)s
+        ) AS changed
+        """,
+        {"since": since, "cohort_id": cohort_id},
+    )
+    return cur.fetchone()["changed"]
 
 
 def compute_register_refresh(cur, session_row: dict) -> dict:
@@ -200,6 +269,12 @@ def apply_register_refresh(cur, session_row: dict, diff: dict, user_id: int | No
                 "WHERE id = %s AND completed_at IS NOT NULL",
                 (session_id,),
             )
+
+    # Advances even when the diff is empty -- an applied refresh (as
+    # opposed to a mere preview) is exactly the moment the roster is
+    # confirmed to match current cohort membership, whether or not that
+    # confirmation required any actual row changes.
+    cur.execute("UPDATE attendance_sessions SET roster_synced_at = now() WHERE id = %s", (session_id,))
 
     return {
         "added": diff["toAdd"],

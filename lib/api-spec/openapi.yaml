@@ -2209,6 +2209,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /reports/functional-skills:
+    get:
+      operationId: getFunctionalSkillsReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/SubjectQueryParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+      responses:
+        "200":
+          description: Functional Skills (Math/English) attendance report (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FunctionalSkillsReportResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/functional-skills/export:
+    get:
+      operationId: exportFunctionalSkillsReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/SubjectQueryParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - name: breakdown
+          in: query
+          schema:
+            type: string
+            enum: [subject, cohort, learner]
+            default: cohort
+      responses:
+        "200":
+          description: CSV export of one Functional Skills report breakdown dimension
+          content:
+            text/csv:
+              schema: { type: string }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /reports/absence:
     get:
       operationId: getAbsenceReport
@@ -4161,6 +4210,12 @@ components:
         expectedCount: { type: integer }
         registerStatus: { $ref: "#/components/schemas/RegisterStatus" }
         registerVersion: { type: integer }
+        # Populated only where _with_counts computes it (all single-session
+        # reads/writes) -- deliberately absent from the plain sessions-list
+        # endpoint's response to avoid an extra query per listed row, so
+        # neither field is required.
+        rosterSyncedAt: { type: ["string", "null"], format: date-time }
+        rosterMayHaveChanged: { type: boolean }
         completedAt: { type: ["string", "null"], format: date-time }
         completedBy: { type: ["integer", "null"] }
         registerLockedAt: { type: ["string", "null"], format: date-time }
@@ -4602,6 +4657,62 @@ components:
       properties:
         subject: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
         metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+
+    FunctionalSkillsCohortBreakdownRow:
+      type: object
+      required: [cohort, activeLearnerCount, metrics, registerCompletion]
+      properties:
+        cohort: { $ref: "#/components/schemas/Cohort" }
+        activeLearnerCount: { type: integer }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+
+    FunctionalSkillsLearnerRow:
+      type: object
+      required: [learnerId, learnerName, learnerRef, cohortId, cohortName, subject, tutorName, metrics, bud]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        learnerRef: { type: string }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        subject: { $ref: "#/components/schemas/FunctionalSkillsSubject" }
+        tutorName: { type: string }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        bud:
+          description: Null when no Bud sync match exists yet -- never breaks the row.
+          oneOf:
+            - $ref: "#/components/schemas/BudProgress"
+            - type: "null"
+
+    FunctionalSkillsReportResponse:
+      type: object
+      required:
+        [
+          activeFsCohorts,
+          activeFsLearners,
+          lowAttendanceThreshold,
+          metrics,
+          registerCompletion,
+          subjectBreakdown,
+          cohortBreakdown,
+          atRiskLearners,
+        ]
+      properties:
+        activeFsCohorts: { type: integer }
+        activeFsLearners: { type: integer }
+        lowAttendanceThreshold: { type: number }
+        metrics: { $ref: "#/components/schemas/AttendanceMetrics" }
+        registerCompletion: { $ref: "#/components/schemas/RegisterCompletionSummary" }
+        subjectBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/SubjectBreakdownRow" }
+        cohortBreakdown:
+          type: array
+          items: { $ref: "#/components/schemas/FunctionalSkillsCohortBreakdownRow" }
+        atRiskLearners:
+          type: array
+          items: { $ref: "#/components/schemas/FunctionalSkillsLearnerRow" }
 
     OrganisationReportResponse:
       type: object

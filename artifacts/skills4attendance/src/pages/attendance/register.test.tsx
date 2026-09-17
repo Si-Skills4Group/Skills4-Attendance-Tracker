@@ -21,6 +21,7 @@ function makeSession(overrides: Record<string, any> = {}) {
     coverOriginalTutorName: null, coverReason: null, coverNotes: null,
     coverAssignedAt: null, coverAssignedByName: null,
     effectiveTutorId: 10, effectiveTutorName: 'Tam Tutor',
+    rosterSyncedAt: '2026-01-01T00:00:00Z', rosterMayHaveChanged: false,
     ...overrides,
   };
 }
@@ -387,6 +388,97 @@ describe('RegisterPage', () => {
         expect.anything(),
       );
     });
+  });
+
+  it('automatically pops up a roster-changed alert when rosterMayHaveChanged is true and canRefresh is true', async () => {
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2099-01-01', rosterMayHaveChanged: true }), entries },
+      isLoading: false,
+    };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    expect(await screen.findByText(/roster may have changed/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /review roster changes/i }));
+
+    await waitFor(() => {
+      expect(mockRefreshMutate).toHaveBeenCalledWith(
+        { id: 200, data: { confirm: false } },
+        expect.anything(),
+      );
+    });
+  });
+
+  it('dismisses the roster-changed alert with Not Now without previewing a refresh', async () => {
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2099-01-01', rosterMayHaveChanged: true }), entries },
+      isLoading: false,
+    };
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await screen.findByText(/roster may have changed/i);
+    await user.click(screen.getByRole('button', { name: /not now/i }));
+
+    expect(screen.queryByText(/roster may have changed/i)).not.toBeInTheDocument();
+    expect(mockRefreshMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not pop up the roster-changed alert when rosterMayHaveChanged is false', () => {
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2099-01-01', rosterMayHaveChanged: false }), entries },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.queryByText(/roster may have changed/i)).not.toBeInTheDocument();
+  });
+
+  it('does not pop up the roster-changed alert on a cancelled session even when rosterMayHaveChanged is true', () => {
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2099-01-01', status: 'cancelled', rosterMayHaveChanged: true }), entries },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.queryByText(/roster may have changed/i)).not.toBeInTheDocument();
+  });
+
+  it('does not pop up the roster-changed alert on a locked register even when rosterMayHaveChanged is true', () => {
+    mockRegister = {
+      data: {
+        session: makeSession({ sessionDate: '2020-01-01', registerLockedAt: '2026-01-02T00:00:00Z', rosterMayHaveChanged: true }),
+        entries,
+      },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.queryByText(/roster may have changed/i)).not.toBeInTheDocument();
+  });
+
+  it('does not pop up the roster-changed alert for a non-admin tutor on a completed session even when rosterMayHaveChanged is true', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 10 } };
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2020-01-01', registerStatus: 'completed', rosterMayHaveChanged: true }), entries },
+      isLoading: false,
+    };
+    renderAtLocation();
+    expect(screen.queryByText(/roster may have changed/i)).not.toBeInTheDocument();
+  });
+
+  it('enables Apply Changes and relabels it "Mark Reviewed" when the diff is empty', async () => {
+    mockRegister = {
+      data: { session: makeSession({ sessionDate: '2099-01-01' }), entries },
+      isLoading: false,
+    };
+    mockRefreshMutate.mockImplementation((payload, { onSuccess }: any) => {
+      onSuccess({ toAdd: [], toRemove: [], blocked: [] });
+    });
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /refresh expected learners/i }));
+
+    const markReviewedButton = await screen.findByRole('button', { name: /mark reviewed/i });
+    expect(markReviewedButton).not.toBeDisabled();
   });
 
   it('shows a loading state while the register loads', () => {

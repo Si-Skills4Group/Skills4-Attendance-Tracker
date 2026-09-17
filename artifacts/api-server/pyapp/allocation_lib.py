@@ -75,7 +75,17 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
     tomorrow. These exclusions apply uniformly to both the home-cohort and
     secondary-enrollment match, so a deleted/withdrawn/completed learner
     disappears from every register, primary or secondary, with no extra
-    code."""
+    code.
+
+    Also excludes a learner currently on a Break in Learning ('paused') --
+    they may not return to the same tutor/cohort and should not be expected
+    to attend sessions while paused. Unlike withdrawn/completed there is no
+    separate "paused as of" date column to gate this on, so it's applied
+    unconditionally (as of *now*, not `as_of_date`) -- a past/historical
+    session generated or refreshed while the learner is currently paused
+    will also exclude them, which is acceptable here since a session that
+    already has their attendance recorded is never removed regardless
+    (compute_register_refresh's "blocked" rule)."""
     cur.execute(
         """
         SELECT l.id
@@ -99,6 +109,7 @@ def learners_expected_in_cohort_as_of(cur, cohort_id: int, as_of_date: date) -> 
         )
         AND l.start_date <= %(as_of)s
         AND l.deleted_at IS NULL
+        AND l.status != 'paused'
         AND NOT (l.status = 'withdrawn' AND l.withdrawal_date IS NOT NULL AND l.withdrawal_date <= %(as_of)s)
         AND NOT (l.status = 'completed' AND l.actual_end_date IS NOT NULL AND l.actual_end_date <= %(as_of)s)
         """,
@@ -137,6 +148,7 @@ def expected_learners_count_sql(cohort_id_column: str, as_of_date_column: str) -
         )
         AND exp_l.start_date <= {as_of_date_column}
         AND exp_l.deleted_at IS NULL
+        AND exp_l.status != 'paused'
         AND NOT (exp_l.status = 'withdrawn' AND exp_l.withdrawal_date IS NOT NULL AND exp_l.withdrawal_date <= {as_of_date_column})
         AND NOT (exp_l.status = 'completed' AND exp_l.actual_end_date IS NOT NULL AND exp_l.actual_end_date <= {as_of_date_column})
     )"""

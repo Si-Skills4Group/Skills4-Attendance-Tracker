@@ -110,6 +110,16 @@ class TestLearnerEligibilityRespectsLifecycle:
         )
         assert learners_expected_in_cohort_as_of(db, cohort["id"], datetime.date(2026, 1, 15)) == [learner["id"]]
 
+    def test_paused_learner_is_excluded_even_for_a_currently_ongoing_session(self, db, cohort_factory, learner_factory):
+        """A paused (Break in Learning) learner may not return to the same
+        tutor/cohort and should not be expected to attend sessions -- unlike
+        withdrawn/completed there's no separate "paused as of" date column,
+        so the exclusion applies unconditionally rather than being gated to
+        sessions on/after some effective date."""
+        cohort = cohort_factory()
+        learner_factory(cohort_id=cohort["id"], start_date="2026-01-01", status="paused")
+        assert learners_expected_in_cohort_as_of(db, cohort["id"], datetime.date(2026, 2, 1)) == []
+
     def test_deleted_learner_is_excluded_even_though_otherwise_eligible(self, db, cohort_factory, learner_factory):
         """A deleted learner would otherwise be fully eligible (started,
         not withdrawn) -- deletion must still exclude them from being
@@ -132,6 +142,7 @@ class TestLearnerEligibilityRespectsLifecycle:
             cohort_id=cohort["id"], start_date="2026-01-01",
             status="withdrawn", withdrawal_date="2026-01-15",
         )  # withdrawn before as-of date
+        learner_factory(cohort_id=cohort["id"], start_date="2026-01-01", status="paused")  # paused
 
         as_of = datetime.date(2026, 2, 1)
         expected_ids = learners_expected_in_cohort_as_of(db, cohort["id"], as_of)
@@ -1132,6 +1143,97 @@ class TestRegisterRefreshEndpoint:
 
         expected_after = get_session_expected_learners(session["id"], admin_user)
         assert marked["id"] in {learner["learnerId"] for learner in expected_after}
+
+
+class TestAttendanceSessionRosterMayHaveChanged:
+    def test_false_immediately_after_generation(
+        self, admin_user, cohort_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+
+        result = get_attendance_session(session["id"], admin_user)
+        assert result["session"]["rosterMayHaveChanged"] is False
+
+    def test_true_after_a_transfer_moves_a_learner_into_the_cohort(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory()
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)  # generates the snapshot, sets roster_synced_at
+
+        allocate_learners(
+            AllocationInput(learnerIds=[learner["id"]], cohortId=cohort["id"], effectiveDate=datetime.date.today()),
+            request_factory(), admin_user,
+        )
+
+        result = get_attendance_session(session["id"], admin_user)
+        assert result["session"]["rosterMayHaveChanged"] is True
+
+    def test_true_after_a_new_functional_skills_secondary_enrollment(
+        self, admin_user, cohort_factory, learner_factory, attendance_session_factory, secondary_enrollment_factory,
+    ):
+        fs_cohort = cohort_factory(membership_type="secondary")
+        learner = learner_factory()
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=fs_cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)
+
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"], enrolled_date=str(datetime.date.today()))
+
+        result = get_attendance_session(session["id"], admin_user)
+        assert result["session"]["rosterMayHaveChanged"] is True
+
+    def test_flag_clears_after_confirming_the_refresh(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory()
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)
+
+        allocate_learners(
+            AllocationInput(learnerIds=[learner["id"]], cohortId=cohort["id"], effectiveDate=datetime.date.today()),
+            request_factory(), admin_user,
+        )
+        assert get_attendance_session(session["id"], admin_user)["session"]["rosterMayHaveChanged"] is True
+
+        refresh_session_register(session["id"], RefreshRegisterInput(confirm=True), request_factory(), admin_user)
+
+        result = get_attendance_session(session["id"], admin_user)
+        assert result["session"]["rosterMayHaveChanged"] is False
+
+    def test_flag_stays_true_after_a_mere_preview(
+        self, request_factory, admin_user, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        learner = learner_factory()
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        session = attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+        get_attendance_session(session["id"], admin_user)
+
+        allocate_learners(
+            AllocationInput(learnerIds=[learner["id"]], cohortId=cohort["id"], effectiveDate=datetime.date.today()),
+            request_factory(), admin_user,
+        )
+        refresh_session_register(session["id"], RefreshRegisterInput(confirm=False), request_factory(), admin_user)
+
+        result = get_attendance_session(session["id"], admin_user)
+        assert result["session"]["rosterMayHaveChanged"] is True
+
+    def test_list_attendance_sessions_does_not_include_the_field(
+        self, admin_user, cohort_factory, attendance_session_factory,
+    ):
+        cohort = cohort_factory()
+        future_date = datetime.date.today() + datetime.timedelta(days=7)
+        attendance_session_factory(cohort_id=cohort["id"], session_date=future_date, created_by=admin_user["userId"])
+
+        results = list_attendance_sessions(cohortId=cohort["id"], session=admin_user)
+        assert "rosterMayHaveChanged" not in results[0]
 
 
 class TestNewEndpointPermissions:

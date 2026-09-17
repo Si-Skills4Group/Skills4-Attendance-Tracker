@@ -187,6 +187,22 @@ def _row_to_metrics(row: dict, period_start: date, period_end: date) -> Attendan
     )
 
 
+def _zero_metrics(period_start: date, period_end: date) -> AttendanceMetrics:
+    """The shared "nothing matched" metrics object -- zero everywhere,
+    insufficientData=True (via _row_to_metrics' own rule, since expected <=
+    0). Used wherever a group/entity/cohort-list has no matching sessions at
+    all, rather than duplicating this same zero-dict literal per caller."""
+    return _row_to_metrics(
+        {
+            "attendedMinutes": 0.0, "expectedMinutes": 0.0, "authorisedAbsenceMinutes": 0.0,
+            "authorisedAbsenceSessions": 0, "unauthorisedAbsenceMinutes": 0.0, "unauthorisedAbsenceSessions": 0,
+            "lateMinutes": 0, "lateSessionCount": 0, "missingRecordCount": 0, "completedRegisterRowCount": 0,
+        },
+        period_start,
+        period_end,
+    )
+
+
 def _scope_clause(scope: Scope, scope_id: int | None) -> tuple[str, list]:
     if scope == "learner":
         return "sel.learner_id = %s", [scope_id]
@@ -313,22 +329,41 @@ def fetch_attendance_metrics_grouped(
     # Entities with zero matching rows (e.g. a learner with no expected
     # sessions at all in this period) get an explicit zero/insufficient
     # entry rather than silently disappearing from the result.
-    empty = _row_to_metrics(
-        {
-            "attendedMinutes": 0.0, "expectedMinutes": 0.0, "authorisedAbsenceMinutes": 0.0,
-            "authorisedAbsenceSessions": 0, "unauthorisedAbsenceMinutes": 0.0, "unauthorisedAbsenceSessions": 0,
-            "lateMinutes": 0, "lateSessionCount": 0, "missingRecordCount": 0, "completedRegisterRowCount": 0,
-        },
-        period_start,
-        period_end,
-    )
+    empty = _zero_metrics(period_start, period_end)
     for group_id in group_ids:
         results.setdefault(group_id, empty)
     return results
 
 
+def fetch_attendance_metrics_for_cohort_ids(
+    cur, *, cohort_ids: list[int], period_start: date, period_end: date
+) -> AttendanceMetrics:
+    """Total attendance across an arbitrary explicit list of cohorts --
+    e.g. "every active Functional Skills cohort" for the FS report's
+    top-line summary. Unlike fetch_attendance_metrics_grouped, this returns
+    one combined total, not one entry per cohort."""
+    if not cohort_ids:
+        return _zero_metrics(period_start, period_end)
+    cur.execute(
+        f"""
+        SELECT {_METRICS_SELECT_COLUMNS}
+        FROM attendance_sessions s
+        JOIN cohorts c ON s.cohort_id = c.id
+        JOIN session_expected_learners sel ON sel.session_id = s.id
+        JOIN learners l ON l.id = sel.learner_id
+        LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
+        WHERE s.status != 'cancelled' AND s.deleted_at IS NULL AND c.deleted_at IS NULL AND l.deleted_at IS NULL
+          AND s.session_date >= %s AND s.session_date <= %s
+          AND s.cohort_id = ANY(%s)
+        """,
+        [period_start, _capped_period_end(period_end), cohort_ids],
+    )
+    return _row_to_metrics(cur.fetchone(), period_start, period_end)
+
+
 def _fetch_metrics_by_string_key(
-    cur, *, key_sql: str, extra_join: str, period_start: date, period_end: date, extra_where: str = ""
+    cur, *, key_sql: str, extra_join: str, period_start: date, period_end: date, extra_where: str = "",
+    extra_params: list | None = None,
 ) -> dict[str, AttendanceMetrics]:
     """Shared implementation behind the by-programme/by-level/by-employer/
     by-subject organisation-report breakdowns -- same formula/columns as
@@ -339,7 +374,8 @@ def _fetch_metrics_by_string_key(
     don't need it for the group key itself) so a deleted learner's minutes
     never contribute to any breakdown. extra_where, when given, must be a
     trusted SQL condition composed by the caller (e.g. excluding a NULL
-    group key), never raw user input."""
+    group key), never raw user input -- extra_params supplies any bind
+    values it references, appended after period_end."""
     cur.execute(
         f"""
         SELECT {key_sql} AS "groupKey", {_METRICS_SELECT_COLUMNS}
@@ -354,17 +390,26 @@ def _fetch_metrics_by_string_key(
           {extra_where}
         GROUP BY {key_sql}
         """,
-        [period_start, _capped_period_end(period_end)],
+        [period_start, _capped_period_end(period_end), *(extra_params or [])],
     )
     return {row["groupKey"]: _row_to_metrics(row, period_start, period_end) for row in cur.fetchall()}
 
 
-def fetch_attendance_metrics_by_subject(cur, *, period_start: date, period_end: date) -> dict[str, AttendanceMetrics]:
+def fetch_attendance_metrics_by_subject(
+    cur, *, period_start: date, period_end: date, cohort_ids: list[int] | None = None
+) -> dict[str, AttendanceMetrics]:
     """Math vs English (vs Both) Functional Skills attendance -- an ordinary
-    'primary' cohort has subject IS NULL and never contributes a row here."""
+    'primary' cohort has subject IS NULL and never contributes a row here.
+    cohort_ids, when given, narrows to that explicit set of FS cohorts (e.g.
+    one tutor's) instead of every FS cohort org-wide."""
+    extra_where = "AND c.subject IS NOT NULL"
+    extra_params: list = []
+    if cohort_ids is not None:
+        extra_where += " AND c.id = ANY(%s)"
+        extra_params = [cohort_ids]
     return _fetch_metrics_by_string_key(
         cur, key_sql="c.subject", extra_join="", period_start=period_start, period_end=period_end,
-        extra_where="AND c.subject IS NOT NULL",
+        extra_where=extra_where, extra_params=extra_params,
     )
 
 
@@ -522,6 +567,66 @@ def fetch_register_completion(
         FROM session_counts
         """,
         params,
+    )
+    row = cur.fetchone()
+    total = row["total"]
+    completion_pct = ((row["completed"] + row["locked"]) / total * 100) if total > 0 else None
+
+    return RegisterCompletionSummary(
+        periodStart=period_start,
+        periodEnd=period_end,
+        notStarted=row["notStarted"],
+        inProgress=row["inProgress"],
+        completed=row["completed"],
+        locked=row["locked"],
+        outstanding=row["outstanding"],
+        completionPercentage=completion_pct,
+    )
+
+
+def fetch_register_completion_for_cohort_ids(
+    cur, *, cohort_ids: list[int], period_start: date, period_end: date
+) -> RegisterCompletionSummary:
+    """Same CTE as fetch_register_completion, but scoped to an explicit list
+    of cohorts (e.g. every active Functional Skills cohort) instead of one
+    scope/scope_id pair."""
+    if not cohort_ids:
+        return RegisterCompletionSummary(
+            periodStart=period_start, periodEnd=period_end,
+            notStarted=0, inProgress=0, completed=0, locked=0, outstanding=0, completionPercentage=None,
+        )
+    cur.execute(
+        """
+        WITH session_counts AS (
+            SELECT
+                s.session_date,
+                s.register_locked_at,
+                (SELECT count(*)::int FROM attendance_records ar WHERE ar.session_id = s.id) AS recorded_count,
+                (SELECT count(*)::int FROM session_expected_learners sel WHERE sel.session_id = s.id) AS expected_count
+            FROM attendance_sessions s
+            JOIN cohorts c ON s.cohort_id = c.id
+            WHERE s.status != 'cancelled' AND s.deleted_at IS NULL AND c.deleted_at IS NULL
+              AND s.session_date >= %s AND s.session_date <= %s AND c.id = ANY(%s)
+        )
+        SELECT
+            count(*) FILTER (WHERE register_locked_at IS NULL AND recorded_count = 0) AS "notStarted",
+            count(*) FILTER (
+                WHERE register_locked_at IS NULL AND recorded_count > 0
+                  AND NOT (expected_count > 0 AND recorded_count >= expected_count)
+            ) AS "inProgress",
+            count(*) FILTER (
+                WHERE register_locked_at IS NULL AND expected_count > 0 AND recorded_count >= expected_count
+            ) AS "completed",
+            count(*) FILTER (WHERE register_locked_at IS NOT NULL) AS "locked",
+            count(*) FILTER (
+                WHERE register_locked_at IS NULL
+                  AND NOT (expected_count > 0 AND recorded_count >= expected_count)
+                  AND session_date <= CURRENT_DATE
+            ) AS "outstanding",
+            count(*) AS "total"
+        FROM session_counts
+        """,
+        [period_start, period_end, cohort_ids],
     )
     row = cur.fetchone()
     total = row["total"]

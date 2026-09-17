@@ -30,6 +30,7 @@ const LearnerReportPage = React.lazy(() => import("@/pages/reports/learners"));
 const CohortReportPage = React.lazy(() => import("@/pages/reports/cohorts"));
 const TutorReportPage = React.lazy(() => import("@/pages/reports/tutors"));
 const OrganisationReportPage = React.lazy(() => import("@/pages/reports/organisation"));
+const FunctionalSkillsReportPage = React.lazy(() => import("@/pages/reports/functional-skills"));
 const AbsenceReportPage = React.lazy(() => import("@/pages/reports/absence"));
 const LatenessReportPage = React.lazy(() => import("@/pages/reports/lateness"));
 const AttendanceHoursReportPage = React.lazy(() => import("@/pages/reports/attendance-hours"));
@@ -74,6 +75,7 @@ function ProtectedRouter() {
           <Route path="/reports/cohorts" component={CohortReportPage} />
           <Route path="/reports/tutors" component={TutorReportPage} />
           <Route path="/reports/organisation" component={OrganisationReportPage} />
+          <Route path="/reports/functional-skills" component={FunctionalSkillsReportPage} />
           <Route path="/reports/absence" component={AbsenceReportPage} />
           <Route path="/reports/lateness" component={LatenessReportPage} />
           <Route path="/reports/attendance-hours" component={AttendanceHoursReportPage} />
