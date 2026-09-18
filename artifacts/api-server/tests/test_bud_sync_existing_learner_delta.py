@@ -326,6 +326,39 @@ class TestStatusChangeApplication:
         assert row["status"] == "withdrawn"
         assert str(row["withdrawalDate"]) == "2026-08-01"
 
+    def test_supplying_the_date_under_its_dateField_labeled_path_is_accepted(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        """Regression test: the review dialog edits/labels this field as
+        statusChange.<dateField> (e.g. statusChange.actualEndDate for a
+        Completed transition, matching missingFieldPaths' own display path)
+        -- not the internal statusChange.effectiveDate key the previous test
+        uses directly. Supplying it under that real, UI-facing path must
+        actually satisfy the approval check, not silently save under an
+        unused key and leave effectiveDate null."""
+        learner = self._link_learner(db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory, "ULN-SC-3")
+
+        db.execute("UPDATE public.learner_progress SET status_desc = 'Completed', synced_at = '2099-06-01T00:00:00Z' WHERE unique_learner_number = 'ULN-SC-3'")
+
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            'SELECT id, proposed_values AS "proposedValues" FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s',
+            (job2["id"], learner["id"]),
+        )
+        item = db.fetchone()
+        assert item["proposedValues"]["statusChange"]["dateField"] == "actualEndDate"
+
+        updated = update_item(db, job2["id"], item["id"], {"statusChange.actualEndDate": "2026-09-17"}, True)
+        assert updated["approved"] is True
+        assert updated["proposedValues"]["statusChange"]["effectiveDate"] == "2026-09-17"
+
+        run_commit(db, job2["id"], [item["id"]], "apply completion", None, request_factory(admin_user), admin_user)
+
+        db.execute("SELECT status, actual_end_date AS \"actualEndDate\" FROM learners WHERE id = %s", (learner["id"],))
+        row = db.fetchone()
+        assert row["status"] == "completed"
+        assert str(row["actualEndDate"]) == "2026-09-17"
+
     def test_a_status_change_never_touches_historical_attendance(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
         cohort_factory, tutor_factory, attendance_session_factory,

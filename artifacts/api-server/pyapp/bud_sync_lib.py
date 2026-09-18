@@ -882,6 +882,19 @@ def update_item(cur, job_id: int, item_id: int, field_updates: dict | None, appr
             section, _, key = path.partition(".")
             if section not in proposed or not isinstance(proposed[section], dict):
                 raise HTTPException(status_code=400, detail=f"Unknown field path: {path}")
+            if section == "statusChange" and key == proposed[section].get("dateField"):
+                # _item_missing_fields and the commit-time apply logic both
+                # only ever read/write the canonical "effectiveDate" key --
+                # dateField ("actualEndDate"/"withdrawalDate") is just a
+                # label for which real learner column to write later. The
+                # UI intentionally shows/edits the field under that
+                # meaningful label (missingFieldPaths), not the generic
+                # "effectiveDate" name, so route it to the real key here
+                # rather than creating a second, never-read one -- without
+                # this, supplying the date still left effectiveDate null and
+                # approval kept failing with "field missing" even though a
+                # value had been saved.
+                key = "effectiveDate"
             proposed[section][key] = value
         cur.execute("UPDATE bud_sync_item SET proposed_values = %s WHERE id = %s", (json.dumps(proposed, default=str), item_id))
 
