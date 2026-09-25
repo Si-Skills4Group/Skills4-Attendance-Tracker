@@ -22,7 +22,7 @@ from pyapp.catchup_lib import record_catchup, revoke_catchup
 from pyapp.engagement_lib import fetch_engagement_rows, fetch_engagement_summary, resolve_learner_engagement_detail
 from pyapp.routers.attendance import AttendanceRegisterInput, RegisterEntryInput, save_attendance_register
 
-TODAY = date(2026, 9, 23)  # matches this session's real system date
+TODAY = date.today()  # always the real "today" -- never hardcode this, it drifts
 
 
 def _record(request_factory, session_id, learner_id, status, acting_session, register_version=1, **kwargs):
@@ -95,7 +95,7 @@ class TestAcceptanceExample:
         assert row["lastCatchupCompletion"] == date(2026, 9, 17)
         assert row["latestEngagementDate"] == date(2026, 9, 17)
         assert row["sources"] == ["catchup"]
-        assert row["daysSinceEngagement"] == 6
+        assert row["daysSinceEngagement"] == (TODAY - date(2026, 9, 17)).days
         assert row["budStatus"] == "resolved"
         assert any("unverified" in note.lower() for note in row["sourceLimitations"]), "Bud dates must be captioned unverified/excluded"
 
