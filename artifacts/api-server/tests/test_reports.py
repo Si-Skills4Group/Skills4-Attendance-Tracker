@@ -468,6 +468,81 @@ class TestFunctionalSkillsReportExport:
         assert learner["learner_ref"] in response.text
 
 
+class TestParticipationReport:
+    """Stage 3 catch-up feature -- the session-based "participation
+    including catch-up" report (reports.py's /reports/participation),
+    exercised over real HTTP so permission scoping and the CSV export are
+    both proven, not just the underlying fetch_session_participation_metrics
+    formula (already covered in isolation by test_participation_metrics.py)."""
+
+    def test_reconciles_after_a_catchup_is_recorded(
+        self, client, monkeypatch, db, admin_user, request_factory, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        from pyapp.catchup_lib import record_catchup
+
+        cohort = cohort_factory()
+        present_learner = learner_factory(cohort_id=cohort["id"])
+        absent_learner = learner_factory(cohort_id=cohort["id"])
+        session_row = attendance_session_factory(cohort_id=cohort["id"], session_date="2026-01-06", created_by=admin_user["userId"])
+        _snapshot(db, session_row)
+        _record(db, session_row["id"], present_learner["id"], "present", hours_attended=6)
+        _record(db, session_row["id"], absent_learner["id"], "absent_authorised")
+
+        _as_admin(client, monkeypatch)
+        before = client.get(f"/api/reports/participation?cohortId={cohort['id']}&{PERIOD_QS}")
+        assert before.status_code == 200
+        body = before.json()
+        assert body["expectedLearnerSessions"] == 2
+        assert body["liveAttendedLearnerSessions"] == 1
+        assert body["recordedAbsences"] == 1
+        assert body["caughtUp"] == 0
+        assert body["totalParticipation"] == 1
+        assert body["participationRate"] == 50.0
+
+        record_catchup(
+            db, session_row["id"], absent_learner["id"], date(2026, 1, 6), "recording_watched", "Watched the recording",
+            request_factory(), admin_user,
+        )
+
+        after = client.get(f"/api/reports/participation?cohortId={cohort['id']}&{PERIOD_QS}")
+        assert after.status_code == 200
+        after_body = after.json()
+        assert after_body["caughtUp"] == 1
+        assert after_body["totalParticipation"] == 2
+        assert after_body["participationRate"] == 100.0
+
+    def test_tutor_cannot_probe_another_tutors_cohort(self, client, monkeypatch, tutor_factory, cohort_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"])
+        _as_tutor(client, monkeypatch, other["tutorId"])
+        response = client.get(f"/api/reports/participation?cohortId={cohort['id']}")
+        assert response.status_code == 403
+
+    def test_export_returns_the_session_based_columns(self, client, monkeypatch, cohort_factory):
+        import csv
+        import io
+
+        cohort = cohort_factory()
+        _as_admin(client, monkeypatch)
+        response = client.get(f"/api/reports/participation/export?cohortId={cohort['id']}&{PERIOD_QS}")
+        assert response.status_code == 200
+        assert "totalParticipation" in response.text
+        assert "participationRate" in response.text
+
+        rows = list(csv.DictReader(io.StringIO(response.text)))
+        assert len(rows) == 1
+        row = rows[0]
+        # calculatedAt is present in both the JSON report and this CSV
+        # export -- the one place either surface states WHEN catch-up was
+        # last known as of, since a later confirmation can raise this same
+        # period's numbers on a subsequent call.
+        assert row["calculatedAt"], "the export must state when this figure was calculated"
+        from datetime import datetime
+
+        datetime.fromisoformat(row["calculatedAt"].replace("Z", "+00:00"))
+
+
 class TestAbsenceAndLatenessReports:
     def test_absence_report_separates_authorised_from_unauthorised(
         self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory

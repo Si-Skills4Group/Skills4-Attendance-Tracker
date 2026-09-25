@@ -651,3 +651,116 @@ def is_low_attendance(metrics: AttendanceMetrics, threshold: float) -> bool:
     if metrics.insufficientData or metrics.attendancePercentage is None:
         return False
     return metrics.attendancePercentage < threshold
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: session-based participation including catch-up
+# ---------------------------------------------------------------------------
+#
+# Deliberately a SEPARATE model/function from AttendanceMetrics/
+# fetch_attendance_metrics above, not a bolt-on to it: the existing
+# minutes-based attendancePercentage must stay completely unchanged (same
+# query, same column, same formula -- untouched by this addition), and this
+# new figure counts distinct learner/session PAIRS, not minutes, which is a
+# genuinely different unit that must never be confused with the existing
+# one. Label this "Session participation including catch-up" everywhere it
+# is shown, precisely so nobody mistakes it for attendancePercentage.
+class SessionParticipationMetrics(BaseModel):
+    periodStart: date
+    periodEnd: date
+    expectedLearnerSessions: int
+    liveAttendedLearnerSessions: int
+    recordedAbsences: int
+    caughtUp: int
+    absencesWithoutCatchup: int
+    attendanceNotRecorded: int
+    totalParticipation: int
+    participationRate: float | None
+    calculatedAt: datetime
+
+
+def fetch_session_participation_metrics(
+    cur, *, scope: Scope, scope_id: int | None, period_start: date, period_end: date,
+) -> SessionParticipationMetrics:
+    """Counts DISTINCT expected learner/session pairs -- never minutes, and
+    never double-counts: a pair is present/late (live), OR an absence
+    (authorised/unauthorised), OR unrecorded (ar.status IS NULL) -- exactly
+    one of those, since ar.status is a single value per row. "Caught up" is
+    the live-derived EFFECTIVE subset of "recordedAbsences" (see
+    catchup_lib.py's _derive_state) -- a revoked catch-up, or one whose
+    original absence has since been corrected to a non-eligible status,
+    never counts here, with no separate bookkeeping required: this simply
+    re-checks ar.status and cu.status fresh, the same as every other read.
+
+    Selects sessions by period_start/period_end applied to s.session_date
+    (the ORIGINAL session), and reflects catch-up as known at the moment
+    this function runs (calculatedAt) -- a catch-up confirmed after this
+    calculation for a session inside this same period is not retroactively
+    reflected in a report already generated; the caller must say so
+    (routers/reports.py's own response text), this function only supplies
+    the timestamp to make that possible.
+
+    Uses the exact same expected-session exclusions as the minutes-based
+    fetch_attendance_metrics (not_expected/withdrawn/bil rows, cancelled/
+    deleted sessions/cohorts/learners, and _capped_period_end to exclude
+    future sessions), expressed as row counts instead of minutes, so the
+    two metrics are never comparing a different population by accident."""
+    scope_sql, scope_params = _scope_clause(scope, scope_id)
+    capped_end = _capped_period_end(period_end)
+    clauses = [
+        "s.status != 'cancelled'",
+        "s.deleted_at IS NULL",
+        "c.deleted_at IS NULL",
+        "l.deleted_at IS NULL",
+        "s.session_date >= %s",
+        "s.session_date <= %s",
+        scope_sql,
+    ]
+    params: list = [period_start, capped_end, *scope_params]
+
+    cur.execute(
+        f"""
+        SELECT
+            COALESCE(COUNT(*) FILTER (WHERE ar.status IS NULL OR ar.status NOT IN ('not_expected', 'withdrawn', 'bil')), 0)
+                AS "expectedLearnerSessions",
+            COALESCE(COUNT(*) FILTER (WHERE ar.status IN ('present', 'late')), 0) AS "liveAttendedLearnerSessions",
+            COALESCE(COUNT(*) FILTER (WHERE ar.status IN ('absent_authorised', 'absent_unauthorised')), 0)
+                AS "recordedAbsences",
+            COALESCE(COUNT(*) FILTER (
+                WHERE ar.status IN ('absent_authorised', 'absent_unauthorised')
+                  AND cu.id IS NOT NULL AND cu.status = 'recorded'
+            ), 0) AS "caughtUp",
+            COALESCE(COUNT(*) FILTER (WHERE ar.status IS NULL), 0) AS "attendanceNotRecorded"
+        FROM attendance_sessions s
+        JOIN cohorts c ON s.cohort_id = c.id
+        JOIN session_expected_learners sel ON sel.session_id = s.id
+        JOIN learners l ON l.id = sel.learner_id
+        LEFT JOIN attendance_records ar ON ar.session_id = sel.session_id AND ar.learner_id = sel.learner_id
+        LEFT JOIN attendance_catchup cu ON cu.session_id = sel.session_id AND cu.learner_id = sel.learner_id
+        WHERE {' AND '.join(clauses)}
+        """,
+        params,
+    )
+    row = cur.fetchone()
+
+    expected = row["expectedLearnerSessions"]
+    live = row["liveAttendedLearnerSessions"]
+    recorded_absences = row["recordedAbsences"]
+    caught_up = row["caughtUp"]
+    absences_without_catchup = recorded_absences - caught_up
+    total_participation = live + caught_up
+    participation_rate = (total_participation / expected * 100) if expected > 0 else None
+
+    return SessionParticipationMetrics(
+        periodStart=period_start,
+        periodEnd=period_end,
+        expectedLearnerSessions=expected,
+        liveAttendedLearnerSessions=live,
+        recordedAbsences=recorded_absences,
+        caughtUp=caught_up,
+        absencesWithoutCatchup=absences_without_catchup,
+        attendanceNotRecorded=row["attendanceNotRecorded"],
+        totalParticipation=total_participation,
+        participationRate=participation_rate,
+        calculatedAt=datetime.now(timezone.utc),
+    )

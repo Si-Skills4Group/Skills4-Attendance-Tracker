@@ -32,15 +32,21 @@ from .routers import (
     tutor_imports,
     learners,
     learner_imports,
+    fs_requirements,
     cohorts,
     allocation_routes,
+    allocation_reconciliation,
     secondary_enrollments,
     attendance,
     attendance_summary,
+    catchup,
     reports,
+    engagement,
     audit_routes,
     settings,
     bud_sync,
+    tutor_identity,
+    bud_missing_source,
 )
 
 configure_logging()
@@ -154,15 +160,21 @@ for router in (
     tutor_imports.router,
     learners.router,
     learner_imports.router,
+    fs_requirements.router,
     cohorts.router,
     allocation_routes.router,
+    allocation_reconciliation.router,
     secondary_enrollments.router,
     attendance.router,
     attendance_summary.router,
+    catchup.router,
     reports.router,
+    engagement.router,
     audit_routes.router,
     settings.router,
     bud_sync.router,
+    tutor_identity.router,
+    bud_missing_source.router,
 ):
     app.include_router(router, prefix="/api")
 

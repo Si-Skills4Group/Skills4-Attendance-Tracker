@@ -25,6 +25,7 @@ const AllocationPage = React.lazy(() => import("@/pages/allocation"));
 const AttendancePage = React.lazy(() => import("@/pages/attendance/index"));
 const CohortSessionsPage = React.lazy(() => import("@/pages/attendance/cohort-sessions"));
 const RegisterPage = React.lazy(() => import("@/pages/attendance/register"));
+const CatchupFollowUpPage = React.lazy(() => import("@/pages/catchup/follow-up"));
 const ReportsPage = React.lazy(() => import("@/pages/reports"));
 const LearnerReportPage = React.lazy(() => import("@/pages/reports/learners"));
 const CohortReportPage = React.lazy(() => import("@/pages/reports/cohorts"));
@@ -37,8 +38,15 @@ const AttendanceHoursReportPage = React.lazy(() => import("@/pages/reports/atten
 const RegisterCompletionReportPage = React.lazy(() => import("@/pages/reports/register-completion"));
 const LastAttendanceReportPage = React.lazy(() => import("@/pages/reports/last-attendance"));
 const AllocationHistoryReportPage = React.lazy(() => import("@/pages/reports/allocation-history"));
+const ParticipationReportPage = React.lazy(() => import("@/pages/reports/participation"));
+const EngagementRecencyReportPage = React.lazy(() => import("@/pages/reports/engagement-recency"));
 const AuditLogPage = React.lazy(() => import("@/pages/audit-log"));
 const BudSyncTrialPage = React.lazy(() => import("@/pages/bud-sync-trial"));
+const AllocationReconciliationPage = React.lazy(() => import("@/pages/allocation-reconciliation"));
+const TutorIdentityPage = React.lazy(() => import("@/pages/tutor-identity"));
+const BudMissingSourcePage = React.lazy(() => import("@/pages/bud-missing-source"));
+const FsRequirementImportPage = React.lazy(() => import("@/pages/functional-skills-requirements/import"));
+const FsRequirementAllocationPage = React.lazy(() => import("@/pages/functional-skills-requirements/allocation"));
 const SettingsPage = React.lazy(() => import("@/pages/settings"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
 
@@ -70,6 +78,7 @@ function ProtectedRouter() {
           <Route path="/attendance" component={AttendancePage} />
           <Route path="/attendance/cohorts/:id" component={CohortSessionsPage} />
           <Route path="/attendance/:id" component={RegisterPage} />
+          <Route path="/catchup/follow-up" component={CatchupFollowUpPage} />
           <Route path="/reports" component={ReportsPage} />
           <Route path="/reports/learners" component={LearnerReportPage} />
           <Route path="/reports/cohorts" component={CohortReportPage} />
@@ -82,8 +91,15 @@ function ProtectedRouter() {
           <Route path="/reports/register-completion" component={RegisterCompletionReportPage} />
           <Route path="/reports/last-attendance" component={LastAttendanceReportPage} />
           <Route path="/reports/allocation-history" component={AllocationHistoryReportPage} />
+          <Route path="/reports/participation" component={ParticipationReportPage} />
+          <Route path="/reports/engagement-recency" component={EngagementRecencyReportPage} />
           <Route path="/audit-log">{() => <RequireAdmin><AuditLogPage /></RequireAdmin>}</Route>
           <Route path="/bud-sync-trial">{() => <RequireAdmin><BudSyncTrialPage /></RequireAdmin>}</Route>
+          <Route path="/allocation-reconciliation">{() => <RequireAdmin><AllocationReconciliationPage /></RequireAdmin>}</Route>
+          <Route path="/tutor-identity">{() => <RequireAdmin><TutorIdentityPage /></RequireAdmin>}</Route>
+          <Route path="/bud-missing-source">{() => <RequireAdmin><BudMissingSourcePage /></RequireAdmin>}</Route>
+          <Route path="/functional-skills-requirements/import">{() => <RequireAdmin><FsRequirementImportPage /></RequireAdmin>}</Route>
+          <Route path="/functional-skills-requirements/allocation">{() => <RequireAdmin><FsRequirementAllocationPage /></RequireAdmin>}</Route>
           <Route path="/settings">{() => <RequireAdmin><SettingsPage /></RequireAdmin>}</Route>
           <Route path="/" component={() => {
             window.location.href = "/dashboard";

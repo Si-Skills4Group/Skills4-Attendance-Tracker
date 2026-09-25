@@ -191,3 +191,24 @@ def parse_tutor_import_csv(
         max_bytes=max_bytes,
         max_rows=max_rows,
     )
+
+
+# ---------------------------------------------------------------------------
+# Stage 5: admin-uploaded Functional Skills subject requirement.
+# ---------------------------------------------------------------------------
+
+FS_REQUIREMENT_IMPORT_COLUMNS = ["learnerID", "AIM"]
+FS_REQUIREMENT_IMPORT_REQUIRED_COLUMNS = ["learnerID", "AIM"]
+FS_REQUIREMENT_IMPORT_COLUMN_TO_FIELD = {"learnerID": "learnerId", "AIM": "aim"}
+
+
+def parse_fs_requirement_import_csv(
+    raw: bytes, *, max_bytes: int = MAX_IMPORT_FILE_BYTES, max_rows: int = MAX_IMPORT_ROWS
+) -> list[dict[str, str]]:
+    return parse_import_csv(
+        raw,
+        column_to_field=FS_REQUIREMENT_IMPORT_COLUMN_TO_FIELD,
+        required_columns=FS_REQUIREMENT_IMPORT_REQUIRED_COLUMNS,
+        max_bytes=max_bytes,
+        max_rows=max_rows,
+    )

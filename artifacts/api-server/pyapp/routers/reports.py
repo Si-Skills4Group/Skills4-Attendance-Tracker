@@ -29,6 +29,7 @@ from ..attendance_metrics import (
     fetch_attendance_metrics_grouped,
     fetch_register_completion,
     fetch_register_completion_for_cohort_ids,
+    fetch_session_participation_metrics,
     is_low_attendance,
 )
 from ..auth import require_admin, require_auth, require_cohort_access, require_learner_access, require_tutor_access
@@ -798,6 +799,74 @@ def export_functional_skills_report(
         request, report_type="functional_skills", rows=rows, columns=columns,
         filename=f"functional-skills-{breakdown}-report.csv", date_from=period_start, date_to=period_end,
         filters={"period": period, "subject": subject, "tutorId": tutorId, "breakdown": breakdown},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Session participation report (Stage 3 catch-up feature) -- the session-
+# based "was this learner-session participated in at all, live or via a
+# confirmed catch-up" figures. Entirely separate from, and never blended
+# with, the existing minutes-based attendancePercentage above: same period/
+# scope resolution, same _enforce_tutor_scope permission rules, but its own
+# formula (fetch_session_participation_metrics) and its own clearly labelled
+# fields so a caller never confuses "Session participation including
+# catch-up" with the existing percentage.
+# ---------------------------------------------------------------------------
+
+SESSION_PARTICIPATION_COLUMNS = [
+    "periodStart", "periodEnd", "expectedLearnerSessions", "liveAttendedLearnerSessions",
+    "recordedAbsences", "caughtUp", "absencesWithoutCatchup", "attendanceNotRecorded",
+    "totalParticipation", "participationRate", "calculatedAt",
+]
+
+
+@router.get("/reports/participation")
+def get_participation_report(
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    tutorId: int | None = None,
+    cohortId: int | None = None,
+    learnerId: int | None = None,
+    session: dict = Depends(require_auth),
+):
+    """Session-based participation including catch-up. Original sessions are
+    selected by this reporting date range; catch-up is reflected as known
+    as of right now (calculatedAt) -- a catch-up confirmed after this call
+    can raise an earlier period's participation on a later call, so this is
+    never presented as a figure frozen at the period's end."""
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        tutor_id, cohort_id, learner_id = _enforce_tutor_scope(cur, session, tutorId, cohortId, learnerId)
+        scope, scope_id = _pick_scope(tutor_id, cohort_id, learner_id)
+        metrics = fetch_session_participation_metrics(
+            cur, scope=scope, scope_id=scope_id, period_start=period_start, period_end=period_end,
+        )
+    return metrics
+
+
+@router.get("/reports/participation/export")
+def export_participation_report(
+    request: Request,
+    period: Period = "current_month",
+    dateFrom: date | None = None,
+    dateTo: date | None = None,
+    tutorId: int | None = None,
+    cohortId: int | None = None,
+    learnerId: int | None = None,
+    session: dict = Depends(require_auth),
+):
+    period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
+    with get_cursor() as cur:
+        tutor_id, cohort_id, learner_id = _enforce_tutor_scope(cur, session, tutorId, cohortId, learnerId)
+        scope, scope_id = _pick_scope(tutor_id, cohort_id, learner_id)
+        metrics = fetch_session_participation_metrics(
+            cur, scope=scope, scope_id=scope_id, period_start=period_start, period_end=period_end,
+        )
+    return export_csv_response(
+        request, report_type="participation", rows=[metrics.model_dump()], columns=SESSION_PARTICIPATION_COLUMNS,
+        filename="session-participation-report.csv", date_from=period_start, date_to=period_end,
+        filters={"period": period, "tutorId": tutor_id, "cohortId": cohort_id, "learnerId": learner_id},
     )
 
 

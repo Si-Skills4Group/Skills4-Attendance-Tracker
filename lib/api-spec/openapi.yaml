@@ -893,6 +893,237 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ---------- Stage 5: admin-uploaded Functional Skills requirement ----------
+  # An interim, manually-sourced substitute for ILR aim data -- never a
+  # BUD/ILR integration. Admin-only upload/preview/commit/cancel/clear;
+  # the learner-detail read reuses require_learner_access (not admin-only).
+  /functional-skills-requirements/import-jobs/template:
+    get:
+      operationId: getFsRequirementImportTemplate
+      tags: [functional-skills-requirements]
+      responses:
+        "200":
+          description: CSV template content (learnerID,AIM)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CsvContent" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/import-jobs:
+    post:
+      operationId: uploadFsRequirementImport
+      tags: [functional-skills-requirements]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Upload parsed and classified
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FsRequirementImportJob" }
+        "400":
+          description: File rejected (too large, malformed, wrong columns, too many rows)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/import-jobs/{jobId}:
+    get:
+      operationId: getFsRequirementImportJob
+      tags: [functional-skills-requirements]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import job status and counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FsRequirementImportJob" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/import-jobs/{jobId}/rows:
+    get:
+      operationId: listFsRequirementImportJobRows
+      tags: [functional-skills-requirements]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+        - name: outcome
+          in: query
+          schema: { $ref: "#/components/schemas/FsRequirementRowOutcome" }
+      responses:
+        "200":
+          description: Paginated import job rows
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FsRequirementImportJobRowListResponse" }
+  /functional-skills-requirements/import-jobs/{jobId}/confirm:
+    post:
+      operationId: confirmFsRequirementImportJob
+      tags: [functional-skills-requirements]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import applied (or, if already completed, the same stored result -- confirming is idempotent)
+          content:
+            application/json:
+              schema: { type: object }
+        "400":
+          description: The file still has row-level errors -- commit is blocked until they are fixed and re-uploaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Job is not confirmable, or the previewed data is stale (learner/requirement changed since preview)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/import-jobs/{jobId}/cancel:
+    post:
+      operationId: cancelFsRequirementImportJob
+      tags: [functional-skills-requirements]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Import job cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FsRequirementImportJob" }
+        "409":
+          description: Job cannot be cancelled (already completed or importing)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/allocation:
+    get:
+      operationId: getFsRequirementAllocation
+      tags: [functional-skills-requirements]
+      description: >-
+        Admin-only allocation view (item 6). Defaults to active learners;
+        a learner appears whenever they have an uploaded requirement OR an
+        existing active secondary enrollment, so a pre-existing
+        enrollment with no uploaded requirement is still visible, labelled
+        "Requirement not recorded" rather than asserted inappropriate.
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: subject
+          in: query
+          schema: { type: string, enum: [math, english, both] }
+        - name: missingOnly
+          in: query
+          schema: { type: boolean, default: false }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/LearnerStatus" }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Paginated Functional Skills allocation rows
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FsRequirementAllocationListResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/learner/{learnerId}:
+    get:
+      operationId: getLearnerFsRequirement
+      tags: [functional-skills-requirements]
+      description: Shown on the learner detail screen within existing access permissions (require_learner_access, not admin-only).
+      parameters:
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The learner's current uploaded requirement, or null if none has ever been uploaded
+          content:
+            application/json:
+              schema:
+                oneOf: [{ $ref: "#/components/schemas/LearnerFsRequirement" }, { type: "null" }]
+        "403":
+          description: Not allowed to access this learner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /functional-skills-requirements/learner/{learnerId}/clear:
+    post:
+      operationId: clearLearnerFsRequirement
+      tags: [functional-skills-requirements]
+      parameters:
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClearFsRequirementInput" }
+      responses:
+        "200":
+          description: Requirement cleared (row retained with status='cleared', history preserved)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearnerFsRequirement" }
+        "400":
+          description: A reason is required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: No active requirement to clear for this learner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /learners/{id}:
     get:
       operationId: getLearner
@@ -1405,6 +1636,99 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AllocationHistoryEntry" }
+  /allocation-reconciliation:
+    get:
+      operationId: getAllocationReconciliation
+      tags: [allocation-reconciliation]
+      description: >-
+        Stage 1 operational allocation audit (admin only, read-only):
+        reconciles Bud's "In Progress" learning-plan population against this
+        app's active cohort allocations, using the same matching hierarchy
+        as the Bud sync trial. Visibility only -- never writes anything.
+      parameters:
+        - name: view
+          in: query
+          schema: { type: string, enum: [assigned, unassigned, needs_review], default: assigned }
+        - name: tutorSource
+          in: query
+          description: Which side of the reconciliation the tutor filter applies to -- see tutorValue.
+          schema: { type: string, enum: [internal, bud] }
+        - name: tutorValue
+          in: query
+          description: >-
+            An internal tutor id (as a string) when tutorSource=internal, or
+            a Bud tutor_name (or the literal "Unknown" for a blank/unmatched
+            one) when tutorSource=bud.
+          schema: { type: string }
+        - name: programmeSource
+          in: query
+          description: Which side of the reconciliation the programme filter applies to -- see programmeValue.
+          schema: { type: string, enum: [internal, bud] }
+        - name: programmeValue
+          in: query
+          description: A programme name, or the literal "Unknown" for a blank one.
+          schema: { type: string }
+        - name: search
+          in: query
+          description: Case-insensitive substring match against learner name or learner reference.
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Allocation reconciliation results for the requested view (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AllocationReconciliationResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /allocation-reconciliation/population-summary:
+    get:
+      operationId: getAllocationReconciliationPopulationSummary
+      tags: [allocation-reconciliation]
+      description: >-
+        Stage 2 corrected, same-snapshot Stage 1 population summary (admin
+        only, read-only). Replaces the original completion report's
+        mislabelled "220"/"429"/"191" comparison figures with populations
+        computed fresh and named for what they actually are.
+      responses:
+        "200":
+          description: Corrected population summary (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AllocationReconciliationPopulationSummary" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /allocation-reconciliation/multiple-plan-breakdown:
+    get:
+      operationId: getAllocationReconciliationMultiplePlanBreakdown
+      tags: [allocation-reconciliation]
+      description: >-
+        Stage 2, item 7 (admin only, read-only): for learners with one
+        current In Progress Bud plan plus historical plans, whether an
+        existing Bud link points at the current plan, a historical one, or
+        doesn't exist. Read-only visibility -- never relinks anything.
+      responses:
+        "200":
+          description: Multiple-plan link breakdown (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AllocationReconciliationMultiplePlanBreakdown" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /allocation/scheduled:
     get:
       operationId: listScheduledAllocations
@@ -1984,6 +2308,276 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ---------- Catch-up recording (Stage 3) ----------
+  # Tutor-confirmed catch-up for a recorded absence -- stored entirely
+  # separately from attendance_records (never replaces the original
+  # status or adds to hours_attended). Every endpoint reuses the same
+  # session-attendance-authority rules as the rest of attendance data.
+  /attendance/sessions/{sessionId}/catchup/{learnerId}:
+    get:
+      operationId: getCatchupState
+      tags: [catchup]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Current catch-up state for this learner/session (live-derived, never a stored flag)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatchupState" }
+        "403":
+          description: Not allowed to access this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Attendance session not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post:
+      operationId: recordCatchup
+      tags: [catchup]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordCatchupInput" }
+      responses:
+        "200":
+          description: Catch-up recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatchupState" }
+        "400":
+          description: Ineligible (not expected, not an eligible absence status, session cancelled/future, invalid completion date)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to write to this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Catch-up already recorded for this learner/session -- use the correction action instead
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    put:
+      operationId: correctCatchup
+      tags: [catchup]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CorrectCatchupInput" }
+      responses:
+        "200":
+          description: Catch-up record corrected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatchupState" }
+        "400":
+          description: Invalid completion date, or missing note/reason
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to write to this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: No active catch-up record to correct
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /attendance/sessions/{sessionId}/catchup/{learnerId}/revoke:
+    post:
+      operationId: revokeCatchup
+      tags: [catchup]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RevokeCatchupInput" }
+      responses:
+        "200":
+          description: Catch-up record revoked (history retained, never deleted)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatchupState" }
+        "400":
+          description: Missing reason
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to write to this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: No active catch-up record to revoke
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /attendance/sessions/{sessionId}/catchup/{learnerId}/history:
+    get:
+      operationId: getCatchupHistory
+      tags: [catchup]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Full audit trail (record/correct/revoke) for this learner/session's catch-up, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CatchupHistoryEntry" }
+        "403":
+          description: Not allowed to access this session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /attendance/catchup/follow-up:
+    get:
+      operationId: listCatchupFollowUp
+      tags: [catchup]
+      description: >-
+        Weekly absence-follow-up list (item 4) -- one row per absent
+        learner/session pair, selected by the ORIGINAL session date range.
+        A catch-up completed later still appears against that original
+        absence. Read-only.
+      parameters:
+        - name: weekStart
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: weekEnd
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [outstanding, completed] }
+        - name: search
+          in: query
+          description: Free-text learner-name filter, applied server-side before pagination.
+          schema: { type: string }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Weekly absence-follow-up list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatchupFollowUpList" }
+        "400":
+          description: weekEnd before weekStart, or pageSize out of range
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to filter by another tutor's cohort/learner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ---------- Session participation report (Stage 3 catch-up feature) ----------
+  # Session-based figures (distinct expected learner/session pairs) kept
+  # entirely separate from the existing minutes-based attendancePercentage
+  # above -- never blended, always separately labelled.
+  /reports/participation:
+    get:
+      operationId: getParticipationReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+      responses:
+        "200":
+          description: Session-based participation including catch-up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionParticipationMetrics" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/participation/export:
+    get:
+      operationId: exportParticipationReport
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/PeriodParam"
+        - $ref: "#/components/parameters/DateFromParam"
+        - $ref: "#/components/parameters/DateToParam"
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - $ref: "#/components/parameters/LearnerIdQueryParam"
+      responses:
+        "200":
+          description: CSV export of the session participation report (single summary row)
+          content:
+            text/csv:
+              schema: { type: string }
+        "403":
+          description: Not allowed to export this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   # ---------- Reports (Phase 9) ----------
   # All calculations here are backed by the same attendance_metrics engine
   # as /dashboard/* and /attendance-summary/* (Phase 8) -- report and
@@ -2552,6 +3146,130 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  # ---------- Learner engagement recency (Stage 4) ----------
+  # Combines four SEPARATE evidence signals (live attendance, Bud
+  # submission, Bud completed activity, Stage 3 confirmed catch-up) into
+  # one "latest recorded engagement" date per learner -- see
+  # engagement_lib.py for the full source-selection/permission design.
+  # Summary/export are registered before the {learnerId} detail route so
+  # they are never shadowed by it.
+  /reports/engagement-recency/summary:
+    get:
+      operationId: getEngagementRecencySummary
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+      responses:
+        "200":
+          description: Compact engagement-recency counts for the caller's authorised scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EngagementRecencySummary" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/engagement-recency/export:
+    get:
+      operationId: exportEngagementRecency
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - name: programme
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: noEngagementOnly
+          in: query
+          schema: { type: boolean, default: false }
+        - name: minDaysSince
+          in: query
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: CSV export of the full filtered authorised engagement-recency results (streamed)
+          content:
+            text/csv:
+              schema: { type: string }
+        "400":
+          description: Export would exceed the maximum row limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Not allowed to export this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/engagement-recency:
+    get:
+      operationId: listEngagementRecency
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/TutorIdQueryParam"
+        - $ref: "#/components/parameters/CohortIdQueryParam"
+        - name: programme
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: noEngagementOnly
+          in: query
+          schema: { type: boolean, default: false }
+        - name: minDaysSince
+          in: query
+          description: "\"At least N days since engagement\" -- always excludes learners with no recorded engagement at all (kept distinct, never swept in by an implicit \"infinite days\")."
+          schema: { type: integer, minimum: 0 }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: One row per learner in the caller's authorised scope, worst-first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EngagementRecencyList" }
+        "403":
+          description: Not allowed to access this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reports/engagement-recency/{learnerId}:
+    get:
+      operationId: getEngagementRecencyDetail
+      tags: [reports]
+      description: >-
+        Traceability drill-down (item 6): the exact same combination rule
+        as the list, with full supporting-evidence references. This is a
+        current view of available evidence, not a reconstruction of what
+        was known on any historical date.
+      parameters:
+        - name: learnerId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Full engagement-recency detail with supporting evidence for one learner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EngagementRecencyDetail" }
+        "403":
+          description: Not allowed to access this learner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Learner not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /reports/allocation-history:
     get:
       operationId: getAllocationHistoryReport
@@ -2851,6 +3569,140 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppSettings"
 
+  /tutor-identity/diagnostics:
+    get:
+      operationId: getTutorIdentityDiagnostics
+      tags: [tutor-identity]
+      description: >-
+        Stage 2 (admin only, read-only): Bud tutor identifiers with no
+        valid internal mapping, held only by an inactive tutor record,
+        attached to more than one internal tutor record, and potential
+        duplicate tutor records for human review. Never merges or changes
+        anything -- see tutor_identity_lib.py's module docstring.
+      responses:
+        "200":
+          description: Tutor identity diagnostics (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TutorIdentityDiagnostics" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /tutor-identity/mapping-corrections/preview:
+    post:
+      operationId: previewTutorMappingCorrection
+      tags: [tutor-identity]
+      description: >-
+        Stage 2 (admin only, read-only): previews reassigning a Bud tutor
+        identifier from one internal tutor record to another. Writes
+        nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TutorMappingCorrectionPreviewRequest" }
+      responses:
+        "200":
+          description: Preview of the proposed correction (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TutorMappingCorrectionPreview" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Source or target tutor not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /tutor-identity/mapping-corrections/commit:
+    post:
+      operationId: commitTutorMappingCorrection
+      tags: [tutor-identity]
+      description: >-
+        Stage 2 (admin only): applies a previewed tutor mapping correction.
+        Requires a non-blank reason and the exact updated_at values the
+        preview showed for both tutors (rejected with 409 if either has
+        changed since). Atomic; writes an audit_logs entry with
+        before/after values; never touches learners, cohorts, or attendance,
+        and never triggers a Bud learner-sync commit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TutorMappingCorrectionCommitRequest" }
+      responses:
+        "200":
+          description: Correction applied (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TutorMappingCorrectionResult" }
+        "400":
+          description: Missing reason, or source/target are the same record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Stale preview, or the Bud identifier is now held by another tutor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /bud-missing-source/exceptions:
+    get:
+      operationId: getBudMissingSourceExceptions
+      tags: [bud-missing-source]
+      description: >-
+        Stage 2, item 6 (admin only, READ-ONLY): reverse-presence
+        exceptions for previously-linked, internally active learners whose
+        linked Bud learning-plan row is missing from the source. Lists
+        whatever the last POST /bud-missing-source/refresh detected --
+        never triggers detection itself. Never infers completion/
+        withdrawal/deletion or changes a learner's status.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, resolved], default: open }
+      responses:
+        "200":
+          description: Reverse-presence exceptions (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BudMissingSourceExceptionList" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /bud-missing-source/refresh:
+    post:
+      operationId: refreshBudMissingSource
+      tags: [bud-missing-source]
+      description: >-
+        Stage 2, item 6 (admin only): runs reverse-presence detection now,
+        transactionally and idempotently, and returns the updated refresh
+        status. A failure here never discards the last successful results
+        -- only last_attempted_at/last_error move; last_succeeded_at and
+        the exceptions themselves are untouched.
+      responses:
+        "200":
+          description: Updated refresh status (admin only)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BudMissingSourceRefreshStatus" }
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /bud-sync/status:
     get:
       operationId: getBudSyncStatus
@@ -3747,6 +4599,182 @@ components:
         updated: { type: integer }
         skipped: { type: integer }
         transferred: { type: integer }
+
+    FsRequirementImportJobStatus:
+      type: string
+      enum: [ready, importing, completed, cancelled]
+
+    FsRequirementRowOutcome:
+      type: string
+      description: >-
+        new: no requirement row exists yet. changed: a row exists and the
+        proposed value differs. unchanged: a row exists, status='recorded',
+        identical to proposed -- a no-op at commit. warning: a later row
+        repeating an earlier row's SAME learnerID and AIM in this file --
+        collapsed, only the first occurrence is applied. error: blocks the
+        whole commit until fixed and re-uploaded (unknown/ambiguous
+        learnerID, blank/unrecognised AIM, or conflicting AIM values for
+        the same learnerID within the file).
+      enum: [new, changed, unchanged, warning, error]
+
+    FsRequirementImportJob:
+      type: object
+      required:
+        [
+          id, filename, uploadedBy, status, totalRows, newCount, changedCount, unchangedCount,
+          warningCount, errorCount, resultSummary, lastError, startedImportingAt, createdAt, updatedAt, expiresAt,
+        ]
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        uploadedBy: { type: integer }
+        status: { $ref: "#/components/schemas/FsRequirementImportJobStatus" }
+        totalRows: { type: integer }
+        newCount: { type: integer }
+        changedCount: { type: integer }
+        unchangedCount: { type: integer }
+        warningCount: { type: integer }
+        errorCount: { type: integer }
+        resultSummary:
+          oneOf: [{ type: object, additionalProperties: true }, { type: "null" }]
+        lastError: { oneOf: [{ type: string }, { type: "null" }] }
+        startedImportingAt: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+
+    FsRequirementImportJobRow:
+      type: object
+      required:
+        [
+          id, jobId, rowNumber, rawData, normalizedAim, matchedLearnerId, outcome,
+          existingMaths, existingEnglish, existingStatus, proposedMaths, proposedEnglish,
+          errors, warnings, importResult, createdAt,
+        ]
+      properties:
+        id: { type: integer }
+        jobId: { type: integer }
+        rowNumber: { type: integer }
+        rawData:
+          type: object
+          additionalProperties: { type: string }
+          description: The raw CSV row verbatim, keyed by its literal headers (learnerID, AIM).
+        normalizedAim:
+          oneOf: [{ type: string, enum: [math, english, both] }, { type: "null" }]
+        matchedLearnerId: { oneOf: [{ type: integer }, { type: "null" }] }
+        matchedLearnerName:
+          oneOf: [{ type: string }, { type: "null" }]
+          description: Looked up live against the current learner record, not persisted -- reflects the learner's name as of this read, not at upload time.
+        matchedLearnerStatus:
+          oneOf: [{ type: string, enum: [active, withdrawn, completed, paused] }, { type: "null" }]
+          description: Looked up live against the current learner record, not persisted.
+        outcome: { $ref: "#/components/schemas/FsRequirementRowOutcome" }
+        existingMaths: { oneOf: [{ type: boolean }, { type: "null" }] }
+        existingEnglish: { oneOf: [{ type: boolean }, { type: "null" }] }
+        existingStatus: { oneOf: [{ type: string, enum: [recorded, cleared] }, { type: "null" }] }
+        proposedMaths: { oneOf: [{ type: boolean }, { type: "null" }] }
+        proposedEnglish: { oneOf: [{ type: boolean }, { type: "null" }] }
+        errors:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        importResult: { oneOf: [{ type: string }, { type: "null" }] }
+        createdAt: { type: string, format: date-time }
+
+    FsRequirementImportJobRowListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FsRequirementImportJobRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    LearnerFsRequirement:
+      type: object
+      description: >-
+        "Uploaded Functional Skills requirement" -- an interim, manually-
+        sourced record of subject need, never verified open ILR aims or
+        funding eligibility.
+      required: [id, learnerId, maths, english, status, source, importBatchId, updatedBy, updatedAt, createdAt]
+      properties:
+        id: { type: integer }
+        learnerId: { type: integer }
+        maths: { type: boolean }
+        english: { type: boolean }
+        status:
+          description: recorded = an active requirement is on file. cleared = an admin explicitly removed it (row retained, history preserved) -- never confused with "no requirement data uploaded" (a null response, no row at all).
+          type: string
+          enum: [recorded, cleared]
+        source: { type: string, enum: [manual_upload] }
+        importBatchId: { oneOf: [{ type: integer }, { type: "null" }] }
+        updatedBy: { type: integer }
+        updatedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    ClearFsRequirementInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+
+    FsRequirementAllocationCohort:
+      type: object
+      required: [cohortId, cohortName, subject, tutorId, tutorName, tutorActive]
+      properties:
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        subject: { type: string, enum: [math, english, both] }
+        tutorId: { oneOf: [{ type: integer }, { type: "null" }] }
+        tutorName: { oneOf: [{ type: string }, { type: "null" }] }
+        tutorActive: { oneOf: [{ type: boolean }, { type: "null" }] }
+
+    FsRequirementAllocationItem:
+      type: object
+      required:
+        [
+          id, learnerRef, learnerName, status, maths, english, requirementRecorded, requirementStatus,
+          missingSubjects, missingTutorSubjects, activeSecondaryCohorts,
+        ]
+      properties:
+        id: { type: integer }
+        learnerRef: { type: string }
+        learnerName: { type: string }
+        status: { $ref: "#/components/schemas/LearnerStatus" }
+        maths: { type: boolean }
+        english: { type: boolean }
+        requirementRecorded: { type: boolean }
+        requirementStatus: { oneOf: [{ type: string, enum: [recorded, cleared] }, { type: "null" }] }
+        source: { oneOf: [{ type: string }, { type: "null" }] }
+        importBatchId: { oneOf: [{ type: integer }, { type: "null" }] }
+        updatedBy: { oneOf: [{ type: integer }, { type: "null" }] }
+        updatedAt: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        missingSubjects:
+          type: array
+          items: { type: string, enum: [math, english] }
+          description: Required subject(s) with no active, actively-tutored covering cohort.
+        missingTutorSubjects:
+          type: array
+          items: { type: string, enum: [math, english] }
+          description: Required subject(s) that ARE covered by an active enrollment, but whose cohort's tutor is missing/inactive -- flagged separately from missingSubjects.
+        activeSecondaryCohorts:
+          type: array
+          items: { $ref: "#/components/schemas/FsRequirementAllocationCohort" }
+
+    FsRequirementAllocationListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FsRequirementAllocationItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     TutorImportJobStatus:
       type: string
@@ -4714,6 +5742,418 @@ components:
           type: array
           items: { $ref: "#/components/schemas/FunctionalSkillsLearnerRow" }
 
+    AllocationReconciliationRow:
+      type: object
+      required:
+        [
+          learnerName,
+          learnerRef,
+          internalLearnerId,
+          budLearningPlanId,
+          internalStatus,
+          budStatus,
+          internalTutorId,
+          internalTutorName,
+          budTutorName,
+          programme,
+          programmeSource,
+          homeCohortId,
+          homeCohortName,
+          homeCohortActive,
+          homeCohortDeleted,
+          homeCohortMembershipType,
+          classification,
+          reviewReason,
+          issueFlags,
+        ]
+      properties:
+        learnerName: { type: ["string", "null"] }
+        learnerRef: { type: ["string", "null"] }
+        internalLearnerId: { type: ["integer", "null"] }
+        budLearningPlanId: { type: ["string", "null"] }
+        internalStatus: { type: ["string", "null"] }
+        budStatus: { type: ["string", "null"] }
+        internalTutorId: { type: ["integer", "null"] }
+        internalTutorName: { type: ["string", "null"] }
+        budTutorName: { type: ["string", "null"] }
+        programme: { type: ["string", "null"] }
+        programmeSource: { type: ["string", "null"] }
+        homeCohortId: { type: ["integer", "null"] }
+        homeCohortName: { type: ["string", "null"] }
+        homeCohortActive: { type: ["boolean", "null"] }
+        homeCohortDeleted: { type: ["boolean", "null"] }
+        homeCohortMembershipType: { type: ["string", "null"] }
+        classification:
+          type: string
+          enum: [assigned, unassigned, needs_review]
+        reviewReason: { type: ["string", "null"] }
+        issueFlags:
+          type: array
+          items: { type: string }
+
+    AllocationReconciliationNeedsReviewCounts:
+      type: object
+      description: >-
+        Deliberately three separate numbers, never one: a single person can
+        appear on more than one Needs Review row (e.g. once per ambiguous
+        Bud learning plan), so recordCount is not a person count.
+      required: [recordCount, distinctPeopleCount, budLearningPlanRowCount]
+      properties:
+        recordCount: { type: integer }
+        distinctPeopleCount: { type: integer }
+        budLearningPlanRowCount: { type: integer }
+
+    AllocationReconciliationCounts:
+      type: object
+      required: [confirmedAssigned, confirmedUnassigned, needsReview]
+      properties:
+        confirmedAssigned:
+          type: integer
+          description: Distinct internal learners classified as assigned.
+        confirmedUnassigned:
+          type: integer
+          description: Distinct internal learners classified as unassigned.
+        needsReview: { $ref: "#/components/schemas/AllocationReconciliationNeedsReviewCounts" }
+
+    AllocationReconciliationAmbiguousPlanBreakdown:
+      type: object
+      required:
+        [
+          distinctLearnerReferences,
+          affectedBudLearningPlans,
+          affectedInternalLearners,
+          withMultipleInProgressPlans,
+          withOneInProgressPlusHistorical,
+          withOnlyHistoricalPlans,
+        ]
+      properties:
+        distinctLearnerReferences: { type: integer }
+        affectedBudLearningPlans: { type: integer }
+        affectedInternalLearners: { type: integer }
+        withMultipleInProgressPlans: { type: integer }
+        withOneInProgressPlusHistorical: { type: integer }
+        withOnlyHistoricalPlans: { type: integer }
+
+    AllocationReconciliationAvailableFilters:
+      type: object
+      required: [budTutorNames, budProgrammes]
+      properties:
+        budTutorNames:
+          type: array
+          items: { type: string }
+        budProgrammes:
+          type: array
+          items: { type: string }
+
+    AllocationReconciliationSyncJobSummary:
+      type: object
+      required: [id, status, startedAt, completedAt]
+      properties:
+        id: { type: integer }
+        status: { type: string }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+
+    AllocationReconciliationSourceInfo:
+      type: object
+      required: [sourceMaxSyncedAt, sourceRowCount, latestAppSyncJob, sourceCompletenessNote]
+      properties:
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        sourceRowCount: { type: integer }
+        latestAppSyncJob:
+          oneOf:
+            - $ref: "#/components/schemas/AllocationReconciliationSyncJobSummary"
+            - type: "null"
+        sourceCompletenessNote: { type: string }
+
+    AllocationReconciliationResponse:
+      type: object
+      required: [items, total, page, pageSize, counts, availableFilters, sourceInfo, ambiguousPlanBreakdown, calculatedAt]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AllocationReconciliationRow" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        counts: { $ref: "#/components/schemas/AllocationReconciliationCounts" }
+        availableFilters: { $ref: "#/components/schemas/AllocationReconciliationAvailableFilters" }
+        sourceInfo: { $ref: "#/components/schemas/AllocationReconciliationSourceInfo" }
+        ambiguousPlanBreakdown: { $ref: "#/components/schemas/AllocationReconciliationAmbiguousPlanBreakdown" }
+        calculatedAt: { type: string, format: date-time }
+
+    AllocationReconciliationExclusionBreakdownEntry:
+      type: object
+      required: [reason, count]
+      properties:
+        reason: { type: string }
+        count: { type: integer }
+
+    AllocationReconciliationPopulationSummary:
+      type: object
+      required:
+        [
+          calculatedAt,
+          confirmedAssigned,
+          confirmedUnassigned,
+          needsReview,
+          broaderActiveWithoutActiveHomeCohort,
+          budCorroboratedActiveWithoutActiveHomeCohort,
+          exclusionBreakdown,
+          sourceInfo,
+        ]
+      properties:
+        calculatedAt: { type: string, format: date-time }
+        confirmedAssigned: { type: integer }
+        confirmedUnassigned: { type: integer }
+        needsReview: { $ref: "#/components/schemas/AllocationReconciliationNeedsReviewCounts" }
+        broaderActiveWithoutActiveHomeCohort:
+          type: integer
+          description: Every internally active learner lacking a valid home cohort, regardless of Bud status.
+        budCorroboratedActiveWithoutActiveHomeCohort:
+          type: integer
+          description: The same population narrowed to learners Bud references at all (any status, any resolution cleanliness).
+        exclusionBreakdown:
+          type: array
+          description: Mutually-exclusive partition of broaderActiveWithoutActiveHomeCohort by reconciliation reason.
+          items: { $ref: "#/components/schemas/AllocationReconciliationExclusionBreakdownEntry" }
+        sourceInfo: { $ref: "#/components/schemas/AllocationReconciliationSourceInfo" }
+
+    AllocationReconciliationMultiplePlanDetail:
+      type: object
+      required: [learnerReference, internalLearnerId, learnerName, category, currentPlanId, linkedPlanId, totalPlansForReference]
+      properties:
+        learnerReference: { type: string }
+        internalLearnerId: { type: ["integer", "null"] }
+        learnerName: { type: ["string", "null"] }
+        category:
+          type: string
+          enum: [link_points_to_current, link_points_to_historical, no_existing_link, conflicting_or_unresolved]
+        currentPlanId: { type: string }
+        linkedPlanId: { type: ["string", "null"] }
+        totalPlansForReference: { type: integer }
+
+    AllocationReconciliationMultiplePlanBreakdown:
+      type: object
+      required: [linkPointsToCurrentPlan, linkPointsToHistoricalPlan, noExistingLink, conflictingOrUnresolved, details]
+      properties:
+        linkPointsToCurrentPlan: { type: integer }
+        linkPointsToHistoricalPlan: { type: integer }
+        noExistingLink: { type: integer }
+        conflictingOrUnresolved: { type: integer }
+        details:
+          type: array
+          items: { $ref: "#/components/schemas/AllocationReconciliationMultiplePlanDetail" }
+
+    TutorIdentitySummary:
+      type: object
+      required: [id, firstName, lastName, email, active, externalSystemId, employeeRef, updatedAt]
+      properties:
+        id: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        active: { type: boolean }
+        externalSystemId: { type: ["string", "null"] }
+        employeeRef: { type: ["string", "null"] }
+        updatedAt: { type: string, format: date-time }
+
+    TutorIdentityUnmatchedBudTutor:
+      type: object
+      required: [budTutorId, budTutorName, affectedLearnerReferences, affectedBudLearningPlanRows]
+      properties:
+        budTutorId: { type: string }
+        budTutorName: { type: ["string", "null"] }
+        affectedLearnerReferences: { type: integer }
+        affectedBudLearningPlanRows: { type: integer }
+
+    TutorIdentityInactiveOnlyBudTutor:
+      type: object
+      required: [budTutorId, budTutorName, inactiveTutor, affectedLearnerReferences, affectedBudLearningPlanRows]
+      properties:
+        budTutorId: { type: string }
+        budTutorName: { type: ["string", "null"] }
+        inactiveTutor: { $ref: "#/components/schemas/TutorIdentitySummary" }
+        affectedLearnerReferences: { type: integer }
+        affectedBudLearningPlanRows: { type: integer }
+
+    TutorIdentityMultiOwnerBudTutor:
+      type: object
+      required: [budTutorId, budTutorName, tutors, affectedLearnerReferences, affectedBudLearningPlanRows]
+      properties:
+        budTutorId: { type: string }
+        budTutorName: { type: ["string", "null"] }
+        tutors:
+          type: array
+          items: { $ref: "#/components/schemas/TutorIdentitySummary" }
+        affectedLearnerReferences: { type: integer }
+        affectedBudLearningPlanRows: { type: integer }
+
+    TutorIdentityDuplicateCandidateGroup:
+      type: object
+      required: [normalizedName, tutors]
+      properties:
+        normalizedName: { type: string }
+        tutors:
+          type: array
+          items: { $ref: "#/components/schemas/TutorIdentitySummary" }
+
+    TutorIdentityDiagnostics:
+      type: object
+      required: [unmatchedBudTutorIds, budIdsHeldOnlyByInactiveTutor, budIdAttachedToMultipleTutors, duplicateTutorCandidates, totals]
+      properties:
+        unmatchedBudTutorIds:
+          type: array
+          items: { $ref: "#/components/schemas/TutorIdentityUnmatchedBudTutor" }
+        budIdsHeldOnlyByInactiveTutor:
+          type: array
+          items: { $ref: "#/components/schemas/TutorIdentityInactiveOnlyBudTutor" }
+        budIdAttachedToMultipleTutors:
+          type: array
+          items: { $ref: "#/components/schemas/TutorIdentityMultiOwnerBudTutor" }
+        duplicateTutorCandidates:
+          type: array
+          items: { $ref: "#/components/schemas/TutorIdentityDuplicateCandidateGroup" }
+        totals:
+          type: object
+          required: [distinctAffectedLearnerReferences, affectedBudLearningPlanRows]
+          properties:
+            distinctAffectedLearnerReferences: { type: integer }
+            affectedBudLearningPlanRows: { type: integer }
+
+    TutorMappingCorrectionPreviewRequest:
+      type: object
+      required: [sourceTutorId, targetTutorId, budTutorId]
+      properties:
+        sourceTutorId: { type: integer }
+        targetTutorId: { type: integer }
+        budTutorId: { type: string }
+
+    TutorMappingFieldChange:
+      type: object
+      required: [tutorId, field, before, after]
+      properties:
+        tutorId: { type: integer }
+        field: { type: string }
+        before: { type: ["string", "null"] }
+        after: { type: ["string", "null"] }
+
+    TutorMappingCorrectionPreview:
+      type: object
+      required:
+        [
+          sourceTutor, targetTutor, budTutorId, nameMatch, supportingSignals,
+          requiresManualIdentityConfirmation, conflictingIdentifierOwnership,
+          fieldChanges, downstreamEffects, remainingUnresolved, preview,
+        ]
+      properties:
+        sourceTutor: { $ref: "#/components/schemas/TutorIdentitySummary" }
+        targetTutor: { $ref: "#/components/schemas/TutorIdentitySummary" }
+        budTutorId: { type: string }
+        nameMatch:
+          type: boolean
+          description: A supporting signal only -- two different people can share a name. Never treated as proof.
+        supportingSignals:
+          type: array
+          description: Signals for a human to weigh (e.g. shared phone, a prior direct transfer between these two records) -- none of them, singly or combined, constitute identity confirmation.
+          items: { type: string }
+        requiresManualIdentityConfirmation:
+          type: boolean
+          description: Always true -- every correction requires an explicit identityConfirmedByAdmin=true at commit, regardless of supportingSignals.
+        conflictingIdentifierOwnership:
+          type: array
+          items: { type: string }
+        fieldChanges:
+          type: array
+          items: { $ref: "#/components/schemas/TutorMappingFieldChange" }
+        downstreamEffects:
+          type: array
+          items: { type: string }
+        remainingUnresolved:
+          type: array
+          items: { type: string }
+        preview:
+          type: object
+          required: [sourceTutorUpdatedAt, targetTutorUpdatedAt]
+          properties:
+            sourceTutorUpdatedAt: { type: string, format: date-time }
+            targetTutorUpdatedAt: { type: string, format: date-time }
+
+    TutorMappingCorrectionCommitRequest:
+      type: object
+      required: [sourceTutorId, targetTutorId, budTutorId, expectedSourceTutorUpdatedAt, expectedTargetTutorUpdatedAt, reason]
+      properties:
+        sourceTutorId: { type: integer }
+        targetTutorId: { type: integer }
+        budTutorId: { type: string }
+        expectedSourceTutorUpdatedAt: { type: string, format: date-time }
+        expectedTargetTutorUpdatedAt: { type: string, format: date-time }
+        reason: { type: string }
+        identityConfirmedByAdmin:
+          type: boolean
+          default: false
+          description: Required (true) when the preview's identityConfirmed was false -- an explicit admin acknowledgement that a human, not the system, verified these are the same person.
+
+    TutorMappingCorrectionResult:
+      type: object
+      required: [sourceTutorId, targetTutorId, budTutorId, appliedAt, reason, invalidatedPreviewJobIds]
+      properties:
+        sourceTutorId: { type: integer }
+        targetTutorId: { type: integer }
+        budTutorId: { type: string }
+        appliedAt: { type: ["string", "null"], format: date-time }
+        reason: { type: string }
+        invalidatedPreviewJobIds:
+          type: array
+          description: Any 'ready' (unapplied) Bud sync preview jobs marked 'failed' by this correction, since their proposed values may reference the old tutor mapping. Generate a new preview to see the corrected matching.
+          items: { type: integer }
+
+    BudMissingSourceException:
+      type: object
+      required:
+        [
+          id, internalLearnerId, budLearningPlanId, learnerReference, status, firstDetectedAt,
+          lastConfirmedMissingAt, resolvedAt, learnerName, learnerStatus,
+          otherPlansForPersonStillPresent, personEntirelyAbsentFromSource, sourceReferenceUnknown,
+        ]
+      properties:
+        id: { type: integer }
+        internalLearnerId: { type: integer }
+        budLearningPlanId: { type: string }
+        learnerReference: { type: ["string", "null"] }
+        status: { type: string, enum: [open, resolved] }
+        firstDetectedAt: { type: string, format: date-time }
+        lastConfirmedMissingAt: { type: string, format: date-time }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        learnerName: { type: ["string", "null"] }
+        learnerStatus: { type: ["string", "null"] }
+        otherPlansForPersonStillPresent: { type: boolean }
+        personEntirelyAbsentFromSource: { type: boolean }
+        sourceReferenceUnknown: { type: boolean }
+
+    BudMissingSourceRefreshStatus:
+      type: object
+      required: [lastAttemptedAt, lastTriggeredBy, lastSucceededAt, lastNewlyOpened, lastResolved, lastError]
+      properties:
+        lastAttemptedAt: { type: ["string", "null"], format: date-time }
+        lastTriggeredBy: { type: ["integer", "null"] }
+        lastSucceededAt: { type: ["string", "null"], format: date-time }
+        lastNewlyOpened: { type: ["integer", "null"] }
+        lastResolved: { type: ["integer", "null"] }
+        lastError:
+          type: ["string", "null"]
+          description: Set only when the LAST attempt failed; cleared on the next success. Never affects lastSucceededAt/lastNewlyOpened/lastResolved, which always reflect the last successful run.
+
+    BudMissingSourceExceptionList:
+      type: object
+      required: [items, sourceInfo, refreshStatus]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/BudMissingSourceException" }
+        sourceInfo: { $ref: "#/components/schemas/AllocationReconciliationSourceInfo" }
+        refreshStatus: { $ref: "#/components/schemas/BudMissingSourceRefreshStatus" }
+
     OrganisationReportResponse:
       type: object
       required:
@@ -4863,6 +6303,207 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    EngagementSource:
+      type: string
+      enum: [attendance, bud_submission, bud_completed_activity, catchup]
+
+    EngagementBudStatus:
+      type: string
+      description: >-
+        not_authorized: the caller does not have an established permission
+        to view this learner's Bud activity (no Bud dates or plan id are
+        returned at all). not_linked: no admin-confirmed Bud learning-plan
+        link exists for this learner. missing_source: a link exists but
+        the plan is not present in the current Bud extract (needs
+        review). needs_review: the linked plan does not appear to be the
+        learner's relevant CURRENT plan (see budPlanCurrency) -- its dates
+        are withheld, not shown as current. resolved: the linked plan was
+        found, is the relevant current plan (or the learner has no
+        current plan at all to conflict with it), and its dates (if any)
+        are shown for reference -- but never included in
+        latestEngagementDate; see EngagementRecencyItem's description.
+      enum: [not_authorized, not_linked, missing_source, needs_review, resolved]
+
+    EngagementBudPlanCurrency:
+      type: string
+      description: >-
+        Null when budStatus is not_authorized/not_linked/missing_source
+        (the question doesn't apply). current: the linked plan is the
+        learner's only/most-recently-confirmed 'In Progress' plan.
+        no_current_plan: the linked plan isn't 'In Progress', and no
+        OTHER plan sharing its learner_reference is either -- not
+        ambiguous, just inactive. linked_plan_not_current: a DIFFERENT
+        plan sharing the same learner_reference is 'In Progress' while
+        the linked one is not -- the link may be stale.
+        multiple_current_plans_ambiguous: 2+ plans sharing the same
+        learner_reference are concurrently 'In Progress' -- which is
+        relevant cannot be determined automatically.
+      enum: [current, no_current_plan, linked_plan_not_current, multiple_current_plans_ambiguous]
+
+    EngagementRecencyItem:
+      type: object
+      required:
+        [
+          id, learnerRef, learnerName, programme,
+          lastLiveAttendance, lastBudSubmission, lastBudCompletedActivity, lastCatchupCompletion,
+          latestEngagementDate, sources, daysSinceEngagement,
+          budStatus, hasIncompleteSourceCoverage, dataQualityIssues, sourceLimitations,
+        ]
+      properties:
+        id: { type: integer }
+        learnerRef: { type: string }
+        learnerName: { type: string }
+        tutorName: { oneOf: [{ type: string }, { type: "null" }] }
+        programme: { type: string }
+        lastLiveAttendance:
+          description: Most recent session date with status present/late, drawn only from sessions the caller has session-level authority over -- future, cancelled and deleted sessions excluded. Contributes to latestEngagementDate.
+          oneOf: [{ type: string, format: date }, { type: "null" }]
+        lastBudSubmission:
+          description: >-
+            Reference only -- learner_progress.last_submission_date's
+            upstream meaning (learner-initiated vs assessor/system update)
+            has not been confirmed. NEVER included in
+            latestEngagementDate/sources/daysSinceEngagement. Null
+            whenever budStatus is not "resolved" (unauthorised, unlinked,
+            missing, or the linked plan isn't the relevant current one).
+          oneOf: [{ type: string, format: date }, { type: "null" }]
+        lastBudCompletedActivity:
+          description: Same caveats as lastBudSubmission -- learner_progress.last_completed_activity's real-world meaning is unverified.
+          oneOf: [{ type: string, format: date }, { type: "null" }]
+        lastCatchupCompletion:
+          description: The catch-up's own completion date, drawn only from sessions the caller has session-level authority over -- never the original missed session date, never when the tutor entered the confirmation. Contributes to latestEngagementDate.
+          oneOf: [{ type: string, format: date }, { type: "null" }]
+        latestEngagementDate:
+          description: The most recent valid qualifying date across ONLY the verified sources (live attendance, effective catch-up) -- Bud dates never contribute. Null means "No recorded engagement", not zero days.
+          oneOf: [{ type: string, format: date }, { type: "null" }]
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/EngagementSource" }
+          description: Currently only ever contains attendance/catchup -- see latestEngagementDate.
+        sourcesText: { type: string, description: "Same as sources, semicolon-joined (used by the CSV export)." }
+        daysSinceEngagement: { oneOf: [{ type: integer }, { type: "null" }] }
+        budStatus: { $ref: "#/components/schemas/EngagementBudStatus" }
+        budPlanCurrency:
+          oneOf: [{ $ref: "#/components/schemas/EngagementBudPlanCurrency" }, { type: "null" }]
+        hasIncompleteSourceCoverage:
+          type: boolean
+          description: True whenever Bud could not be reliably and authorisedly resolved to a current plan for this caller (budStatus != "resolved").
+        dataQualityIssues:
+          type: array
+          items: { type: string }
+          description: Human-readable notes for any attendance/catch-up candidate date excluded for being in the future.
+        dataQualityIssuesText: { type: string }
+        sourceLimitations:
+          type: array
+          items: { type: string }
+          description: Human-readable caveats about Bud source coverage/permission/currency for this row and this caller (item 5's "Source/matching limitations" column) -- always includes an "unverified" note whenever a Bud date is shown.
+        sourceLimitationsText: { type: string }
+        budLinkedPlanId:
+          description: Null when budStatus is "not_authorized" -- the plan id itself is withheld, not just its dates.
+          oneOf: [{ type: string }, { type: "null" }]
+        budResolvedPlanId: { oneOf: [{ type: string }, { type: "null" }] }
+        budSyncedAt:
+          description: Source-refresh freshness only -- never engagement evidence. Null unless budStatus is "resolved" or "needs_review".
+          oneOf: [{ type: string, format: date-time }, { type: "null" }]
+        budStatusDesc: { oneOf: [{ type: string }, { type: "null" }] }
+
+    EngagementRecencyList:
+      type: object
+      required: [items, total, page, pageSize, calculatedAt, scopeLabel]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EngagementRecencyItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        calculatedAt: { type: string, format: date-time }
+        scopeLabel:
+          type: string
+          description: States the population this result is based on for the caller's authorised scope.
+
+    EngagementRecencySummary:
+      type: object
+      required: [totalLearners, noRecordedEngagementCount, calculatedAt, scopeLabel]
+      properties:
+        totalLearners: { type: integer }
+        noRecordedEngagementCount: { type: integer }
+        calculatedAt: { type: string, format: date-time }
+        scopeLabel: { type: string }
+
+    EngagementEvidenceAttendance:
+      type: object
+      required: [sessionId, sessionDate, status]
+      properties:
+        sessionId: { type: integer }
+        sessionDate: { type: string, format: date }
+        sessionTitle: { oneOf: [{ type: string }, { type: "null" }] }
+        status: { $ref: "#/components/schemas/AttendanceStatus" }
+
+    EngagementEvidenceCatchup:
+      type: object
+      required: [catchupId, sessionId, sessionDate, completionDate, method, confirmedAt, confirmedByUserId]
+      properties:
+        catchupId: { type: integer }
+        sessionId: { type: integer }
+        sessionDate: { type: string, format: date }
+        completionDate: { type: string, format: date }
+        method: { $ref: "#/components/schemas/CatchupMethod" }
+        note: { oneOf: [{ type: string }, { type: "null" }] }
+        confirmedAt: { type: string, format: date-time }
+        confirmedByUserId: { type: integer }
+
+    EngagementEvidenceBud:
+      type: object
+      properties:
+        linkedPlanId: { oneOf: [{ type: string }, { type: "null" }] }
+        resolvedPlanId: { oneOf: [{ type: string }, { type: "null" }] }
+        lastSubmissionDate: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        lastCompletedActivity: { oneOf: [{ type: string, format: date }, { type: "null" }] }
+        syncedAt: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        statusDesc: { oneOf: [{ type: string }, { type: "null" }] }
+        learningPlanUrl: { oneOf: [{ type: string }, { type: "null" }] }
+
+    EngagementRecencyDetail:
+      type: object
+      required: [latestEngagementDate, sources, daysSinceEngagement, dataQualityIssues, budStatus, hasIncompleteSourceCoverage, sourceLimitations, calculatedAt, scopeLabel]
+      properties:
+        latestEngagementDate: { oneOf: [{ type: string, format: date }, { type: "null" }] }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/EngagementSource" }
+        daysSinceEngagement: { oneOf: [{ type: integer }, { type: "null" }] }
+        dataQualityIssues:
+          type: array
+          items: { type: string }
+        budStatus: { $ref: "#/components/schemas/EngagementBudStatus" }
+        budPlanCurrency:
+          oneOf: [{ $ref: "#/components/schemas/EngagementBudPlanCurrency" }, { type: "null" }]
+        hasIncompleteSourceCoverage: { type: boolean }
+        sourceLimitations:
+          type: array
+          items: { type: string }
+        lastBudSubmission: { oneOf: [{ type: string, format: date }, { type: "null" }] }
+        lastBudCompletedActivity: { oneOf: [{ type: string, format: date }, { type: "null" }] }
+        budLinkedPlanId: { oneOf: [{ type: string }, { type: "null" }] }
+        budResolvedPlanId: { oneOf: [{ type: string }, { type: "null" }] }
+        budSyncedAt: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        budStatusDesc: { oneOf: [{ type: string }, { type: "null" }] }
+        attendanceEvidence:
+          oneOf: [{ $ref: "#/components/schemas/EngagementEvidenceAttendance" }, { type: "null" }]
+        catchupEvidence:
+          oneOf: [{ $ref: "#/components/schemas/EngagementEvidenceCatchup" }, { type: "null" }]
+        budEvidence:
+          description: Only populated when budStatus is "resolved" (authorised, linked, current) -- withheld entirely otherwise, not just its dates.
+          oneOf: [{ $ref: "#/components/schemas/EngagementEvidenceBud" }, { type: "null" }]
+        calculatedAt: { type: string, format: date-time }
+        scopeLabel:
+          type: string
+          description: >-
+            States whether this result is the caller's full authorised
+            evidence (admin) or restricted to what they can individually
+            see (a tutor) -- e.g. "Based on engagement visible to you".
 
     AttendanceHoursItem:
       type: object
@@ -5132,6 +6773,203 @@ components:
           description: True when there isn't enough recorded data to trust attendancePercentage (see the low-attendance minimum-data rule).
           type: boolean
         calculatedAt: { type: string, format: date-time }
+
+    SessionParticipationMetrics:
+      type: object
+      description: >-
+        Session-based figures (distinct expected learner/session pairs),
+        entirely separate from AttendanceMetrics' minutes-based
+        attendancePercentage above. totalParticipation = liveAttendedLearnerSessions
+        + caughtUp. participationRate = totalParticipation / expectedLearnerSessions
+        * 100, null when expectedLearnerSessions is zero. recordedAbsences and
+        caughtUp intentionally overlap (caughtUp is a subset of recordedAbsences).
+      required:
+        [
+          periodStart,
+          periodEnd,
+          expectedLearnerSessions,
+          liveAttendedLearnerSessions,
+          recordedAbsences,
+          caughtUp,
+          absencesWithoutCatchup,
+          attendanceNotRecorded,
+          totalParticipation,
+          participationRate,
+          calculatedAt,
+        ]
+      properties:
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        expectedLearnerSessions: { type: integer }
+        liveAttendedLearnerSessions: { type: integer, description: "Present or late (late counts as one attended learner-session, not full minutes)." }
+        recordedAbsences: { type: integer, description: "Authorised or unauthorised, regardless of catch-up." }
+        caughtUp: { type: integer, description: "Subset of recordedAbsences with an effective confirmed catch-up." }
+        absencesWithoutCatchup: { type: integer }
+        attendanceNotRecorded: { type: integer }
+        totalParticipation: { type: integer }
+        participationRate:
+          description: Null when expectedLearnerSessions is zero -- never a fabricated 0%.
+          oneOf:
+            - type: number
+            - type: "null"
+        calculatedAt:
+          type: string
+          format: date-time
+          description: >-
+            When this figure was produced. Catch-up known as of this moment
+            only -- a later catch-up confirmation can raise an earlier
+            period's participation on a subsequent call.
+
+    CatchupMethod:
+      type: string
+      enum: [recording_watched, activity_completed]
+
+    RecordCatchupInput:
+      type: object
+      required: [completionDate, method, note]
+      properties:
+        completionDate: { type: string, format: date }
+        method: { $ref: "#/components/schemas/CatchupMethod" }
+        note:
+          type: string
+          description: Required tutor-entered description of the completion evidence or activity -- this is tutor confirmation, not automated tracking.
+
+    CorrectCatchupInput:
+      type: object
+      required: [completionDate, method, note, reason]
+      properties:
+        completionDate: { type: string, format: date }
+        method: { $ref: "#/components/schemas/CatchupMethod" }
+        note: { type: string }
+        reason:
+          type: string
+          description: Required reason for the correction, retained in the audit history.
+
+    RevokeCatchupInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Required reason for the revocation, retained in the audit history.
+
+    CatchupRecord:
+      type: object
+      required:
+        [
+          id,
+          sessionId,
+          learnerId,
+          status,
+          completionDate,
+          method,
+          note,
+          originalStatusAtRecording,
+          recordedBy,
+          recordedAt,
+        ]
+      properties:
+        id: { type: integer }
+        sessionId: { type: integer }
+        learnerId: { type: integer }
+        status: { type: string, enum: [recorded, revoked] }
+        completionDate: { type: string, format: date }
+        method: { $ref: "#/components/schemas/CatchupMethod" }
+        note: { type: string }
+        originalStatusAtRecording:
+          description: The attendance status this catch-up was recorded against at the time -- retained even if the original attendance is later corrected.
+          $ref: "#/components/schemas/AttendanceStatus"
+        recordedBy: { type: integer }
+        recordedAt: { type: string, format: date-time }
+        lastUpdatedBy: { oneOf: [{ type: integer }, { type: "null" }] }
+        updatedAt: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        revokedAt: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        revokedBy: { oneOf: [{ type: integer }, { type: "null" }] }
+        revocationReason: { oneOf: [{ type: string }, { type: "null" }] }
+
+    CatchupState:
+      type: object
+      description: >-
+        The live-derived "does this catch-up currently count" state --
+        never a stored flag. Returned by the GET endpoint and by every
+        write endpoint's response.
+      required: [catchup, effective, ineligibleReason]
+      properties:
+        catchup:
+          oneOf:
+            - $ref: "#/components/schemas/CatchupRecord"
+            - type: "null"
+          description: Null when no catch-up has ever been recorded for this learner/session. "Not recorded" must never be presented as proof the learner did no work.
+        effective:
+          type: boolean
+          description: True only when the catch-up is recorded (not revoked), the session is not cancelled, and the current original attendance status is still an eligible absence.
+        ineligibleReason:
+          oneOf:
+            - type: string
+              enum: [revoked, session_cancelled, original_status_changed]
+            - type: "null"
+
+    CatchupHistoryEntry:
+      type: object
+      required: [id, action, timestamp]
+      properties:
+        id: { type: integer }
+        userId: { oneOf: [{ type: integer }, { type: "null" }] }
+        userName: { oneOf: [{ type: string }, { type: "null" }] }
+        action: { type: string, description: "catchup_recorded | catchup_re_recorded | catchup_corrected | catchup_revoked" }
+        previousValue:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+        newValue:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+        timestamp: { type: string, format: date-time }
+
+    CatchupFollowUpItem:
+      type: object
+      required:
+        [
+          learnerId,
+          learnerName,
+          sessionId,
+          cohortId,
+          cohortName,
+          sessionDate,
+          originalStatus,
+          effective,
+        ]
+      properties:
+        learnerId: { type: integer }
+        learnerName: { type: string }
+        sessionId: { type: integer }
+        cohortId: { type: integer }
+        cohortName: { type: string }
+        sessionDate: { type: string, format: date }
+        sessionTitle: { oneOf: [{ type: string }, { type: "null" }] }
+        originalStatus: { $ref: "#/components/schemas/AttendanceStatus" }
+        catchupId: { oneOf: [{ type: integer }, { type: "null" }] }
+        catchupStatus: { oneOf: [{ type: string, enum: [recorded, revoked] }, { type: "null" }] }
+        completionDate: { oneOf: [{ type: string, format: date }, { type: "null" }] }
+        method: { oneOf: [{ $ref: "#/components/schemas/CatchupMethod" }, { type: "null" }] }
+        note: { oneOf: [{ type: string }, { type: "null" }] }
+        effective:
+          type: boolean
+          description: Whether the currently-recorded catch-up (if any) is effective -- false for outstanding, revoked, or none.
+
+    CatchupFollowUpList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CatchupFollowUpItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     RegisterCompletionSummary:
       type: object

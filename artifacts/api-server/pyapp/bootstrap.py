@@ -748,6 +748,228 @@ CREATE INDEX IF NOT EXISTS idx_allocation_history_previous_cohort_changed
   ON learner_allocation_history (previous_cohort_id, changed_date);
 CREATE INDEX IF NOT EXISTS idx_allocation_history_new_cohort_changed
   ON learner_allocation_history (new_cohort_id, changed_date);
+
+-- Stage 2, item 5: a preview job now has a visible "in flight" state
+-- distinct from 'ready' -- run_preview inserts the job row as 'generating'
+-- immediately (surviving any later rollback so a failure has something to
+-- attach diagnostics to), then only flips it to 'ready' as the LAST
+-- statement of the same transaction that inserts every bud_sync_item row,
+-- so 'ready' can never mean "some items are missing because we crashed
+-- partway through". A crash rolls the items back and a separate,
+-- post-rollback statement marks the job 'failed' with error_summary --
+-- exactly mirroring run_commit's own already-established failure pattern.
+ALTER TABLE bud_sync_job DROP CONSTRAINT IF EXISTS bud_sync_job_status_check;
+ALTER TABLE bud_sync_job ADD CONSTRAINT bud_sync_job_status_check
+  CHECK (status IN ('generating', 'ready', 'committing', 'completed', 'failed'));
+
+-- Stage 2, item 6: a reverse-presence exception for a previously-linked,
+-- internally active learner whose linked Bud learning-plan row has gone
+-- missing from the source. This is deliberately its own small, persistent
+-- table (not a row synthesised fresh on every reconciliation request like
+-- the rest of allocation_reconciliation_lib) because the whole point is to
+-- track this over time -- first detected when, still missing as of the
+-- last check, and cleanly resolved (with history kept, never deleted) if
+-- the source row reappears. Nothing here ever infers or applies a status
+-- change to the learner -- see bud_missing_source_lib.py.
+CREATE TABLE IF NOT EXISTS bud_missing_source_exception (
+  id serial PRIMARY KEY,
+  internal_learner_id integer NOT NULL,
+  bud_learning_plan_id text NOT NULL,
+  learner_reference text,
+  status text NOT NULL DEFAULT 'open',
+  first_detected_at timestamptz NOT NULL DEFAULT now(),
+  last_confirmed_missing_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz,
+  resolution_note text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE bud_missing_source_exception DROP CONSTRAINT IF EXISTS bud_missing_source_exception_status_check;
+ALTER TABLE bud_missing_source_exception ADD CONSTRAINT bud_missing_source_exception_status_check
+  CHECK (status IN ('open', 'resolved'));
+
+-- Prevents a duplicate OPEN exception for the same learner+plan being
+-- created on every repeated preview/reconciliation run -- the sync
+-- function upserts against this index instead of blindly inserting.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_missing_source_exception_open_unique
+  ON bud_missing_source_exception (internal_learner_id, bud_learning_plan_id) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS idx_bud_missing_source_exception_learner_id
+  ON bud_missing_source_exception (internal_learner_id);
+
+-- Stage 2 verification pass, item 1: GET must be read-only, so detection
+-- moves to an explicit admin-triggered POST refresh. This single-row status
+-- table is what lets the interface show "last successful detection time"
+-- and a failure state WITHOUT discarding the last successful results --
+-- last_succeeded_at/last_newly_opened/last_resolved are only ever updated
+-- on success; a failed attempt only ever touches last_attempted_at/
+-- last_error, so the last-known-good numbers are never overwritten by a
+-- failure.
+CREATE TABLE IF NOT EXISTS bud_missing_source_refresh_status (
+  id integer PRIMARY KEY DEFAULT 1,
+  last_attempted_at timestamptz,
+  last_triggered_by integer,
+  last_succeeded_at timestamptz,
+  last_newly_opened integer,
+  last_resolved integer,
+  last_error text,
+  CHECK (id = 1)
+);
+INSERT INTO bud_missing_source_refresh_status (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- Stage 2 verification pass, item 2: a monotonic generation counter closes
+-- the "stale tutor mapping" gap a plain updated_at/ownership check cannot --
+-- see run_preview/run_commit (bud_sync_lib.py) and
+-- commit_tutor_mapping_correction (tutor_identity_lib.py). Bumped only by a
+-- committed tutor mapping correction, inside the same transaction as the
+-- actual tutor row changes, so it can never advance independently of a
+-- real mapping change.
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS tutor_mapping_generation integer NOT NULL DEFAULT 0;
+
+-- Every preview job stamps the generation that was current when it started
+-- classifying; run_commit re-reads the CURRENT generation (via a locking
+-- SELECT ... FOR SHARE that blocks on a concurrent correction's own
+-- UPDATE of the same row, rather than a plain unlocked read) and refuses
+-- to apply anything if the two no longer match -- covering a preview that
+-- was still generating when a correction landed, not just one that had
+-- already reached 'ready'.
+ALTER TABLE bud_sync_job ADD COLUMN IF NOT EXISTS tutor_mapping_generation_at_preview integer;
+
+-- Stage 3: tutor-confirmed catch-up completion for a recorded absence.
+-- Deliberately its own table, never a column on attendance_records -- the
+-- original absence (status/hours_attended) must never be touched by a
+-- catch-up confirmation (see catchup_lib.py's module docstring). One row
+-- per (session_id, learner_id) for the entire lifecycle: recorded ->
+-- corrected (in place, audited separately via audit_logs) ->
+-- revoked -> re-recorded, never a fresh row per submission and never
+-- hard-deleted, so the full history survives under one id via audit_logs
+-- (entity_type='attendance_catchup', entity_id=this row's id).
+-- original_status_at_recording is a point-in-time snapshot for display/
+-- audit only -- it is NEVER used to decide whether a catch-up currently
+-- counts; that is always re-derived live against attendance_records.status
+-- and the session's current cancelled/deleted state, so a later
+-- correction of the original attendance (or a session cancellation)
+-- automatically excludes this row from effective participation totals
+-- without ever rewriting or deleting the catch-up record itself.
+CREATE TABLE IF NOT EXISTS attendance_catchup (
+  id serial PRIMARY KEY,
+  session_id integer NOT NULL,
+  learner_id integer NOT NULL,
+  status text NOT NULL DEFAULT 'recorded',
+  completion_date date NOT NULL,
+  method text NOT NULL,
+  note text NOT NULL,
+  original_status_at_recording attendance_status NOT NULL,
+  recorded_by integer NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT now(),
+  last_updated_by integer,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz,
+  revoked_by integer,
+  revocation_reason text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (session_id, learner_id)
+);
+
+ALTER TABLE attendance_catchup DROP CONSTRAINT IF EXISTS attendance_catchup_status_check;
+ALTER TABLE attendance_catchup ADD CONSTRAINT attendance_catchup_status_check
+  CHECK (status IN ('recorded', 'revoked'));
+
+ALTER TABLE attendance_catchup DROP CONSTRAINT IF EXISTS attendance_catchup_method_check;
+ALTER TABLE attendance_catchup ADD CONSTRAINT attendance_catchup_method_check
+  CHECK (method IN ('recording_watched', 'activity_completed'));
+
+CREATE INDEX IF NOT EXISTS idx_attendance_catchup_session_id ON attendance_catchup (session_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_catchup_learner_id ON attendance_catchup (learner_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_catchup_status ON attendance_catchup (status);
+
+-- Stage 5: admin-uploaded Functional Skills subject requirements. This is
+-- an interim, manually-sourced substitute for ILR aim data (confirmed
+-- absent from every accessible source -- see the Stage 5 discovery
+-- report), never a BUD/ILR integration. One row per learner for the
+-- WHOLE lifecycle (recorded -> cleared -> re-recorded), matching
+-- attendance_catchup's own "never a fresh row, never hard-deleted"
+-- pattern -- full history lives in audit_logs (entity_type=
+-- 'learner_fs_requirement'), never here.
+CREATE TABLE IF NOT EXISTS learner_fs_requirements (
+  id serial PRIMARY KEY,
+  learner_id integer NOT NULL UNIQUE,
+  maths boolean NOT NULL DEFAULT false,
+  english boolean NOT NULL DEFAULT false,
+  status text NOT NULL DEFAULT 'recorded',
+  source text NOT NULL DEFAULT 'manual_upload',
+  import_batch_id integer,
+  updated_by integer NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE learner_fs_requirements DROP CONSTRAINT IF EXISTS learner_fs_requirements_status_check;
+ALTER TABLE learner_fs_requirements ADD CONSTRAINT learner_fs_requirements_status_check
+  CHECK (status IN ('recorded', 'cleared'));
+
+CREATE INDEX IF NOT EXISTS idx_learner_fs_requirements_status ON learner_fs_requirements (status);
+
+-- The controlled-upload job/row pair, matching learner_import_jobs/
+-- learner_import_rows' own shape and lazy-expiry convention exactly
+-- (see learner_import_lib.py) -- but with this feature's own outcome
+-- vocabulary (new/changed/unchanged/warning/error) rather than the
+-- learner-creation importer's duplicate-classification one, since
+-- "update a flag" and "create or match a person" are different enough
+-- concepts that forcing one vocabulary onto the other would misdescribe
+-- outcomes either way.
+CREATE TABLE IF NOT EXISTS fs_requirement_import_jobs (
+  id serial PRIMARY KEY,
+  filename text NOT NULL,
+  uploaded_by integer NOT NULL,
+  status text NOT NULL DEFAULT 'ready',
+  total_rows integer NOT NULL DEFAULT 0,
+  new_count integer NOT NULL DEFAULT 0,
+  changed_count integer NOT NULL DEFAULT 0,
+  unchanged_count integer NOT NULL DEFAULT 0,
+  warning_count integer NOT NULL DEFAULT 0,
+  error_count integer NOT NULL DEFAULT 0,
+  result_summary jsonb,
+  last_error text,
+  started_importing_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
+
+ALTER TABLE fs_requirement_import_jobs DROP CONSTRAINT IF EXISTS fs_requirement_import_jobs_status_check;
+ALTER TABLE fs_requirement_import_jobs ADD CONSTRAINT fs_requirement_import_jobs_status_check
+  CHECK (status IN ('ready', 'importing', 'completed', 'cancelled'));
+
+CREATE TABLE IF NOT EXISTS fs_requirement_import_rows (
+  id serial PRIMARY KEY,
+  job_id integer NOT NULL,
+  row_number integer NOT NULL,
+  raw_data jsonb NOT NULL,
+  normalized_aim text,
+  matched_learner_id integer,
+  matched_learner_status text,
+  outcome text NOT NULL,
+  existing_maths boolean,
+  existing_english boolean,
+  existing_status text,
+  proposed_maths boolean,
+  proposed_english boolean,
+  errors jsonb NOT NULL DEFAULT '[]'::jsonb,
+  warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
+  import_result text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Retrofit for installations created before the commit-time staleness
+-- check below started comparing a learner's status as of classification
+-- against their live status at confirm time.
+ALTER TABLE fs_requirement_import_rows ADD COLUMN IF NOT EXISTS matched_learner_status text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fs_requirement_import_rows_job_row
+  ON fs_requirement_import_rows (job_id, row_number);
+CREATE INDEX IF NOT EXISTS idx_fs_requirement_import_rows_job_outcome
+  ON fs_requirement_import_rows (job_id, outcome);
 """
 
 
