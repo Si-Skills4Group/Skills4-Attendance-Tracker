@@ -27,6 +27,9 @@ import type {
   AllocationHistoryEntry,
   AllocationHistoryReportResponse,
   AllocationInput,
+  AllocationReconciliationMultiplePlanBreakdown,
+  AllocationReconciliationPopulationSummary,
+  AllocationReconciliationResponse,
   AllocationResult,
   AppSettings,
   AttendanceHoursReportResponse,
@@ -39,6 +42,8 @@ import type {
   AuditLogEntry,
   AuditLogListResponse,
   AuthUser,
+  BudMissingSourceExceptionList,
+  BudMissingSourceRefreshStatus,
   BudSyncBaseline,
   BudSyncBaselineInput,
   BudSyncBaselineResetInput,
@@ -55,6 +60,10 @@ import type {
   BudSyncStatus,
   BudSyncUnmatchedPreBaselineResponse,
   CancelScheduledAllocationResult,
+  CatchupFollowUpList,
+  CatchupHistoryEntry,
+  CatchupState,
+  ClearFsRequirementInput,
   Cohort,
   CohortCardSummary,
   CohortDeleteInput,
@@ -63,22 +72,32 @@ import type {
   CohortReportResponse,
   CohortUpdate,
   CompleteRegisterInput,
+  ConfirmFsRequirementImportJob200,
+  CorrectCatchupInput,
   CoverTutorInput,
   CsvContent,
   DeactivateTutorParams,
+  EngagementRecencyDetail,
+  EngagementRecencyList,
+  EngagementRecencySummary,
   ErrorResponse,
   ExpectedLearner,
   ExportAbsenceReportParams,
   ExportAllocationHistoryReportParams,
   ExportAttendanceHoursReportParams,
   ExportCohortReportParams,
+  ExportEngagementRecencyParams,
   ExportFunctionalSkillsReportParams,
   ExportLastAttendanceReportParams,
   ExportLatenessReportParams,
   ExportLearnerReportParams,
   ExportOrganisationReportParams,
+  ExportParticipationReportParams,
   ExportRegisterCompletionReportParams,
   ExportTutorReportParams,
+  FsRequirementAllocationListResponse,
+  FsRequirementImportJob,
+  FsRequirementImportJobRowListResponse,
   FunctionalSkillsReportResponse,
   GetAbsenceReportParams,
   GetAdminDashboardCohortsParams,
@@ -86,15 +105,20 @@ import type {
   GetAdminLowAttendanceLearnersParams,
   GetAdminOutstandingRegistersParams,
   GetAllocationHistoryReportParams,
+  GetAllocationReconciliationParams,
   GetAttendanceHoursReportParams,
+  GetBudMissingSourceExceptionsParams,
   GetCohortAttendanceSummaryParams,
   GetCohortReportV2Params,
+  GetEngagementRecencySummaryParams,
+  GetFsRequirementAllocationParams,
   GetFunctionalSkillsReportParams,
   GetLastAttendanceReportParams,
   GetLatenessReportParams,
   GetLearnerAttendanceSummaryParams,
   GetLearnerReportV2Params,
   GetOrganisationReportV2Params,
+  GetParticipationReportParams,
   GetRegisterCompletionReportParams,
   GetTutorAttendanceSummaryParams,
   GetTutorDashboardCohortsParams,
@@ -108,6 +132,7 @@ import type {
   LearnerAttendanceSummaryDetailResponse,
   LearnerAttendanceSummaryListResponse,
   LearnerDeleteInput,
+  LearnerFsRequirement,
   LearnerImportJob,
   LearnerImportJobRow,
   LearnerImportJobRowListResponse,
@@ -124,8 +149,11 @@ import type {
   ListBudSyncJobItemsParams,
   ListBudSyncJobsParams,
   ListBudSyncUnmatchedPreBaselineParams,
+  ListCatchupFollowUpParams,
   ListCohortSummaryParams,
   ListCohortsParams,
+  ListEngagementRecencyParams,
+  ListFsRequirementImportJobRowsParams,
   ListLearnerImportJobRowsParams,
   ListLearnersParams,
   ListScheduledAllocationsParams,
@@ -136,29 +164,38 @@ import type {
   LoginInput,
   OrganisationReportResponse,
   OutstandingRegisterListResponse,
+  RecordCatchupInput,
   RefreshRegisterInput,
   RegisterCompletionReportResponse,
   RegisterRefreshDiff,
   RegisterRefreshResult,
   RemoveCoverTutorInput,
+  RevokeCatchupInput,
   SecondaryEnrollment,
   SecondaryEnrollmentEndInput,
   SecondaryEnrollmentInput,
   SessionCancelInput,
   SessionDeleteInput,
+  SessionParticipationMetrics,
   SettingsUpdate,
   Tutor,
   TutorCohortOverviewRow,
   TutorDashboard,
+  TutorIdentityDiagnostics,
   TutorImportJob,
   TutorImportJobRow,
   TutorImportJobRowListResponse,
   TutorImportResult,
   TutorImportRowResolveInput,
   TutorInput,
+  TutorMappingCorrectionCommitRequest,
+  TutorMappingCorrectionPreview,
+  TutorMappingCorrectionPreviewRequest,
+  TutorMappingCorrectionResult,
   TutorReportResponse,
   TutorUpdate,
   UnlockRegisterInput,
+  UploadFsRequirementImportBody,
   UploadLearnerImportBody,
   UploadTutorImportBody,
   UserLinkTutorInput,
@@ -3094,6 +3131,649 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCancelLearnerImportJobMutationOptions(options));
     }
 
+export const getGetFsRequirementImportTemplateUrl = () => {
+
+
+
+
+  return `/api/functional-skills-requirements/import-jobs/template`
+}
+
+export const getFsRequirementImportTemplate = async ( options?: RequestInit): Promise<CsvContent> => {
+
+  return customFetch<CsvContent>(getGetFsRequirementImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFsRequirementImportTemplateQueryKey = () => {
+    return [
+    `/api/functional-skills-requirements/import-jobs/template`
+    ] as const;
+    }
+
+
+export const getGetFsRequirementImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getFsRequirementImportTemplate>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFsRequirementImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFsRequirementImportTemplate>>> = ({ signal }) => getFsRequirementImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementImportTemplate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFsRequirementImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getFsRequirementImportTemplate>>>
+export type GetFsRequirementImportTemplateQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetFsRequirementImportTemplate<TData = Awaited<ReturnType<typeof getFsRequirementImportTemplate>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementImportTemplate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFsRequirementImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUploadFsRequirementImportUrl = () => {
+
+
+
+
+  return `/api/functional-skills-requirements/import-jobs`
+}
+
+export const uploadFsRequirementImport = async (uploadFsRequirementImportBody: UploadFsRequirementImportBody, options?: RequestInit): Promise<FsRequirementImportJob> => {
+    const formData = new FormData();
+formData.append(`file`, uploadFsRequirementImportBody.file);
+
+  return customFetch<FsRequirementImportJob>(getUploadFsRequirementImportUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadFsRequirementImportMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadFsRequirementImport>>, TError,{data: BodyType<UploadFsRequirementImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadFsRequirementImport>>, TError,{data: BodyType<UploadFsRequirementImportBody>}, TContext> => {
+
+const mutationKey = ['uploadFsRequirementImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadFsRequirementImport>>, {data: BodyType<UploadFsRequirementImportBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadFsRequirementImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadFsRequirementImportMutationResult = NonNullable<Awaited<ReturnType<typeof uploadFsRequirementImport>>>
+    export type UploadFsRequirementImportMutationBody = BodyType<UploadFsRequirementImportBody>
+    export type UploadFsRequirementImportMutationError = ErrorType<ErrorResponse>
+
+    export const useUploadFsRequirementImport = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadFsRequirementImport>>, TError,{data: BodyType<UploadFsRequirementImportBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadFsRequirementImport>>,
+        TError,
+        {data: BodyType<UploadFsRequirementImportBody>},
+        TContext
+      > => {
+      return useMutation(getUploadFsRequirementImportMutationOptions(options));
+    }
+
+export const getGetFsRequirementImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/functional-skills-requirements/import-jobs/${jobId}`
+}
+
+export const getFsRequirementImportJob = async (jobId: number, options?: RequestInit): Promise<FsRequirementImportJob> => {
+
+  return customFetch<FsRequirementImportJob>(getGetFsRequirementImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFsRequirementImportJobQueryKey = (jobId: number,) => {
+    return [
+    `/api/functional-skills-requirements/import-jobs/${jobId}`
+    ] as const;
+    }
+
+
+export const getGetFsRequirementImportJobQueryOptions = <TData = Awaited<ReturnType<typeof getFsRequirementImportJob>>, TError = ErrorType<ErrorResponse>>(jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementImportJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFsRequirementImportJobQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFsRequirementImportJob>>> = ({ signal }) => getFsRequirementImportJob(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementImportJob>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFsRequirementImportJobQueryResult = NonNullable<Awaited<ReturnType<typeof getFsRequirementImportJob>>>
+export type GetFsRequirementImportJobQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetFsRequirementImportJob<TData = Awaited<ReturnType<typeof getFsRequirementImportJob>>, TError = ErrorType<ErrorResponse>>(
+ jobId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementImportJob>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFsRequirementImportJobQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListFsRequirementImportJobRowsUrl = (jobId: number,
+    params?: ListFsRequirementImportJobRowsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/functional-skills-requirements/import-jobs/${jobId}/rows?${stringifiedParams}` : `/api/functional-skills-requirements/import-jobs/${jobId}/rows`
+}
+
+export const listFsRequirementImportJobRows = async (jobId: number,
+    params?: ListFsRequirementImportJobRowsParams, options?: RequestInit): Promise<FsRequirementImportJobRowListResponse> => {
+
+  return customFetch<FsRequirementImportJobRowListResponse>(getListFsRequirementImportJobRowsUrl(jobId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFsRequirementImportJobRowsQueryKey = (jobId: number,
+    params?: ListFsRequirementImportJobRowsParams,) => {
+    return [
+    `/api/functional-skills-requirements/import-jobs/${jobId}/rows`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListFsRequirementImportJobRowsQueryOptions = <TData = Awaited<ReturnType<typeof listFsRequirementImportJobRows>>, TError = ErrorType<unknown>>(jobId: number,
+    params?: ListFsRequirementImportJobRowsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFsRequirementImportJobRows>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFsRequirementImportJobRowsQueryKey(jobId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFsRequirementImportJobRows>>> = ({ signal }) => listFsRequirementImportJobRows(jobId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFsRequirementImportJobRows>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFsRequirementImportJobRowsQueryResult = NonNullable<Awaited<ReturnType<typeof listFsRequirementImportJobRows>>>
+export type ListFsRequirementImportJobRowsQueryError = ErrorType<unknown>
+
+
+
+export function useListFsRequirementImportJobRows<TData = Awaited<ReturnType<typeof listFsRequirementImportJobRows>>, TError = ErrorType<unknown>>(
+ jobId: number,
+    params?: ListFsRequirementImportJobRowsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFsRequirementImportJobRows>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFsRequirementImportJobRowsQueryOptions(jobId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getConfirmFsRequirementImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/functional-skills-requirements/import-jobs/${jobId}/confirm`
+}
+
+export const confirmFsRequirementImportJob = async (jobId: number, options?: RequestInit): Promise<ConfirmFsRequirementImportJob200> => {
+
+  return customFetch<ConfirmFsRequirementImportJob200>(getConfirmFsRequirementImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getConfirmFsRequirementImportJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmFsRequirementImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmFsRequirementImportJob>>, TError,{jobId: number}, TContext> => {
+
+const mutationKey = ['confirmFsRequirementImportJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmFsRequirementImportJob>>, {jobId: number}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  confirmFsRequirementImportJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmFsRequirementImportJobMutationResult = NonNullable<Awaited<ReturnType<typeof confirmFsRequirementImportJob>>>
+
+    export type ConfirmFsRequirementImportJobMutationError = ErrorType<ErrorResponse>
+
+    export const useConfirmFsRequirementImportJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmFsRequirementImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmFsRequirementImportJob>>,
+        TError,
+        {jobId: number},
+        TContext
+      > => {
+      return useMutation(getConfirmFsRequirementImportJobMutationOptions(options));
+    }
+
+export const getCancelFsRequirementImportJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/functional-skills-requirements/import-jobs/${jobId}/cancel`
+}
+
+export const cancelFsRequirementImportJob = async (jobId: number, options?: RequestInit): Promise<FsRequirementImportJob> => {
+
+  return customFetch<FsRequirementImportJob>(getCancelFsRequirementImportJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelFsRequirementImportJobMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelFsRequirementImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelFsRequirementImportJob>>, TError,{jobId: number}, TContext> => {
+
+const mutationKey = ['cancelFsRequirementImportJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelFsRequirementImportJob>>, {jobId: number}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  cancelFsRequirementImportJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelFsRequirementImportJobMutationResult = NonNullable<Awaited<ReturnType<typeof cancelFsRequirementImportJob>>>
+
+    export type CancelFsRequirementImportJobMutationError = ErrorType<ErrorResponse>
+
+    export const useCancelFsRequirementImportJob = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelFsRequirementImportJob>>, TError,{jobId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelFsRequirementImportJob>>,
+        TError,
+        {jobId: number},
+        TContext
+      > => {
+      return useMutation(getCancelFsRequirementImportJobMutationOptions(options));
+    }
+
+export const getGetFsRequirementAllocationUrl = (params?: GetFsRequirementAllocationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/functional-skills-requirements/allocation?${stringifiedParams}` : `/api/functional-skills-requirements/allocation`
+}
+
+/**
+ * Admin-only allocation view (item 6). Defaults to active learners; a learner appears whenever they have an uploaded requirement OR an existing active secondary enrollment, so a pre-existing enrollment with no uploaded requirement is still visible, labelled "Requirement not recorded" rather than asserted inappropriate.
+ */
+export const getFsRequirementAllocation = async (params?: GetFsRequirementAllocationParams, options?: RequestInit): Promise<FsRequirementAllocationListResponse> => {
+
+  return customFetch<FsRequirementAllocationListResponse>(getGetFsRequirementAllocationUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFsRequirementAllocationQueryKey = (params?: GetFsRequirementAllocationParams,) => {
+    return [
+    `/api/functional-skills-requirements/allocation`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFsRequirementAllocationQueryOptions = <TData = Awaited<ReturnType<typeof getFsRequirementAllocation>>, TError = ErrorType<ErrorResponse>>(params?: GetFsRequirementAllocationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementAllocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFsRequirementAllocationQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFsRequirementAllocation>>> = ({ signal }) => getFsRequirementAllocation(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementAllocation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFsRequirementAllocationQueryResult = NonNullable<Awaited<ReturnType<typeof getFsRequirementAllocation>>>
+export type GetFsRequirementAllocationQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetFsRequirementAllocation<TData = Awaited<ReturnType<typeof getFsRequirementAllocation>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetFsRequirementAllocationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsRequirementAllocation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFsRequirementAllocationQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLearnerFsRequirementUrl = (learnerId: number,) => {
+
+
+
+
+  return `/api/functional-skills-requirements/learner/${learnerId}`
+}
+
+/**
+ * Shown on the learner detail screen within existing access permissions (require_learner_access, not admin-only).
+ */
+export const getLearnerFsRequirement = async (learnerId: number, options?: RequestInit): Promise<LearnerFsRequirement | null> => {
+
+  return customFetch<LearnerFsRequirement | null>(getGetLearnerFsRequirementUrl(learnerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLearnerFsRequirementQueryKey = (learnerId: number,) => {
+    return [
+    `/api/functional-skills-requirements/learner/${learnerId}`
+    ] as const;
+    }
+
+
+export const getGetLearnerFsRequirementQueryOptions = <TData = Awaited<ReturnType<typeof getLearnerFsRequirement>>, TError = ErrorType<ErrorResponse>>(learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerFsRequirement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLearnerFsRequirementQueryKey(learnerId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLearnerFsRequirement>>> = ({ signal }) => getLearnerFsRequirement(learnerId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLearnerFsRequirement>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLearnerFsRequirementQueryResult = NonNullable<Awaited<ReturnType<typeof getLearnerFsRequirement>>>
+export type GetLearnerFsRequirementQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetLearnerFsRequirement<TData = Awaited<ReturnType<typeof getLearnerFsRequirement>>, TError = ErrorType<ErrorResponse>>(
+ learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLearnerFsRequirement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLearnerFsRequirementQueryOptions(learnerId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getClearLearnerFsRequirementUrl = (learnerId: number,) => {
+
+
+
+
+  return `/api/functional-skills-requirements/learner/${learnerId}/clear`
+}
+
+export const clearLearnerFsRequirement = async (learnerId: number,
+    clearFsRequirementInput: ClearFsRequirementInput, options?: RequestInit): Promise<LearnerFsRequirement> => {
+
+  return customFetch<LearnerFsRequirement>(getClearLearnerFsRequirementUrl(learnerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clearFsRequirementInput)
+  }
+);}
+
+
+
+
+
+export const getClearLearnerFsRequirementMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearLearnerFsRequirement>>, TError,{learnerId: number;data: BodyType<ClearFsRequirementInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearLearnerFsRequirement>>, TError,{learnerId: number;data: BodyType<ClearFsRequirementInput>}, TContext> => {
+
+const mutationKey = ['clearLearnerFsRequirement'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearLearnerFsRequirement>>, {learnerId: number;data: BodyType<ClearFsRequirementInput>}> = (props) => {
+          const {learnerId,data} = props ?? {};
+
+          return  clearLearnerFsRequirement(learnerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearLearnerFsRequirementMutationResult = NonNullable<Awaited<ReturnType<typeof clearLearnerFsRequirement>>>
+    export type ClearLearnerFsRequirementMutationBody = BodyType<ClearFsRequirementInput>
+    export type ClearLearnerFsRequirementMutationError = ErrorType<ErrorResponse>
+
+    export const useClearLearnerFsRequirement = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearLearnerFsRequirement>>, TError,{learnerId: number;data: BodyType<ClearFsRequirementInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearLearnerFsRequirement>>,
+        TError,
+        {learnerId: number;data: BodyType<ClearFsRequirementInput>},
+        TContext
+      > => {
+      return useMutation(getClearLearnerFsRequirementMutationOptions(options));
+    }
+
 export const getGetLearnerUrl = (id: number,) => {
 
 
@@ -4479,6 +5159,235 @@ export function useListAllocationHistory<TData = Awaited<ReturnType<typeof listA
 
 
 
+export const getGetAllocationReconciliationUrl = (params?: GetAllocationReconciliationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/allocation-reconciliation?${stringifiedParams}` : `/api/allocation-reconciliation`
+}
+
+/**
+ * Stage 1 operational allocation audit (admin only, read-only): reconciles Bud's "In Progress" learning-plan population against this app's active cohort allocations, using the same matching hierarchy as the Bud sync trial. Visibility only -- never writes anything.
+ */
+export const getAllocationReconciliation = async (params?: GetAllocationReconciliationParams, options?: RequestInit): Promise<AllocationReconciliationResponse> => {
+
+  return customFetch<AllocationReconciliationResponse>(getGetAllocationReconciliationUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAllocationReconciliationQueryKey = (params?: GetAllocationReconciliationParams,) => {
+    return [
+    `/api/allocation-reconciliation`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAllocationReconciliationQueryOptions = <TData = Awaited<ReturnType<typeof getAllocationReconciliation>>, TError = ErrorType<ErrorResponse>>(params?: GetAllocationReconciliationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAllocationReconciliationQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllocationReconciliation>>> = ({ signal }) => getAllocationReconciliation(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAllocationReconciliationQueryResult = NonNullable<Awaited<ReturnType<typeof getAllocationReconciliation>>>
+export type GetAllocationReconciliationQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetAllocationReconciliation<TData = Awaited<ReturnType<typeof getAllocationReconciliation>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetAllocationReconciliationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAllocationReconciliationQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAllocationReconciliationPopulationSummaryUrl = () => {
+
+
+
+
+  return `/api/allocation-reconciliation/population-summary`
+}
+
+/**
+ * Stage 2 corrected, same-snapshot Stage 1 population summary (admin only, read-only). Replaces the original completion report's mislabelled "220"/"429"/"191" comparison figures with populations computed fresh and named for what they actually are.
+ */
+export const getAllocationReconciliationPopulationSummary = async ( options?: RequestInit): Promise<AllocationReconciliationPopulationSummary> => {
+
+  return customFetch<AllocationReconciliationPopulationSummary>(getGetAllocationReconciliationPopulationSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAllocationReconciliationPopulationSummaryQueryKey = () => {
+    return [
+    `/api/allocation-reconciliation/population-summary`
+    ] as const;
+    }
+
+
+export const getGetAllocationReconciliationPopulationSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAllocationReconciliationPopulationSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>> = ({ signal }) => getAllocationReconciliationPopulationSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAllocationReconciliationPopulationSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>>
+export type GetAllocationReconciliationPopulationSummaryQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetAllocationReconciliationPopulationSummary<TData = Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliationPopulationSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAllocationReconciliationPopulationSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAllocationReconciliationMultiplePlanBreakdownUrl = () => {
+
+
+
+
+  return `/api/allocation-reconciliation/multiple-plan-breakdown`
+}
+
+/**
+ * Stage 2, item 7 (admin only, read-only): for learners with one current In Progress Bud plan plus historical plans, whether an existing Bud link points at the current plan, a historical one, or doesn't exist. Read-only visibility -- never relinks anything.
+ */
+export const getAllocationReconciliationMultiplePlanBreakdown = async ( options?: RequestInit): Promise<AllocationReconciliationMultiplePlanBreakdown> => {
+
+  return customFetch<AllocationReconciliationMultiplePlanBreakdown>(getGetAllocationReconciliationMultiplePlanBreakdownUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAllocationReconciliationMultiplePlanBreakdownQueryKey = () => {
+    return [
+    `/api/allocation-reconciliation/multiple-plan-breakdown`
+    ] as const;
+    }
+
+
+export const getGetAllocationReconciliationMultiplePlanBreakdownQueryOptions = <TData = Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAllocationReconciliationMultiplePlanBreakdownQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>> = ({ signal }) => getAllocationReconciliationMultiplePlanBreakdown({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAllocationReconciliationMultiplePlanBreakdownQueryResult = NonNullable<Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>>
+export type GetAllocationReconciliationMultiplePlanBreakdownQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetAllocationReconciliationMultiplePlanBreakdown<TData = Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAllocationReconciliationMultiplePlanBreakdown>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAllocationReconciliationMultiplePlanBreakdownQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListScheduledAllocationsUrl = (params?: ListScheduledAllocationsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -5705,6 +6614,599 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getMarkAllPresentMutationOptions(options));
     }
+
+export const getGetCatchupStateUrl = (sessionId: number,
+    learnerId: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${sessionId}/catchup/${learnerId}`
+}
+
+export const getCatchupState = async (sessionId: number,
+    learnerId: number, options?: RequestInit): Promise<CatchupState> => {
+
+  return customFetch<CatchupState>(getGetCatchupStateUrl(sessionId,learnerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatchupStateQueryKey = (sessionId: number,
+    learnerId: number,) => {
+    return [
+    `/api/attendance/sessions/${sessionId}/catchup/${learnerId}`
+    ] as const;
+    }
+
+
+export const getGetCatchupStateQueryOptions = <TData = Awaited<ReturnType<typeof getCatchupState>>, TError = ErrorType<ErrorResponse>>(sessionId: number,
+    learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatchupState>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatchupStateQueryKey(sessionId,learnerId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatchupState>>> = ({ signal }) => getCatchupState(sessionId,learnerId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sessionId !== null && sessionId !== undefined && learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatchupState>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatchupStateQueryResult = NonNullable<Awaited<ReturnType<typeof getCatchupState>>>
+export type GetCatchupStateQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetCatchupState<TData = Awaited<ReturnType<typeof getCatchupState>>, TError = ErrorType<ErrorResponse>>(
+ sessionId: number,
+    learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatchupState>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatchupStateQueryOptions(sessionId,learnerId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecordCatchupUrl = (sessionId: number,
+    learnerId: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${sessionId}/catchup/${learnerId}`
+}
+
+export const recordCatchup = async (sessionId: number,
+    learnerId: number,
+    recordCatchupInput: RecordCatchupInput, options?: RequestInit): Promise<CatchupState> => {
+
+  return customFetch<CatchupState>(getRecordCatchupUrl(sessionId,learnerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recordCatchupInput)
+  }
+);}
+
+
+
+
+
+export const getRecordCatchupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<RecordCatchupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<RecordCatchupInput>}, TContext> => {
+
+const mutationKey = ['recordCatchup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordCatchup>>, {sessionId: number;learnerId: number;data: BodyType<RecordCatchupInput>}> = (props) => {
+          const {sessionId,learnerId,data} = props ?? {};
+
+          return  recordCatchup(sessionId,learnerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordCatchupMutationResult = NonNullable<Awaited<ReturnType<typeof recordCatchup>>>
+    export type RecordCatchupMutationBody = BodyType<RecordCatchupInput>
+    export type RecordCatchupMutationError = ErrorType<ErrorResponse>
+
+    export const useRecordCatchup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<RecordCatchupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordCatchup>>,
+        TError,
+        {sessionId: number;learnerId: number;data: BodyType<RecordCatchupInput>},
+        TContext
+      > => {
+      return useMutation(getRecordCatchupMutationOptions(options));
+    }
+
+export const getCorrectCatchupUrl = (sessionId: number,
+    learnerId: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${sessionId}/catchup/${learnerId}`
+}
+
+export const correctCatchup = async (sessionId: number,
+    learnerId: number,
+    correctCatchupInput: CorrectCatchupInput, options?: RequestInit): Promise<CatchupState> => {
+
+  return customFetch<CatchupState>(getCorrectCatchupUrl(sessionId,learnerId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(correctCatchupInput)
+  }
+);}
+
+
+
+
+
+export const getCorrectCatchupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<CorrectCatchupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof correctCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<CorrectCatchupInput>}, TContext> => {
+
+const mutationKey = ['correctCatchup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctCatchup>>, {sessionId: number;learnerId: number;data: BodyType<CorrectCatchupInput>}> = (props) => {
+          const {sessionId,learnerId,data} = props ?? {};
+
+          return  correctCatchup(sessionId,learnerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectCatchupMutationResult = NonNullable<Awaited<ReturnType<typeof correctCatchup>>>
+    export type CorrectCatchupMutationBody = BodyType<CorrectCatchupInput>
+    export type CorrectCatchupMutationError = ErrorType<ErrorResponse>
+
+    export const useCorrectCatchup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<CorrectCatchupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof correctCatchup>>,
+        TError,
+        {sessionId: number;learnerId: number;data: BodyType<CorrectCatchupInput>},
+        TContext
+      > => {
+      return useMutation(getCorrectCatchupMutationOptions(options));
+    }
+
+export const getRevokeCatchupUrl = (sessionId: number,
+    learnerId: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${sessionId}/catchup/${learnerId}/revoke`
+}
+
+export const revokeCatchup = async (sessionId: number,
+    learnerId: number,
+    revokeCatchupInput: RevokeCatchupInput, options?: RequestInit): Promise<CatchupState> => {
+
+  return customFetch<CatchupState>(getRevokeCatchupUrl(sessionId,learnerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(revokeCatchupInput)
+  }
+);}
+
+
+
+
+
+export const getRevokeCatchupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<RevokeCatchupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<RevokeCatchupInput>}, TContext> => {
+
+const mutationKey = ['revokeCatchup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeCatchup>>, {sessionId: number;learnerId: number;data: BodyType<RevokeCatchupInput>}> = (props) => {
+          const {sessionId,learnerId,data} = props ?? {};
+
+          return  revokeCatchup(sessionId,learnerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeCatchupMutationResult = NonNullable<Awaited<ReturnType<typeof revokeCatchup>>>
+    export type RevokeCatchupMutationBody = BodyType<RevokeCatchupInput>
+    export type RevokeCatchupMutationError = ErrorType<ErrorResponse>
+
+    export const useRevokeCatchup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeCatchup>>, TError,{sessionId: number;learnerId: number;data: BodyType<RevokeCatchupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeCatchup>>,
+        TError,
+        {sessionId: number;learnerId: number;data: BodyType<RevokeCatchupInput>},
+        TContext
+      > => {
+      return useMutation(getRevokeCatchupMutationOptions(options));
+    }
+
+export const getGetCatchupHistoryUrl = (sessionId: number,
+    learnerId: number,) => {
+
+
+
+
+  return `/api/attendance/sessions/${sessionId}/catchup/${learnerId}/history`
+}
+
+export const getCatchupHistory = async (sessionId: number,
+    learnerId: number, options?: RequestInit): Promise<CatchupHistoryEntry[]> => {
+
+  return customFetch<CatchupHistoryEntry[]>(getGetCatchupHistoryUrl(sessionId,learnerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatchupHistoryQueryKey = (sessionId: number,
+    learnerId: number,) => {
+    return [
+    `/api/attendance/sessions/${sessionId}/catchup/${learnerId}/history`
+    ] as const;
+    }
+
+
+export const getGetCatchupHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getCatchupHistory>>, TError = ErrorType<ErrorResponse>>(sessionId: number,
+    learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatchupHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatchupHistoryQueryKey(sessionId,learnerId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatchupHistory>>> = ({ signal }) => getCatchupHistory(sessionId,learnerId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sessionId !== null && sessionId !== undefined && learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatchupHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatchupHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getCatchupHistory>>>
+export type GetCatchupHistoryQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetCatchupHistory<TData = Awaited<ReturnType<typeof getCatchupHistory>>, TError = ErrorType<ErrorResponse>>(
+ sessionId: number,
+    learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatchupHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatchupHistoryQueryOptions(sessionId,learnerId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCatchupFollowUpUrl = (params: ListCatchupFollowUpParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/catchup/follow-up?${stringifiedParams}` : `/api/attendance/catchup/follow-up`
+}
+
+/**
+ * Weekly absence-follow-up list (item 4) -- one row per absent learner/session pair, selected by the ORIGINAL session date range. A catch-up completed later still appears against that original absence. Read-only.
+ */
+export const listCatchupFollowUp = async (params: ListCatchupFollowUpParams, options?: RequestInit): Promise<CatchupFollowUpList> => {
+
+  return customFetch<CatchupFollowUpList>(getListCatchupFollowUpUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCatchupFollowUpQueryKey = (params?: ListCatchupFollowUpParams,) => {
+    return [
+    `/api/attendance/catchup/follow-up`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCatchupFollowUpQueryOptions = <TData = Awaited<ReturnType<typeof listCatchupFollowUp>>, TError = ErrorType<ErrorResponse>>(params: ListCatchupFollowUpParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCatchupFollowUp>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCatchupFollowUpQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCatchupFollowUp>>> = ({ signal }) => listCatchupFollowUp(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCatchupFollowUp>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCatchupFollowUpQueryResult = NonNullable<Awaited<ReturnType<typeof listCatchupFollowUp>>>
+export type ListCatchupFollowUpQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useListCatchupFollowUp<TData = Awaited<ReturnType<typeof listCatchupFollowUp>>, TError = ErrorType<ErrorResponse>>(
+ params: ListCatchupFollowUpParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCatchupFollowUp>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCatchupFollowUpQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetParticipationReportUrl = (params?: GetParticipationReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/participation?${stringifiedParams}` : `/api/reports/participation`
+}
+
+export const getParticipationReport = async (params?: GetParticipationReportParams, options?: RequestInit): Promise<SessionParticipationMetrics> => {
+
+  return customFetch<SessionParticipationMetrics>(getGetParticipationReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetParticipationReportQueryKey = (params?: GetParticipationReportParams,) => {
+    return [
+    `/api/reports/participation`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetParticipationReportQueryOptions = <TData = Awaited<ReturnType<typeof getParticipationReport>>, TError = ErrorType<ErrorResponse>>(params?: GetParticipationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getParticipationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetParticipationReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getParticipationReport>>> = ({ signal }) => getParticipationReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getParticipationReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetParticipationReportQueryResult = NonNullable<Awaited<ReturnType<typeof getParticipationReport>>>
+export type GetParticipationReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetParticipationReport<TData = Awaited<ReturnType<typeof getParticipationReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetParticipationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getParticipationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetParticipationReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportParticipationReportUrl = (params?: ExportParticipationReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/participation/export?${stringifiedParams}` : `/api/reports/participation/export`
+}
+
+export const exportParticipationReport = async (params?: ExportParticipationReportParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportParticipationReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportParticipationReportQueryKey = (params?: ExportParticipationReportParams,) => {
+    return [
+    `/api/reports/participation/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportParticipationReportQueryOptions = <TData = Awaited<ReturnType<typeof exportParticipationReport>>, TError = ErrorType<ErrorResponse>>(params?: ExportParticipationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportParticipationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportParticipationReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportParticipationReport>>> = ({ signal }) => exportParticipationReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportParticipationReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportParticipationReportQueryResult = NonNullable<Awaited<ReturnType<typeof exportParticipationReport>>>
+export type ExportParticipationReportQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportParticipationReport<TData = Awaited<ReturnType<typeof exportParticipationReport>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportParticipationReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportParticipationReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportParticipationReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetLearnerReportV2Url = (learnerId: number,
     params?: GetLearnerReportV2Params,) => {
@@ -7296,6 +8798,314 @@ export function useExportLastAttendanceReport<TData = Awaited<ReturnType<typeof 
 
 
 
+export const getGetEngagementRecencySummaryUrl = (params?: GetEngagementRecencySummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/engagement-recency/summary?${stringifiedParams}` : `/api/reports/engagement-recency/summary`
+}
+
+export const getEngagementRecencySummary = async (params?: GetEngagementRecencySummaryParams, options?: RequestInit): Promise<EngagementRecencySummary> => {
+
+  return customFetch<EngagementRecencySummary>(getGetEngagementRecencySummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEngagementRecencySummaryQueryKey = (params?: GetEngagementRecencySummaryParams,) => {
+    return [
+    `/api/reports/engagement-recency/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEngagementRecencySummaryQueryOptions = <TData = Awaited<ReturnType<typeof getEngagementRecencySummary>>, TError = ErrorType<ErrorResponse>>(params?: GetEngagementRecencySummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEngagementRecencySummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEngagementRecencySummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEngagementRecencySummary>>> = ({ signal }) => getEngagementRecencySummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEngagementRecencySummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEngagementRecencySummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getEngagementRecencySummary>>>
+export type GetEngagementRecencySummaryQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetEngagementRecencySummary<TData = Awaited<ReturnType<typeof getEngagementRecencySummary>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetEngagementRecencySummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEngagementRecencySummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEngagementRecencySummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportEngagementRecencyUrl = (params?: ExportEngagementRecencyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/engagement-recency/export?${stringifiedParams}` : `/api/reports/engagement-recency/export`
+}
+
+export const exportEngagementRecency = async (params?: ExportEngagementRecencyParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportEngagementRecencyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportEngagementRecencyQueryKey = (params?: ExportEngagementRecencyParams,) => {
+    return [
+    `/api/reports/engagement-recency/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportEngagementRecencyQueryOptions = <TData = Awaited<ReturnType<typeof exportEngagementRecency>>, TError = ErrorType<ErrorResponse>>(params?: ExportEngagementRecencyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportEngagementRecency>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportEngagementRecencyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportEngagementRecency>>> = ({ signal }) => exportEngagementRecency(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportEngagementRecency>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportEngagementRecencyQueryResult = NonNullable<Awaited<ReturnType<typeof exportEngagementRecency>>>
+export type ExportEngagementRecencyQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useExportEngagementRecency<TData = Awaited<ReturnType<typeof exportEngagementRecency>>, TError = ErrorType<ErrorResponse>>(
+ params?: ExportEngagementRecencyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportEngagementRecency>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportEngagementRecencyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListEngagementRecencyUrl = (params?: ListEngagementRecencyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports/engagement-recency?${stringifiedParams}` : `/api/reports/engagement-recency`
+}
+
+export const listEngagementRecency = async (params?: ListEngagementRecencyParams, options?: RequestInit): Promise<EngagementRecencyList> => {
+
+  return customFetch<EngagementRecencyList>(getListEngagementRecencyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEngagementRecencyQueryKey = (params?: ListEngagementRecencyParams,) => {
+    return [
+    `/api/reports/engagement-recency`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListEngagementRecencyQueryOptions = <TData = Awaited<ReturnType<typeof listEngagementRecency>>, TError = ErrorType<ErrorResponse>>(params?: ListEngagementRecencyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEngagementRecency>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEngagementRecencyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEngagementRecency>>> = ({ signal }) => listEngagementRecency(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEngagementRecency>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEngagementRecencyQueryResult = NonNullable<Awaited<ReturnType<typeof listEngagementRecency>>>
+export type ListEngagementRecencyQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useListEngagementRecency<TData = Awaited<ReturnType<typeof listEngagementRecency>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListEngagementRecencyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEngagementRecency>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEngagementRecencyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEngagementRecencyDetailUrl = (learnerId: number,) => {
+
+
+
+
+  return `/api/reports/engagement-recency/${learnerId}`
+}
+
+/**
+ * Traceability drill-down (item 6): the exact same combination rule as the list, with full supporting-evidence references. This is a current view of available evidence, not a reconstruction of what was known on any historical date.
+ */
+export const getEngagementRecencyDetail = async (learnerId: number, options?: RequestInit): Promise<EngagementRecencyDetail> => {
+
+  return customFetch<EngagementRecencyDetail>(getGetEngagementRecencyDetailUrl(learnerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEngagementRecencyDetailQueryKey = (learnerId: number,) => {
+    return [
+    `/api/reports/engagement-recency/${learnerId}`
+    ] as const;
+    }
+
+
+export const getGetEngagementRecencyDetailQueryOptions = <TData = Awaited<ReturnType<typeof getEngagementRecencyDetail>>, TError = ErrorType<ErrorResponse>>(learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEngagementRecencyDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEngagementRecencyDetailQueryKey(learnerId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEngagementRecencyDetail>>> = ({ signal }) => getEngagementRecencyDetail(learnerId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: learnerId !== null && learnerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEngagementRecencyDetail>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEngagementRecencyDetailQueryResult = NonNullable<Awaited<ReturnType<typeof getEngagementRecencyDetail>>>
+export type GetEngagementRecencyDetailQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetEngagementRecencyDetail<TData = Awaited<ReturnType<typeof getEngagementRecencyDetail>>, TError = ErrorType<ErrorResponse>>(
+ learnerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEngagementRecencyDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEngagementRecencyDetailQueryOptions(learnerId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetAllocationHistoryReportUrl = (params?: GetAllocationHistoryReportParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -8277,6 +10087,365 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
+    }
+
+export const getGetTutorIdentityDiagnosticsUrl = () => {
+
+
+
+
+  return `/api/tutor-identity/diagnostics`
+}
+
+/**
+ * Stage 2 (admin only, read-only): Bud tutor identifiers with no valid internal mapping, held only by an inactive tutor record, attached to more than one internal tutor record, and potential duplicate tutor records for human review. Never merges or changes anything -- see tutor_identity_lib.py's module docstring.
+ */
+export const getTutorIdentityDiagnostics = async ( options?: RequestInit): Promise<TutorIdentityDiagnostics> => {
+
+  return customFetch<TutorIdentityDiagnostics>(getGetTutorIdentityDiagnosticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorIdentityDiagnosticsQueryKey = () => {
+    return [
+    `/api/tutor-identity/diagnostics`
+    ] as const;
+    }
+
+
+export const getGetTutorIdentityDiagnosticsQueryOptions = <TData = Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorIdentityDiagnosticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>> = ({ signal }) => getTutorIdentityDiagnostics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorIdentityDiagnosticsQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>>
+export type GetTutorIdentityDiagnosticsQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetTutorIdentityDiagnostics<TData = Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorIdentityDiagnostics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorIdentityDiagnosticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPreviewTutorMappingCorrectionUrl = () => {
+
+
+
+
+  return `/api/tutor-identity/mapping-corrections/preview`
+}
+
+/**
+ * Stage 2 (admin only, read-only): previews reassigning a Bud tutor identifier from one internal tutor record to another. Writes nothing.
+ */
+export const previewTutorMappingCorrection = async (tutorMappingCorrectionPreviewRequest: TutorMappingCorrectionPreviewRequest, options?: RequestInit): Promise<TutorMappingCorrectionPreview> => {
+
+  return customFetch<TutorMappingCorrectionPreview>(getPreviewTutorMappingCorrectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(tutorMappingCorrectionPreviewRequest)
+  }
+);}
+
+
+
+
+
+export const getPreviewTutorMappingCorrectionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewTutorMappingCorrection>>, TError,{data: BodyType<TutorMappingCorrectionPreviewRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewTutorMappingCorrection>>, TError,{data: BodyType<TutorMappingCorrectionPreviewRequest>}, TContext> => {
+
+const mutationKey = ['previewTutorMappingCorrection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewTutorMappingCorrection>>, {data: BodyType<TutorMappingCorrectionPreviewRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewTutorMappingCorrection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewTutorMappingCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof previewTutorMappingCorrection>>>
+    export type PreviewTutorMappingCorrectionMutationBody = BodyType<TutorMappingCorrectionPreviewRequest>
+    export type PreviewTutorMappingCorrectionMutationError = ErrorType<ErrorResponse>
+
+    export const usePreviewTutorMappingCorrection = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewTutorMappingCorrection>>, TError,{data: BodyType<TutorMappingCorrectionPreviewRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewTutorMappingCorrection>>,
+        TError,
+        {data: BodyType<TutorMappingCorrectionPreviewRequest>},
+        TContext
+      > => {
+      return useMutation(getPreviewTutorMappingCorrectionMutationOptions(options));
+    }
+
+export const getCommitTutorMappingCorrectionUrl = () => {
+
+
+
+
+  return `/api/tutor-identity/mapping-corrections/commit`
+}
+
+/**
+ * Stage 2 (admin only): applies a previewed tutor mapping correction. Requires a non-blank reason and the exact updated_at values the preview showed for both tutors (rejected with 409 if either has changed since). Atomic; writes an audit_logs entry with before/after values; never touches learners, cohorts, or attendance, and never triggers a Bud learner-sync commit.
+ */
+export const commitTutorMappingCorrection = async (tutorMappingCorrectionCommitRequest: TutorMappingCorrectionCommitRequest, options?: RequestInit): Promise<TutorMappingCorrectionResult> => {
+
+  return customFetch<TutorMappingCorrectionResult>(getCommitTutorMappingCorrectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(tutorMappingCorrectionCommitRequest)
+  }
+);}
+
+
+
+
+
+export const getCommitTutorMappingCorrectionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitTutorMappingCorrection>>, TError,{data: BodyType<TutorMappingCorrectionCommitRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof commitTutorMappingCorrection>>, TError,{data: BodyType<TutorMappingCorrectionCommitRequest>}, TContext> => {
+
+const mutationKey = ['commitTutorMappingCorrection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof commitTutorMappingCorrection>>, {data: BodyType<TutorMappingCorrectionCommitRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  commitTutorMappingCorrection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CommitTutorMappingCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof commitTutorMappingCorrection>>>
+    export type CommitTutorMappingCorrectionMutationBody = BodyType<TutorMappingCorrectionCommitRequest>
+    export type CommitTutorMappingCorrectionMutationError = ErrorType<ErrorResponse>
+
+    export const useCommitTutorMappingCorrection = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof commitTutorMappingCorrection>>, TError,{data: BodyType<TutorMappingCorrectionCommitRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof commitTutorMappingCorrection>>,
+        TError,
+        {data: BodyType<TutorMappingCorrectionCommitRequest>},
+        TContext
+      > => {
+      return useMutation(getCommitTutorMappingCorrectionMutationOptions(options));
+    }
+
+export const getGetBudMissingSourceExceptionsUrl = (params?: GetBudMissingSourceExceptionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bud-missing-source/exceptions?${stringifiedParams}` : `/api/bud-missing-source/exceptions`
+}
+
+/**
+ * Stage 2, item 6 (admin only, READ-ONLY): reverse-presence exceptions for previously-linked, internally active learners whose linked Bud learning-plan row is missing from the source. Lists whatever the last POST /bud-missing-source/refresh detected -- never triggers detection itself. Never infers completion/ withdrawal/deletion or changes a learner's status.
+ */
+export const getBudMissingSourceExceptions = async (params?: GetBudMissingSourceExceptionsParams, options?: RequestInit): Promise<BudMissingSourceExceptionList> => {
+
+  return customFetch<BudMissingSourceExceptionList>(getGetBudMissingSourceExceptionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBudMissingSourceExceptionsQueryKey = (params?: GetBudMissingSourceExceptionsParams,) => {
+    return [
+    `/api/bud-missing-source/exceptions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBudMissingSourceExceptionsQueryOptions = <TData = Awaited<ReturnType<typeof getBudMissingSourceExceptions>>, TError = ErrorType<ErrorResponse>>(params?: GetBudMissingSourceExceptionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudMissingSourceExceptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBudMissingSourceExceptionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBudMissingSourceExceptions>>> = ({ signal }) => getBudMissingSourceExceptions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBudMissingSourceExceptions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBudMissingSourceExceptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getBudMissingSourceExceptions>>>
+export type GetBudMissingSourceExceptionsQueryError = ErrorType<ErrorResponse>
+
+
+
+export function useGetBudMissingSourceExceptions<TData = Awaited<ReturnType<typeof getBudMissingSourceExceptions>>, TError = ErrorType<ErrorResponse>>(
+ params?: GetBudMissingSourceExceptionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBudMissingSourceExceptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBudMissingSourceExceptionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRefreshBudMissingSourceUrl = () => {
+
+
+
+
+  return `/api/bud-missing-source/refresh`
+}
+
+/**
+ * Stage 2, item 6 (admin only): runs reverse-presence detection now, transactionally and idempotently, and returns the updated refresh status. A failure here never discards the last successful results -- only last_attempted_at/last_error move; last_succeeded_at and the exceptions themselves are untouched.
+ */
+export const refreshBudMissingSource = async ( options?: RequestInit): Promise<BudMissingSourceRefreshStatus> => {
+
+  return customFetch<BudMissingSourceRefreshStatus>(getRefreshBudMissingSourceUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefreshBudMissingSourceMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshBudMissingSource>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshBudMissingSource>>, TError,void, TContext> => {
+
+const mutationKey = ['refreshBudMissingSource'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshBudMissingSource>>, void> = () => {
+
+
+          return  refreshBudMissingSource(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshBudMissingSourceMutationResult = NonNullable<Awaited<ReturnType<typeof refreshBudMissingSource>>>
+
+    export type RefreshBudMissingSourceMutationError = ErrorType<ErrorResponse>
+
+    export const useRefreshBudMissingSource = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshBudMissingSource>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshBudMissingSource>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRefreshBudMissingSourceMutationOptions(options));
     }
 
 export const getGetBudSyncStatusUrl = () => {

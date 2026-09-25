@@ -130,9 +130,15 @@ class TestRejectedEntraTokens:
 
     def test_tampered_signature_is_rejected(self, rsa_private_key):
         token = _make_token(rsa_private_key)
-        # Flip a character deep in the signature segment.
+        # Flip the signature segment's last character to something guaranteed
+        # to differ from the original -- the previous version picked the
+        # replacement based on signature[-1] but spliced it in at position 0
+        # (signature[1:]), so on the ~1-in-64 run where the signature's own
+        # first character already happened to be "A", the "tampered" token
+        # was byte-for-byte identical to the valid one and this test flaked.
         header, payload, signature = token.split(".")
-        tampered_signature = ("A" if signature[-1] != "A" else "B") + signature[1:]
+        replacement = "A" if signature[-1] != "A" else "B"
+        tampered_signature = signature[:-1] + replacement
         tampered = f"{header}.{payload}.{tampered_signature}"
         with pytest.raises(TokenValidationError):
             validate_entra_access_token(tampered)

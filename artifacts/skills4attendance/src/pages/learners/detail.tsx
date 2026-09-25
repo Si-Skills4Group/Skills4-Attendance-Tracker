@@ -4,8 +4,9 @@ import {
   useGetLearner, useCreateLearner, useUpdateLearner, useChangeLearnerStatus, useDeleteLearner,
   useGetLearnerAllocationHistory, useGetCurrentUser, useListTutors, useListCohorts, useAllocateLearners, LearnerStatus,
   useListLearnerSecondaryEnrollments, useCreateLearnerSecondaryEnrollment, useEndLearnerSecondaryEnrollment,
+  useGetLearnerFsRequirement, useClearLearnerFsRequirement,
   getGetLearnerQueryKey, getGetLearnerAllocationHistoryQueryKey, getListTutorsQueryKey,
-  getListLearnerSecondaryEnrollmentsQueryKey, getListCohortsQueryKey,
+  getListLearnerSecondaryEnrollmentsQueryKey, getListCohortsQueryKey, getGetLearnerFsRequirementQueryKey,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useForm } from "react-hook-form";
@@ -32,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2, Users, GraduationCap, Plus, XCircle } from "lucide-react";
+import { Loader2, Save, ArrowLeft, History, Calendar, RefreshCw, Trash2, Users, GraduationCap, Plus, XCircle, FileWarning } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -88,6 +89,8 @@ export default function LearnerDetailPage() {
   const [endEnrollmentId, setEndEnrollmentId] = React.useState<number | null>(null);
   const [endEnrollmentDate, setEndEnrollmentDate] = React.useState(format(new Date(), "yyyy-MM-dd"));
   const [endEnrollmentReason, setEndEnrollmentReason] = React.useState("");
+  const [clearFsDialogOpen, setClearFsDialogOpen] = React.useState(false);
+  const [clearFsReason, setClearFsReason] = React.useState("");
 
   const { data: currentUser } = useGetCurrentUser();
   const isAdmin = currentUser?.role === "admin";
@@ -106,6 +109,13 @@ export default function LearnerDetailPage() {
 
   const { data: secondaryEnrollments = [] } = useListLearnerSecondaryEnrollments(learnerId, {
     query: { enabled: !isNew, queryKey: getListLearnerSecondaryEnrollmentsQueryKey(learnerId) }
+  });
+  // Uploaded Functional Skills requirement (Stage 5) -- an interim, manually-
+  // sourced record of subject need, never verified open ILR aims or funding
+  // eligibility. null means no requirement has ever been uploaded for this
+  // learner (distinct from an explicitly cleared one).
+  const { data: fsRequirement } = useGetLearnerFsRequirement(learnerId, {
+    query: { enabled: !isNew, queryKey: getGetLearnerFsRequirementQueryKey(learnerId) }
   });
   const { data: allCohorts = [] } = useListCohorts({ active: true }, {
     query: { enabled: isAdmin && !isNew, queryKey: getListCohortsQueryKey({ active: true }) }
@@ -127,6 +137,7 @@ export default function LearnerDetailPage() {
   const allocateMutation = useAllocateLearners();
   const enrollMutation = useCreateLearnerSecondaryEnrollment();
   const endEnrollmentMutation = useEndLearnerSecondaryEnrollment();
+  const clearFsRequirementMutation = useClearLearnerFsRequirement();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const form = useForm<z.infer<typeof learnerSchema>>({
@@ -286,6 +297,19 @@ export default function LearnerDetailPage() {
         queryClient.invalidateQueries({ queryKey: getListLearnerSecondaryEnrollmentsQueryKey(learnerId) });
       },
       onError: (err) => toast({ title: "Could not end enrollment", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const onClearFsRequirement = () => {
+    if (!clearFsReason.trim()) return;
+    clearFsRequirementMutation.mutate({ learnerId, data: { reason: clearFsReason.trim() } }, {
+      onSuccess: () => {
+        toast({ title: "Functional Skills requirement cleared" });
+        setClearFsDialogOpen(false);
+        setClearFsReason("");
+        queryClient.invalidateQueries({ queryKey: getGetLearnerFsRequirementQueryKey(learnerId) });
+      },
+      onError: (err) => toast({ title: "Could not clear requirement", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 
@@ -524,7 +548,46 @@ export default function LearnerDetailPage() {
           )}
 
           {!isNew && (
-            <TabsContent value="functional-skills">
+            <TabsContent value="functional-skills" className="space-y-6">
+              <Card className="shadow-sm">
+                <CardHeader className="border-b bg-muted/10">
+                  <CardTitle className="flex items-center justify-between text-lg">
+                    <span className="flex items-center gap-2">
+                      <FileWarning className="w-5 h-5 text-primary" /> Uploaded Functional Skills Requirement
+                    </span>
+                    {isAdmin && fsRequirement?.status === "recorded" && (
+                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setClearFsDialogOpen(true)}>
+                        <XCircle className="w-4 h-4 mr-2" /> Clear Requirement
+                      </Button>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    An interim, manually-uploaded record of the subject(s) this learner is expected to need Functional
+                    Skills provision for -- never verified open ILR aims or funding eligibility.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {!fsRequirement ? (
+                    <p className="text-muted-foreground text-sm">No requirement has been uploaded for this learner.</p>
+                  ) : fsRequirement.status === "cleared" ? (
+                    <p className="text-muted-foreground text-sm">
+                      This learner's requirement was explicitly cleared on {format(parseISO(fsRequirement.updatedAt), "MMM d, yyyy")}.
+                    </p>
+                  ) : (
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        <span className="text-muted-foreground">Required subject(s): </span>
+                        <span className="font-medium">
+                          {fsRequirement.maths && fsRequirement.english ? "Maths and English" : fsRequirement.maths ? "Maths" : "English"}
+                        </span>
+                      </p>
+                      <p className="text-muted-foreground">Source: Manual upload</p>
+                      <p className="text-muted-foreground">Last updated: {format(parseISO(fsRequirement.updatedAt), "MMM d, yyyy")}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card className="shadow-sm">
                 <CardHeader className="border-b bg-muted/10">
                   <CardTitle className="flex items-center justify-between text-lg">
@@ -744,6 +807,36 @@ export default function LearnerDetailPage() {
             <Button variant="destructive" onClick={onEndEnrollment} disabled={endEnrollmentMutation.isPending}>
               {endEnrollmentMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               End Enrollment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={clearFsDialogOpen} onOpenChange={(o) => { setClearFsDialogOpen(o); if (!o) setClearFsReason(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear Functional Skills Requirement</DialogTitle>
+            <DialogDescription>
+              This records that no Functional Skills subject requirement currently applies, distinct from no
+              requirement ever having been uploaded -- the history is preserved. This does not remove any Functional
+              Skills cohort enrollment or attendance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="clear-fs-reason">Reason (Required)</Label>
+            <Textarea
+              id="clear-fs-reason"
+              value={clearFsReason}
+              onChange={(e) => setClearFsReason(e.target.value)}
+              rows={3}
+              placeholder="Why is this requirement being cleared?"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearFsDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={onClearFsRequirement} disabled={clearFsRequirementMutation.isPending || !clearFsReason.trim()}>
+              {clearFsRequirementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Clear Requirement
             </Button>
           </DialogFooter>
         </DialogContent>

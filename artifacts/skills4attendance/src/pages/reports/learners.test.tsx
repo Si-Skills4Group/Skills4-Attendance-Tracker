@@ -24,6 +24,7 @@ const searchResult = { id: 1, firstName: 'Ada', lastName: 'Lovelace', learnerRef
 
 let mockSearchResults: any;
 let mockLearnerReport: any;
+let mockEngagementDetail: any;
 
 vi.mock('@workspace/api-client-react', () => ({
   useListLearners: () => mockSearchResults,
@@ -31,6 +32,8 @@ vi.mock('@workspace/api-client-react', () => ({
   useGetLearnerReportV2: () => mockLearnerReport,
   getGetLearnerReportV2QueryKey: (id: number, p: unknown) => ['getLearnerReportV2', id, p],
   exportLearnerReport: vi.fn().mockResolvedValue('sessionDate\n2026-07-10\n'),
+  useGetEngagementRecencyDetail: () => mockEngagementDetail,
+  getGetEngagementRecencyDetailQueryKey: (id: number) => ['getEngagementRecencyDetail', id],
 }));
 
 vi.mock('@/lib/csv-download', () => ({ downloadCsv: vi.fn() }));
@@ -48,6 +51,7 @@ function renderPage() {
 beforeEach(() => {
   mockSearchResults = { data: { items: [searchResult], total: 1, page: 1, pageSize: 10 }, isFetching: false };
   mockLearnerReport = { data: undefined, isLoading: false, isError: false };
+  mockEngagementDetail = { data: undefined };
 });
 
 describe('LearnerReportPage', () => {

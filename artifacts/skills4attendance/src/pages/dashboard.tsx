@@ -9,6 +9,7 @@ import {
   useGetTutorLowAttendanceLearners,
   useGetAdminLowAttendanceLearners,
   useGetSettings,
+  useGetEngagementRecencySummary,
   AdminDashboard,
   TutorDashboard,
   getGetAdminDashboardQueryKey,
@@ -247,6 +248,7 @@ function TutorDashboardView({ data, threshold, filter, onFilterChange }: {
 }) {
   const cohortsQuery = useGetTutorDashboardCohorts(filter);
   const lowAttendanceQuery = useGetTutorLowAttendanceLearners({ ...filter, pageSize: 50 });
+  const engagementSummary = useGetEngagementRecencySummary();
 
   return (
     <div className="space-y-6">
@@ -323,6 +325,22 @@ function TutorDashboardView({ data, threshold, filter, onFilterChange }: {
           </CardContent>
         </Card>
       </div>
+
+      {engagementSummary.data && (
+        <Link href="/reports/engagement-recency">
+          <Card className="shadow-sm hover-elevate cursor-pointer page-transition-enter stagger-3">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Engagement Recency</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {engagementSummary.data.noRecordedEngagementCount} of {engagementSummary.data.totalLearners} learner{engagementSummary.data.totalLearners === 1 ? "" : "s"} with no recorded engagement -- view the full report
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       <div className="page-transition-enter stagger-3">
         <DashboardDateFilter value={filter} onChange={onFilterChange} />

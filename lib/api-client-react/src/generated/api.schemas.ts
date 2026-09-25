@@ -470,6 +470,225 @@ export interface LearnerImportRowResolveInput {
   transferRequested?: boolean;
 }
 
+export type FsRequirementImportJobStatus = typeof FsRequirementImportJobStatus[keyof typeof FsRequirementImportJobStatus];
+
+
+export const FsRequirementImportJobStatus = {
+  ready: 'ready',
+  importing: 'importing',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
+/**
+ * new: no requirement row exists yet. changed: a row exists and the proposed value differs. unchanged: a row exists, status='recorded', identical to proposed -- a no-op at commit. warning: a later row repeating an earlier row's SAME learnerID and AIM in this file -- collapsed, only the first occurrence is applied. error: blocks the whole commit until fixed and re-uploaded (unknown/ambiguous learnerID, blank/unrecognised AIM, or conflicting AIM values for the same learnerID within the file).
+ */
+export type FsRequirementRowOutcome = typeof FsRequirementRowOutcome[keyof typeof FsRequirementRowOutcome];
+
+
+export const FsRequirementRowOutcome = {
+  new: 'new',
+  changed: 'changed',
+  unchanged: 'unchanged',
+  warning: 'warning',
+  error: 'error',
+} as const;
+
+export type FsRequirementImportJobResultSummary = { [key: string]: unknown } | null;
+
+export interface FsRequirementImportJob {
+  id: number;
+  filename: string;
+  uploadedBy: number;
+  status: FsRequirementImportJobStatus;
+  totalRows: number;
+  newCount: number;
+  changedCount: number;
+  unchangedCount: number;
+  warningCount: number;
+  errorCount: number;
+  resultSummary: FsRequirementImportJobResultSummary;
+  lastError: string | null;
+  startedImportingAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+/**
+ * The raw CSV row verbatim, keyed by its literal headers (learnerID, AIM).
+ */
+export type FsRequirementImportJobRowRawData = {[key: string]: string};
+
+export type FsRequirementImportJobRowNormalizedAim = typeof FsRequirementImportJobRowNormalizedAim[keyof typeof FsRequirementImportJobRowNormalizedAim] | null;
+
+
+export const FsRequirementImportJobRowNormalizedAim = {
+  math: 'math',
+  english: 'english',
+  both: 'both',
+} as const;
+
+/**
+ * Looked up live against the current learner record, not persisted.
+ */
+export type FsRequirementImportJobRowMatchedLearnerStatus = typeof FsRequirementImportJobRowMatchedLearnerStatus[keyof typeof FsRequirementImportJobRowMatchedLearnerStatus] | null;
+
+
+export const FsRequirementImportJobRowMatchedLearnerStatus = {
+  active: 'active',
+  withdrawn: 'withdrawn',
+  completed: 'completed',
+  paused: 'paused',
+} as const;
+
+export type FsRequirementImportJobRowExistingStatus = typeof FsRequirementImportJobRowExistingStatus[keyof typeof FsRequirementImportJobRowExistingStatus] | null;
+
+
+export const FsRequirementImportJobRowExistingStatus = {
+  recorded: 'recorded',
+  cleared: 'cleared',
+} as const;
+
+export interface FsRequirementImportJobRow {
+  id: number;
+  jobId: number;
+  rowNumber: number;
+  /** The raw CSV row verbatim, keyed by its literal headers (learnerID, AIM). */
+  rawData: FsRequirementImportJobRowRawData;
+  normalizedAim: FsRequirementImportJobRowNormalizedAim;
+  matchedLearnerId: number | null;
+  /** Looked up live against the current learner record, not persisted -- reflects the learner's name as of this read, not at upload time. */
+  matchedLearnerName?: string | null;
+  /** Looked up live against the current learner record, not persisted. */
+  matchedLearnerStatus?: FsRequirementImportJobRowMatchedLearnerStatus;
+  outcome: FsRequirementRowOutcome;
+  existingMaths: boolean | null;
+  existingEnglish: boolean | null;
+  existingStatus: FsRequirementImportJobRowExistingStatus;
+  proposedMaths: boolean | null;
+  proposedEnglish: boolean | null;
+  errors: string[];
+  warnings: string[];
+  importResult: string | null;
+  createdAt: string;
+}
+
+export interface FsRequirementImportJobRowListResponse {
+  items: FsRequirementImportJobRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * recorded = an active requirement is on file. cleared = an admin explicitly removed it (row retained, history preserved) -- never confused with "no requirement data uploaded" (a null response, no row at all).
+ */
+export type LearnerFsRequirementStatus = typeof LearnerFsRequirementStatus[keyof typeof LearnerFsRequirementStatus];
+
+
+export const LearnerFsRequirementStatus = {
+  recorded: 'recorded',
+  cleared: 'cleared',
+} as const;
+
+export type LearnerFsRequirementSource = typeof LearnerFsRequirementSource[keyof typeof LearnerFsRequirementSource];
+
+
+export const LearnerFsRequirementSource = {
+  manual_upload: 'manual_upload',
+} as const;
+
+/**
+ * "Uploaded Functional Skills requirement" -- an interim, manually- sourced record of subject need, never verified open ILR aims or funding eligibility.
+ */
+export interface LearnerFsRequirement {
+  id: number;
+  learnerId: number;
+  maths: boolean;
+  english: boolean;
+  /** recorded = an active requirement is on file. cleared = an admin explicitly removed it (row retained, history preserved) -- never confused with "no requirement data uploaded" (a null response, no row at all). */
+  status: LearnerFsRequirementStatus;
+  source: LearnerFsRequirementSource;
+  importBatchId: number | null;
+  updatedBy: number;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface ClearFsRequirementInput {
+  reason: string;
+}
+
+export type FsRequirementAllocationCohortSubject = typeof FsRequirementAllocationCohortSubject[keyof typeof FsRequirementAllocationCohortSubject];
+
+
+export const FsRequirementAllocationCohortSubject = {
+  math: 'math',
+  english: 'english',
+  both: 'both',
+} as const;
+
+export interface FsRequirementAllocationCohort {
+  cohortId: number;
+  cohortName: string;
+  subject: FsRequirementAllocationCohortSubject;
+  tutorId: number | null;
+  tutorName: string | null;
+  tutorActive: boolean | null;
+}
+
+export type FsRequirementAllocationItemRequirementStatus = typeof FsRequirementAllocationItemRequirementStatus[keyof typeof FsRequirementAllocationItemRequirementStatus] | null;
+
+
+export const FsRequirementAllocationItemRequirementStatus = {
+  recorded: 'recorded',
+  cleared: 'cleared',
+} as const;
+
+export type FsRequirementAllocationItemMissingSubjectsItem = typeof FsRequirementAllocationItemMissingSubjectsItem[keyof typeof FsRequirementAllocationItemMissingSubjectsItem];
+
+
+export const FsRequirementAllocationItemMissingSubjectsItem = {
+  math: 'math',
+  english: 'english',
+} as const;
+
+export type FsRequirementAllocationItemMissingTutorSubjectsItem = typeof FsRequirementAllocationItemMissingTutorSubjectsItem[keyof typeof FsRequirementAllocationItemMissingTutorSubjectsItem];
+
+
+export const FsRequirementAllocationItemMissingTutorSubjectsItem = {
+  math: 'math',
+  english: 'english',
+} as const;
+
+export interface FsRequirementAllocationItem {
+  id: number;
+  learnerRef: string;
+  learnerName: string;
+  status: LearnerStatus;
+  maths: boolean;
+  english: boolean;
+  requirementRecorded: boolean;
+  requirementStatus: FsRequirementAllocationItemRequirementStatus;
+  source?: string | null;
+  importBatchId?: number | null;
+  updatedBy?: number | null;
+  updatedAt?: string | null;
+  /** Required subject(s) with no active, actively-tutored covering cohort. */
+  missingSubjects: FsRequirementAllocationItemMissingSubjectsItem[];
+  /** Required subject(s) that ARE covered by an active enrollment, but whose cohort's tutor is missing/inactive -- flagged separately from missingSubjects. */
+  missingTutorSubjects: FsRequirementAllocationItemMissingTutorSubjectsItem[];
+  activeSecondaryCohorts: FsRequirementAllocationCohort[];
+}
+
+export interface FsRequirementAllocationListResponse {
+  items: FsRequirementAllocationItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export type TutorImportJobStatus = typeof TutorImportJobStatus[keyof typeof TutorImportJobStatus];
 
 
@@ -1235,6 +1454,331 @@ export interface FunctionalSkillsReportResponse {
   atRiskLearners: FunctionalSkillsLearnerRow[];
 }
 
+export type AllocationReconciliationRowClassification = typeof AllocationReconciliationRowClassification[keyof typeof AllocationReconciliationRowClassification];
+
+
+export const AllocationReconciliationRowClassification = {
+  assigned: 'assigned',
+  unassigned: 'unassigned',
+  needs_review: 'needs_review',
+} as const;
+
+export interface AllocationReconciliationRow {
+  /** @nullable */
+  learnerName: string | null;
+  /** @nullable */
+  learnerRef: string | null;
+  /** @nullable */
+  internalLearnerId: number | null;
+  /** @nullable */
+  budLearningPlanId: string | null;
+  /** @nullable */
+  internalStatus: string | null;
+  /** @nullable */
+  budStatus: string | null;
+  /** @nullable */
+  internalTutorId: number | null;
+  /** @nullable */
+  internalTutorName: string | null;
+  /** @nullable */
+  budTutorName: string | null;
+  /** @nullable */
+  programme: string | null;
+  /** @nullable */
+  programmeSource: string | null;
+  /** @nullable */
+  homeCohortId: number | null;
+  /** @nullable */
+  homeCohortName: string | null;
+  /** @nullable */
+  homeCohortActive: boolean | null;
+  /** @nullable */
+  homeCohortDeleted: boolean | null;
+  /** @nullable */
+  homeCohortMembershipType: string | null;
+  classification: AllocationReconciliationRowClassification;
+  /** @nullable */
+  reviewReason: string | null;
+  issueFlags: string[];
+}
+
+/**
+ * Deliberately three separate numbers, never one: a single person can appear on more than one Needs Review row (e.g. once per ambiguous Bud learning plan), so recordCount is not a person count.
+ */
+export interface AllocationReconciliationNeedsReviewCounts {
+  recordCount: number;
+  distinctPeopleCount: number;
+  budLearningPlanRowCount: number;
+}
+
+export interface AllocationReconciliationCounts {
+  /** Distinct internal learners classified as assigned. */
+  confirmedAssigned: number;
+  /** Distinct internal learners classified as unassigned. */
+  confirmedUnassigned: number;
+  needsReview: AllocationReconciliationNeedsReviewCounts;
+}
+
+export interface AllocationReconciliationAmbiguousPlanBreakdown {
+  distinctLearnerReferences: number;
+  affectedBudLearningPlans: number;
+  affectedInternalLearners: number;
+  withMultipleInProgressPlans: number;
+  withOneInProgressPlusHistorical: number;
+  withOnlyHistoricalPlans: number;
+}
+
+export interface AllocationReconciliationAvailableFilters {
+  budTutorNames: string[];
+  budProgrammes: string[];
+}
+
+export interface AllocationReconciliationSyncJobSummary {
+  id: number;
+  status: string;
+  startedAt: string;
+  /** @nullable */
+  completedAt: string | null;
+}
+
+export interface AllocationReconciliationSourceInfo {
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  sourceRowCount: number;
+  latestAppSyncJob: AllocationReconciliationSyncJobSummary | null;
+  sourceCompletenessNote: string;
+}
+
+export interface AllocationReconciliationResponse {
+  items: AllocationReconciliationRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: AllocationReconciliationCounts;
+  availableFilters: AllocationReconciliationAvailableFilters;
+  sourceInfo: AllocationReconciliationSourceInfo;
+  ambiguousPlanBreakdown: AllocationReconciliationAmbiguousPlanBreakdown;
+  calculatedAt: string;
+}
+
+export interface AllocationReconciliationExclusionBreakdownEntry {
+  reason: string;
+  count: number;
+}
+
+export interface AllocationReconciliationPopulationSummary {
+  calculatedAt: string;
+  confirmedAssigned: number;
+  confirmedUnassigned: number;
+  needsReview: AllocationReconciliationNeedsReviewCounts;
+  /** Every internally active learner lacking a valid home cohort, regardless of Bud status. */
+  broaderActiveWithoutActiveHomeCohort: number;
+  /** The same population narrowed to learners Bud references at all (any status, any resolution cleanliness). */
+  budCorroboratedActiveWithoutActiveHomeCohort: number;
+  /** Mutually-exclusive partition of broaderActiveWithoutActiveHomeCohort by reconciliation reason. */
+  exclusionBreakdown: AllocationReconciliationExclusionBreakdownEntry[];
+  sourceInfo: AllocationReconciliationSourceInfo;
+}
+
+export type AllocationReconciliationMultiplePlanDetailCategory = typeof AllocationReconciliationMultiplePlanDetailCategory[keyof typeof AllocationReconciliationMultiplePlanDetailCategory];
+
+
+export const AllocationReconciliationMultiplePlanDetailCategory = {
+  link_points_to_current: 'link_points_to_current',
+  link_points_to_historical: 'link_points_to_historical',
+  no_existing_link: 'no_existing_link',
+  conflicting_or_unresolved: 'conflicting_or_unresolved',
+} as const;
+
+export interface AllocationReconciliationMultiplePlanDetail {
+  learnerReference: string;
+  /** @nullable */
+  internalLearnerId: number | null;
+  /** @nullable */
+  learnerName: string | null;
+  category: AllocationReconciliationMultiplePlanDetailCategory;
+  currentPlanId: string;
+  /** @nullable */
+  linkedPlanId: string | null;
+  totalPlansForReference: number;
+}
+
+export interface AllocationReconciliationMultiplePlanBreakdown {
+  linkPointsToCurrentPlan: number;
+  linkPointsToHistoricalPlan: number;
+  noExistingLink: number;
+  conflictingOrUnresolved: number;
+  details: AllocationReconciliationMultiplePlanDetail[];
+}
+
+export interface TutorIdentitySummary {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  active: boolean;
+  /** @nullable */
+  externalSystemId: string | null;
+  /** @nullable */
+  employeeRef: string | null;
+  updatedAt: string;
+}
+
+export interface TutorIdentityUnmatchedBudTutor {
+  budTutorId: string;
+  /** @nullable */
+  budTutorName: string | null;
+  affectedLearnerReferences: number;
+  affectedBudLearningPlanRows: number;
+}
+
+export interface TutorIdentityInactiveOnlyBudTutor {
+  budTutorId: string;
+  /** @nullable */
+  budTutorName: string | null;
+  inactiveTutor: TutorIdentitySummary;
+  affectedLearnerReferences: number;
+  affectedBudLearningPlanRows: number;
+}
+
+export interface TutorIdentityMultiOwnerBudTutor {
+  budTutorId: string;
+  /** @nullable */
+  budTutorName: string | null;
+  tutors: TutorIdentitySummary[];
+  affectedLearnerReferences: number;
+  affectedBudLearningPlanRows: number;
+}
+
+export interface TutorIdentityDuplicateCandidateGroup {
+  normalizedName: string;
+  tutors: TutorIdentitySummary[];
+}
+
+export type TutorIdentityDiagnosticsTotals = {
+  distinctAffectedLearnerReferences: number;
+  affectedBudLearningPlanRows: number;
+};
+
+export interface TutorIdentityDiagnostics {
+  unmatchedBudTutorIds: TutorIdentityUnmatchedBudTutor[];
+  budIdsHeldOnlyByInactiveTutor: TutorIdentityInactiveOnlyBudTutor[];
+  budIdAttachedToMultipleTutors: TutorIdentityMultiOwnerBudTutor[];
+  duplicateTutorCandidates: TutorIdentityDuplicateCandidateGroup[];
+  totals: TutorIdentityDiagnosticsTotals;
+}
+
+export interface TutorMappingCorrectionPreviewRequest {
+  sourceTutorId: number;
+  targetTutorId: number;
+  budTutorId: string;
+}
+
+export interface TutorMappingFieldChange {
+  tutorId: number;
+  field: string;
+  /** @nullable */
+  before: string | null;
+  /** @nullable */
+  after: string | null;
+}
+
+export type TutorMappingCorrectionPreviewPreview = {
+  sourceTutorUpdatedAt: string;
+  targetTutorUpdatedAt: string;
+};
+
+export interface TutorMappingCorrectionPreview {
+  sourceTutor: TutorIdentitySummary;
+  targetTutor: TutorIdentitySummary;
+  budTutorId: string;
+  /** A supporting signal only -- two different people can share a name. Never treated as proof. */
+  nameMatch: boolean;
+  /** Signals for a human to weigh (e.g. shared phone, a prior direct transfer between these two records) -- none of them, singly or combined, constitute identity confirmation. */
+  supportingSignals: string[];
+  /** Always true -- every correction requires an explicit identityConfirmedByAdmin=true at commit, regardless of supportingSignals. */
+  requiresManualIdentityConfirmation: boolean;
+  conflictingIdentifierOwnership: string[];
+  fieldChanges: TutorMappingFieldChange[];
+  downstreamEffects: string[];
+  remainingUnresolved: string[];
+  preview: TutorMappingCorrectionPreviewPreview;
+}
+
+export interface TutorMappingCorrectionCommitRequest {
+  sourceTutorId: number;
+  targetTutorId: number;
+  budTutorId: string;
+  expectedSourceTutorUpdatedAt: string;
+  expectedTargetTutorUpdatedAt: string;
+  reason: string;
+  /** Required (true) when the preview's identityConfirmed was false -- an explicit admin acknowledgement that a human, not the system, verified these are the same person. */
+  identityConfirmedByAdmin?: boolean;
+}
+
+export interface TutorMappingCorrectionResult {
+  sourceTutorId: number;
+  targetTutorId: number;
+  budTutorId: string;
+  /** @nullable */
+  appliedAt: string | null;
+  reason: string;
+  /** Any 'ready' (unapplied) Bud sync preview jobs marked 'failed' by this correction, since their proposed values may reference the old tutor mapping. Generate a new preview to see the corrected matching. */
+  invalidatedPreviewJobIds: number[];
+}
+
+export type BudMissingSourceExceptionStatus = typeof BudMissingSourceExceptionStatus[keyof typeof BudMissingSourceExceptionStatus];
+
+
+export const BudMissingSourceExceptionStatus = {
+  open: 'open',
+  resolved: 'resolved',
+} as const;
+
+export interface BudMissingSourceException {
+  id: number;
+  internalLearnerId: number;
+  budLearningPlanId: string;
+  /** @nullable */
+  learnerReference: string | null;
+  status: BudMissingSourceExceptionStatus;
+  firstDetectedAt: string;
+  lastConfirmedMissingAt: string;
+  /** @nullable */
+  resolvedAt: string | null;
+  /** @nullable */
+  learnerName: string | null;
+  /** @nullable */
+  learnerStatus: string | null;
+  otherPlansForPersonStillPresent: boolean;
+  personEntirelyAbsentFromSource: boolean;
+  sourceReferenceUnknown: boolean;
+}
+
+export interface BudMissingSourceRefreshStatus {
+  /** @nullable */
+  lastAttemptedAt: string | null;
+  /** @nullable */
+  lastTriggeredBy: number | null;
+  /** @nullable */
+  lastSucceededAt: string | null;
+  /** @nullable */
+  lastNewlyOpened: number | null;
+  /** @nullable */
+  lastResolved: number | null;
+  /**
+     * Set only when the LAST attempt failed; cleared on the next success. Never affects lastSucceededAt/lastNewlyOpened/lastResolved, which always reflect the last successful run.
+     * @nullable
+     */
+  lastError: string | null;
+}
+
+export interface BudMissingSourceExceptionList {
+  items: BudMissingSourceException[];
+  sourceInfo: AllocationReconciliationSourceInfo;
+  refreshStatus: BudMissingSourceRefreshStatus;
+}
+
 export interface OrganisationReportResponse {
   activeLearners: number;
   activeTutors: number;
@@ -1317,6 +1861,159 @@ export interface LastAttendanceReportResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export type EngagementSource = typeof EngagementSource[keyof typeof EngagementSource];
+
+
+export const EngagementSource = {
+  attendance: 'attendance',
+  bud_submission: 'bud_submission',
+  bud_completed_activity: 'bud_completed_activity',
+  catchup: 'catchup',
+} as const;
+
+/**
+ * not_authorized: the caller does not have an established permission to view this learner's Bud activity (no Bud dates or plan id are returned at all). not_linked: no admin-confirmed Bud learning-plan link exists for this learner. missing_source: a link exists but the plan is not present in the current Bud extract (needs review). needs_review: the linked plan does not appear to be the learner's relevant CURRENT plan (see budPlanCurrency) -- its dates are withheld, not shown as current. resolved: the linked plan was found, is the relevant current plan (or the learner has no current plan at all to conflict with it), and its dates (if any) are shown for reference -- but never included in latestEngagementDate; see EngagementRecencyItem's description.
+ */
+export type EngagementBudStatus = typeof EngagementBudStatus[keyof typeof EngagementBudStatus];
+
+
+export const EngagementBudStatus = {
+  not_authorized: 'not_authorized',
+  not_linked: 'not_linked',
+  missing_source: 'missing_source',
+  needs_review: 'needs_review',
+  resolved: 'resolved',
+} as const;
+
+/**
+ * Null when budStatus is not_authorized/not_linked/missing_source (the question doesn't apply). current: the linked plan is the learner's only/most-recently-confirmed 'In Progress' plan. no_current_plan: the linked plan isn't 'In Progress', and no OTHER plan sharing its learner_reference is either -- not ambiguous, just inactive. linked_plan_not_current: a DIFFERENT plan sharing the same learner_reference is 'In Progress' while the linked one is not -- the link may be stale. multiple_current_plans_ambiguous: 2+ plans sharing the same learner_reference are concurrently 'In Progress' -- which is relevant cannot be determined automatically.
+ */
+export type EngagementBudPlanCurrency = typeof EngagementBudPlanCurrency[keyof typeof EngagementBudPlanCurrency];
+
+
+export const EngagementBudPlanCurrency = {
+  current: 'current',
+  no_current_plan: 'no_current_plan',
+  linked_plan_not_current: 'linked_plan_not_current',
+  multiple_current_plans_ambiguous: 'multiple_current_plans_ambiguous',
+} as const;
+
+export interface EngagementRecencyItem {
+  id: number;
+  learnerRef: string;
+  learnerName: string;
+  tutorName?: string | null;
+  programme: string;
+  /** Most recent session date with status present/late, drawn only from sessions the caller has session-level authority over -- future, cancelled and deleted sessions excluded. Contributes to latestEngagementDate. */
+  lastLiveAttendance: string | null;
+  /** Reference only -- learner_progress.last_submission_date's upstream meaning (learner-initiated vs assessor/system update) has not been confirmed. NEVER included in latestEngagementDate/sources/daysSinceEngagement. Null whenever budStatus is not "resolved" (unauthorised, unlinked, missing, or the linked plan isn't the relevant current one). */
+  lastBudSubmission: string | null;
+  /** Same caveats as lastBudSubmission -- learner_progress.last_completed_activity's real-world meaning is unverified. */
+  lastBudCompletedActivity: string | null;
+  /** The catch-up's own completion date, drawn only from sessions the caller has session-level authority over -- never the original missed session date, never when the tutor entered the confirmation. Contributes to latestEngagementDate. */
+  lastCatchupCompletion: string | null;
+  /** The most recent valid qualifying date across ONLY the verified sources (live attendance, effective catch-up) -- Bud dates never contribute. Null means "No recorded engagement", not zero days. */
+  latestEngagementDate: string | null;
+  /** Currently only ever contains attendance/catchup -- see latestEngagementDate. */
+  sources: EngagementSource[];
+  /** Same as sources, semicolon-joined (used by the CSV export). */
+  sourcesText?: string;
+  daysSinceEngagement: number | null;
+  budStatus: EngagementBudStatus;
+  budPlanCurrency?: EngagementBudPlanCurrency | null;
+  /** True whenever Bud could not be reliably and authorisedly resolved to a current plan for this caller (budStatus != "resolved"). */
+  hasIncompleteSourceCoverage: boolean;
+  /** Human-readable notes for any attendance/catch-up candidate date excluded for being in the future. */
+  dataQualityIssues: string[];
+  dataQualityIssuesText?: string;
+  /** Human-readable caveats about Bud source coverage/permission/currency for this row and this caller (item 5's "Source/matching limitations" column) -- always includes an "unverified" note whenever a Bud date is shown. */
+  sourceLimitations: string[];
+  sourceLimitationsText?: string;
+  /** Null when budStatus is "not_authorized" -- the plan id itself is withheld, not just its dates. */
+  budLinkedPlanId?: string | null;
+  budResolvedPlanId?: string | null;
+  /** Source-refresh freshness only -- never engagement evidence. Null unless budStatus is "resolved" or "needs_review". */
+  budSyncedAt?: string | null;
+  budStatusDesc?: string | null;
+}
+
+export interface EngagementRecencyList {
+  items: EngagementRecencyItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  calculatedAt: string;
+  /** States the population this result is based on for the caller's authorised scope. */
+  scopeLabel: string;
+}
+
+export interface EngagementRecencySummary {
+  totalLearners: number;
+  noRecordedEngagementCount: number;
+  calculatedAt: string;
+  scopeLabel: string;
+}
+
+export interface EngagementEvidenceAttendance {
+  sessionId: number;
+  sessionDate: string;
+  sessionTitle?: string | null;
+  status: AttendanceStatus;
+}
+
+export type CatchupMethod = typeof CatchupMethod[keyof typeof CatchupMethod];
+
+
+export const CatchupMethod = {
+  recording_watched: 'recording_watched',
+  activity_completed: 'activity_completed',
+} as const;
+
+export interface EngagementEvidenceCatchup {
+  catchupId: number;
+  sessionId: number;
+  sessionDate: string;
+  completionDate: string;
+  method: CatchupMethod;
+  note?: string | null;
+  confirmedAt: string;
+  confirmedByUserId: number;
+}
+
+export interface EngagementEvidenceBud {
+  linkedPlanId?: string | null;
+  resolvedPlanId?: string | null;
+  lastSubmissionDate?: string | null;
+  lastCompletedActivity?: string | null;
+  syncedAt?: string | null;
+  statusDesc?: string | null;
+  learningPlanUrl?: string | null;
+}
+
+export interface EngagementRecencyDetail {
+  latestEngagementDate: string | null;
+  sources: EngagementSource[];
+  daysSinceEngagement: number | null;
+  dataQualityIssues: string[];
+  budStatus: EngagementBudStatus;
+  budPlanCurrency?: EngagementBudPlanCurrency | null;
+  hasIncompleteSourceCoverage: boolean;
+  sourceLimitations: string[];
+  lastBudSubmission?: string | null;
+  lastBudCompletedActivity?: string | null;
+  budLinkedPlanId?: string | null;
+  budResolvedPlanId?: string | null;
+  budSyncedAt?: string | null;
+  budStatusDesc?: string | null;
+  attendanceEvidence?: EngagementEvidenceAttendance | null;
+  catchupEvidence?: EngagementEvidenceCatchup | null;
+  /** Only populated when budStatus is "resolved" (authorised, linked, current) -- withheld entirely otherwise, not just its dates. */
+  budEvidence?: EngagementEvidenceBud | null;
+  calculatedAt: string;
+  /** States whether this result is the caller's full authorised evidence (admin) or restricted to what they can individually see (a tutor) -- e.g. "Based on engagement visible to you". */
+  scopeLabel: string;
 }
 
 export interface AttendanceHoursItem {
@@ -1451,6 +2148,143 @@ export interface TutorDashboard {
   nextSession: SessionSummary | null;
   sessionsAwaitingCompletion: SessionSummary[];
   lowAttendanceLearners: LearnerAttendanceSummaryRow[];
+}
+
+/**
+ * Session-based figures (distinct expected learner/session pairs), entirely separate from AttendanceMetrics' minutes-based attendancePercentage above. totalParticipation = liveAttendedLearnerSessions + caughtUp. participationRate = totalParticipation / expectedLearnerSessions * 100, null when expectedLearnerSessions is zero. recordedAbsences and caughtUp intentionally overlap (caughtUp is a subset of recordedAbsences).
+ */
+export interface SessionParticipationMetrics {
+  periodStart: string;
+  periodEnd: string;
+  expectedLearnerSessions: number;
+  /** Present or late (late counts as one attended learner-session, not full minutes). */
+  liveAttendedLearnerSessions: number;
+  /** Authorised or unauthorised, regardless of catch-up. */
+  recordedAbsences: number;
+  /** Subset of recordedAbsences with an effective confirmed catch-up. */
+  caughtUp: number;
+  absencesWithoutCatchup: number;
+  attendanceNotRecorded: number;
+  totalParticipation: number;
+  /** Null when expectedLearnerSessions is zero -- never a fabricated 0%. */
+  participationRate: number | null;
+  /** When this figure was produced. Catch-up known as of this moment only -- a later catch-up confirmation can raise an earlier period's participation on a subsequent call. */
+  calculatedAt: string;
+}
+
+export interface RecordCatchupInput {
+  completionDate: string;
+  method: CatchupMethod;
+  /** Required tutor-entered description of the completion evidence or activity -- this is tutor confirmation, not automated tracking. */
+  note: string;
+}
+
+export interface CorrectCatchupInput {
+  completionDate: string;
+  method: CatchupMethod;
+  note: string;
+  /** Required reason for the correction, retained in the audit history. */
+  reason: string;
+}
+
+export interface RevokeCatchupInput {
+  /** Required reason for the revocation, retained in the audit history. */
+  reason: string;
+}
+
+export type CatchupRecordStatus = typeof CatchupRecordStatus[keyof typeof CatchupRecordStatus];
+
+
+export const CatchupRecordStatus = {
+  recorded: 'recorded',
+  revoked: 'revoked',
+} as const;
+
+export interface CatchupRecord {
+  id: number;
+  sessionId: number;
+  learnerId: number;
+  status: CatchupRecordStatus;
+  completionDate: string;
+  method: CatchupMethod;
+  note: string;
+  /** The attendance status this catch-up was recorded against at the time -- retained even if the original attendance is later corrected. */
+  originalStatusAtRecording: AttendanceStatus;
+  recordedBy: number;
+  recordedAt: string;
+  lastUpdatedBy?: number | null;
+  updatedAt?: string | null;
+  revokedAt?: string | null;
+  revokedBy?: number | null;
+  revocationReason?: string | null;
+}
+
+export type CatchupStateIneligibleReason = typeof CatchupStateIneligibleReason[keyof typeof CatchupStateIneligibleReason] | null;
+
+
+export const CatchupStateIneligibleReason = {
+  revoked: 'revoked',
+  session_cancelled: 'session_cancelled',
+  original_status_changed: 'original_status_changed',
+} as const;
+
+/**
+ * The live-derived "does this catch-up currently count" state -- never a stored flag. Returned by the GET endpoint and by every write endpoint's response.
+ */
+export interface CatchupState {
+  /** Null when no catch-up has ever been recorded for this learner/session. "Not recorded" must never be presented as proof the learner did no work. */
+  catchup: CatchupRecord | null;
+  /** True only when the catch-up is recorded (not revoked), the session is not cancelled, and the current original attendance status is still an eligible absence. */
+  effective: boolean;
+  ineligibleReason: CatchupStateIneligibleReason;
+}
+
+export type CatchupHistoryEntryPreviousValue = { [key: string]: unknown } | null;
+
+export type CatchupHistoryEntryNewValue = { [key: string]: unknown } | null;
+
+export interface CatchupHistoryEntry {
+  id: number;
+  userId?: number | null;
+  userName?: string | null;
+  /** catchup_recorded | catchup_re_recorded | catchup_corrected | catchup_revoked */
+  action: string;
+  previousValue?: CatchupHistoryEntryPreviousValue;
+  newValue?: CatchupHistoryEntryNewValue;
+  timestamp: string;
+}
+
+export type CatchupFollowUpItemCatchupStatus = typeof CatchupFollowUpItemCatchupStatus[keyof typeof CatchupFollowUpItemCatchupStatus] | null;
+
+
+export const CatchupFollowUpItemCatchupStatus = {
+  recorded: 'recorded',
+  revoked: 'revoked',
+} as const;
+
+export interface CatchupFollowUpItem {
+  learnerId: number;
+  learnerName: string;
+  sessionId: number;
+  cohortId: number;
+  cohortName: string;
+  sessionDate: string;
+  sessionTitle?: string | null;
+  originalStatus: AttendanceStatus;
+  catchupId?: number | null;
+  catchupStatus?: CatchupFollowUpItemCatchupStatus;
+  completionDate?: string | null;
+  method?: CatchupMethod | null;
+  note?: string | null;
+  /** Whether the currently-recorded catch-up (if any) is effective -- false for outstanding, revoked, or none. */
+  effective: boolean;
+}
+
+export interface CatchupFollowUpList {
+  items: CatchupFollowUpItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface AttendanceSummaryResponse {
@@ -1968,6 +2802,36 @@ pageSize?: number;
 classification?: LearnerImportRowClassification;
 };
 
+export type UploadFsRequirementImportBody = {
+  file: Blob;
+};
+
+export type ListFsRequirementImportJobRowsParams = {
+page?: number;
+pageSize?: number;
+outcome?: FsRequirementRowOutcome;
+};
+
+export type ConfirmFsRequirementImportJob200 = { [key: string]: unknown };
+
+export type GetFsRequirementAllocationParams = {
+search?: string;
+subject?: GetFsRequirementAllocationSubject;
+missingOnly?: boolean;
+status?: LearnerStatus;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type GetFsRequirementAllocationSubject = typeof GetFsRequirementAllocationSubject[keyof typeof GetFsRequirementAllocationSubject];
+
+
+export const GetFsRequirementAllocationSubject = {
+  math: 'math',
+  english: 'english',
+  both: 'both',
+} as const;
+
 export type ListCohortsParams = {
 tutorId?: number;
 active?: boolean;
@@ -1988,6 +2852,57 @@ cohortId?: number;
 tutorId?: number;
 };
 
+export type GetAllocationReconciliationParams = {
+view?: GetAllocationReconciliationView;
+/**
+ * Which side of the reconciliation the tutor filter applies to -- see tutorValue.
+ */
+tutorSource?: GetAllocationReconciliationTutorSource;
+/**
+ * An internal tutor id (as a string) when tutorSource=internal, or a Bud tutor_name (or the literal "Unknown" for a blank/unmatched one) when tutorSource=bud.
+ */
+tutorValue?: string;
+/**
+ * Which side of the reconciliation the programme filter applies to -- see programmeValue.
+ */
+programmeSource?: GetAllocationReconciliationProgrammeSource;
+/**
+ * A programme name, or the literal "Unknown" for a blank one.
+ */
+programmeValue?: string;
+/**
+ * Case-insensitive substring match against learner name or learner reference.
+ */
+search?: string;
+page?: number;
+pageSize?: number;
+};
+
+export type GetAllocationReconciliationView = typeof GetAllocationReconciliationView[keyof typeof GetAllocationReconciliationView];
+
+
+export const GetAllocationReconciliationView = {
+  assigned: 'assigned',
+  unassigned: 'unassigned',
+  needs_review: 'needs_review',
+} as const;
+
+export type GetAllocationReconciliationTutorSource = typeof GetAllocationReconciliationTutorSource[keyof typeof GetAllocationReconciliationTutorSource];
+
+
+export const GetAllocationReconciliationTutorSource = {
+  internal: 'internal',
+  bud: 'bud',
+} as const;
+
+export type GetAllocationReconciliationProgrammeSource = typeof GetAllocationReconciliationProgrammeSource[keyof typeof GetAllocationReconciliationProgrammeSource];
+
+
+export const GetAllocationReconciliationProgrammeSource = {
+  internal: 'internal',
+  bud: 'bud',
+} as const;
+
 export type ListScheduledAllocationsParams = {
 learnerId?: number;
 };
@@ -1999,6 +2914,46 @@ dateFrom?: string;
 dateTo?: string;
 status?: SessionStatus;
 registerStatus?: RegisterStatus;
+};
+
+export type ListCatchupFollowUpParams = {
+weekStart: string;
+weekEnd: string;
+cohortId?: CohortIdQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
+status?: ListCatchupFollowUpStatus;
+/**
+ * Free-text learner-name filter, applied server-side before pagination.
+ */
+search?: string;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
+export type ListCatchupFollowUpStatus = typeof ListCatchupFollowUpStatus[keyof typeof ListCatchupFollowUpStatus];
+
+
+export const ListCatchupFollowUpStatus = {
+  outstanding: 'outstanding',
+  completed: 'completed',
+} as const;
+
+export type GetParticipationReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
+};
+
+export type ExportParticipationReportParams = {
+period?: PeriodParamParameter;
+dateFrom?: DateFromParamParameter;
+dateTo?: DateToParamParameter;
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+learnerId?: LearnerIdQueryParamParameter;
 };
 
 export type GetLearnerReportV2Params = {
@@ -2223,6 +3178,38 @@ cohortId?: CohortIdQueryParamParameter;
 status?: LearnerStatus;
 };
 
+export type GetEngagementRecencySummaryParams = {
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+};
+
+export type ExportEngagementRecencyParams = {
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+programme?: string;
+search?: string;
+noEngagementOnly?: boolean;
+/**
+ * @minimum 0
+ */
+minDaysSince?: number;
+};
+
+export type ListEngagementRecencyParams = {
+tutorId?: TutorIdQueryParamParameter;
+cohortId?: CohortIdQueryParamParameter;
+programme?: string;
+search?: string;
+noEngagementOnly?: boolean;
+/**
+ * "At least N days since engagement" -- always excludes learners with no recorded engagement at all (kept distinct, never swept in by an implicit "infinite days").
+ * @minimum 0
+ */
+minDaysSince?: number;
+page?: PageParamParameter;
+pageSize?: PageSizeParamParameter;
+};
+
 export type GetAllocationHistoryReportParams = {
 learnerId?: LearnerIdQueryParamParameter;
 tutorId?: TutorIdQueryParamParameter;
@@ -2257,6 +3244,18 @@ dateTo?: string;
 page?: number;
 pageSize?: number;
 };
+
+export type GetBudMissingSourceExceptionsParams = {
+status?: GetBudMissingSourceExceptionsStatus;
+};
+
+export type GetBudMissingSourceExceptionsStatus = typeof GetBudMissingSourceExceptionsStatus[keyof typeof GetBudMissingSourceExceptionsStatus];
+
+
+export const GetBudMissingSourceExceptionsStatus = {
+  open: 'open',
+  resolved: 'resolved',
+} as const;
 
 export type ListBudSyncJobsParams = {
 page?: number;

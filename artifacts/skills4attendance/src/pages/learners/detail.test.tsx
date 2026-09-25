@@ -39,10 +39,12 @@ const secondaryEnrollment = {
 
 let mockCurrentUser: { data: any };
 let mockSecondaryEnrollments: { data: any[] };
+let mockFsRequirement: { data: any };
 const mockDeleteMutate = vi.fn();
 const mockAllocateMutate = vi.fn();
 const mockEnrollMutate = vi.fn();
 const mockEndEnrollmentMutate = vi.fn();
+const mockClearFsRequirementMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetLearner: () => ({ data: learner, isLoading: false }),
@@ -57,22 +59,27 @@ vi.mock('@workspace/api-client-react', () => ({
   useListLearnerSecondaryEnrollments: () => mockSecondaryEnrollments,
   useCreateLearnerSecondaryEnrollment: () => ({ mutate: mockEnrollMutate, isPending: false }),
   useEndLearnerSecondaryEnrollment: () => ({ mutate: mockEndEnrollmentMutate, isPending: false }),
+  useGetLearnerFsRequirement: () => mockFsRequirement,
+  useClearLearnerFsRequirement: () => ({ mutate: mockClearFsRequirementMutate, isPending: false }),
   useGetCurrentUser: () => mockCurrentUser,
   getGetLearnerQueryKey: (id: number) => ['getLearner', id],
   getGetLearnerAllocationHistoryQueryKey: (id: number) => ['getLearnerAllocationHistory', id],
   getListTutorsQueryKey: (params: unknown) => ['listTutors', params],
   getListCohortsQueryKey: (params: unknown) => ['listCohorts', params],
   getListLearnerSecondaryEnrollmentsQueryKey: (id: number) => ['listLearnerSecondaryEnrollments', id],
+  getGetLearnerFsRequirementQueryKey: (id: number) => ['getLearnerFsRequirement', id],
 }));
 
 describe('LearnerDetailPage for an existing learner', () => {
   beforeEach(() => {
     mockCurrentUser = { data: { id: 1, role: 'admin' } };
     mockSecondaryEnrollments = { data: [secondaryEnrollment] };
+    mockFsRequirement = { data: undefined };
     mockDeleteMutate.mockReset();
     mockAllocateMutate.mockReset();
     mockEnrollMutate.mockReset();
     mockEndEnrollmentMutate.mockReset();
+    mockClearFsRequirementMutate.mockReset();
     mockSetLocation.mockReset();
   });
 
@@ -266,6 +273,96 @@ describe('LearnerDetailPage for an existing learner', () => {
           id: 100,
           data: expect.objectContaining({ reason: 'Passed Functional Skills' }),
         },
+        expect.anything(),
+      );
+    });
+
+    it('shows "No requirement has been uploaded" when nothing was ever uploaded for this learner', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+
+      expect(screen.getByText(/no requirement has been uploaded/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /clear requirement/i })).not.toBeInTheDocument();
+    });
+
+    it('shows the uploaded requirement and offers Clear Requirement for admins', async () => {
+      mockFsRequirement = {
+        data: {
+          id: 1, learnerId: 42, maths: true, english: true, status: 'recorded',
+          source: 'manual_upload', importBatchId: 5, updatedBy: 1,
+          updatedAt: '2026-03-01T00:00:00Z', createdAt: '2026-03-01T00:00:00Z',
+        },
+      };
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+
+      expect(screen.getByText('Maths and English')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /clear requirement/i })).toBeInTheDocument();
+    });
+
+    it('hides the Clear Requirement action for tutors even when a requirement exists', async () => {
+      mockCurrentUser = { data: { id: 2, role: 'tutor' } };
+      mockFsRequirement = {
+        data: {
+          id: 1, learnerId: 42, maths: true, english: false, status: 'recorded',
+          source: 'manual_upload', importBatchId: 5, updatedBy: 1,
+          updatedAt: '2026-03-01T00:00:00Z', createdAt: '2026-03-01T00:00:00Z',
+        },
+      };
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+
+      expect(screen.getByText('Maths')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /clear requirement/i })).not.toBeInTheDocument();
+    });
+
+    it('shows an explicitly cleared requirement distinctly from no-data-uploaded', async () => {
+      mockFsRequirement = {
+        data: {
+          id: 1, learnerId: 42, maths: false, english: false, status: 'cleared',
+          source: 'manual_upload', importBatchId: 5, updatedBy: 1,
+          updatedAt: '2026-03-05T00:00:00Z', createdAt: '2026-03-01T00:00:00Z',
+        },
+      };
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+
+      expect(screen.getByText(/explicitly cleared/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no requirement has been uploaded/i)).not.toBeInTheDocument();
+    });
+
+    it('requires a reason before Clear Requirement can be confirmed', async () => {
+      mockFsRequirement = {
+        data: {
+          id: 1, learnerId: 42, maths: true, english: false, status: 'recorded',
+          source: 'manual_upload', importBatchId: 5, updatedBy: 1,
+          updatedAt: '2026-03-01T00:00:00Z', createdAt: '2026-03-01T00:00:00Z',
+        },
+      };
+      const user = userEvent.setup();
+      renderWithQueryClient(<LearnerDetailPage />);
+
+      await user.click(screen.getByRole('tab', { name: /functional skills/i }));
+      await user.click(screen.getByRole('button', { name: /clear requirement/i }));
+
+      const dialog = screen.getByRole('dialog');
+      const confirmButton = within(dialog).getByRole('button', { name: /^clear requirement$/i });
+      expect(confirmButton).toBeDisabled();
+
+      await user.type(within(dialog).getByLabelText(/reason/i), 'Withdrew from Functional Skills');
+      expect(confirmButton).toBeEnabled();
+
+      await user.click(confirmButton);
+      expect(mockClearFsRequirementMutate).toHaveBeenCalledWith(
+        { learnerId: 42, data: { reason: 'Withdrew from Functional Skills' } },
         expect.anything(),
       );
     });

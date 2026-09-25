@@ -1318,6 +1318,223 @@ export const CancelLearnerImportJobResponse = zod.object({
 })
 
 
+export const GetFsRequirementImportTemplateResponse = zod.object({
+  "csv": zod.string(),
+  "filename": zod.string().optional()
+})
+
+
+export const UploadFsRequirementImportBody = zod.object({
+  "file": zod.instanceof(File)
+})
+
+export const UploadFsRequirementImportResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "changedCount": zod.number(),
+  "unchangedCount": zod.number(),
+  "warningCount": zod.number(),
+  "errorCount": zod.number(),
+  "resultSummary": zod.union([zod.record(zod.string(), zod.unknown()),zod.null()]),
+  "lastError": zod.union([zod.string(),zod.null()]),
+  "startedImportingAt": zod.union([zod.coerce.date(),zod.null()]),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+export const GetFsRequirementImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const GetFsRequirementImportJobResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "changedCount": zod.number(),
+  "unchangedCount": zod.number(),
+  "warningCount": zod.number(),
+  "errorCount": zod.number(),
+  "resultSummary": zod.union([zod.record(zod.string(), zod.unknown()),zod.null()]),
+  "lastError": zod.union([zod.string(),zod.null()]),
+  "startedImportingAt": zod.union([zod.coerce.date(),zod.null()]),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+export const ListFsRequirementImportJobRowsParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const listFsRequirementImportJobRowsQueryPageDefault = 1;
+export const listFsRequirementImportJobRowsQueryPageSizeDefault = 25;
+
+export const ListFsRequirementImportJobRowsQueryParams = zod.object({
+  "page": zod.coerce.number().default(listFsRequirementImportJobRowsQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listFsRequirementImportJobRowsQueryPageSizeDefault),
+  "outcome": zod.enum(['new', 'changed', 'unchanged', 'warning', 'error']).optional()
+})
+
+export const ListFsRequirementImportJobRowsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "jobId": zod.number(),
+  "rowNumber": zod.number(),
+  "rawData": zod.record(zod.string(), zod.string()).describe('The raw CSV row verbatim, keyed by its literal headers (learnerID, AIM).'),
+  "normalizedAim": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]),
+  "matchedLearnerId": zod.union([zod.number(),zod.null()]),
+  "matchedLearnerName": zod.union([zod.string(),zod.null()]).optional().describe('Looked up live against the current learner record, not persisted -- reflects the learner\'s name as of this read, not at upload time.'),
+  "matchedLearnerStatus": zod.union([zod.enum(['active', 'withdrawn', 'completed', 'paused']),zod.null()]).optional().describe('Looked up live against the current learner record, not persisted.'),
+  "outcome": zod.enum(['new', 'changed', 'unchanged', 'warning', 'error']).describe('new: no requirement row exists yet. changed: a row exists and the proposed value differs. unchanged: a row exists, status=\'recorded\', identical to proposed -- a no-op at commit. warning: a later row repeating an earlier row\'s SAME learnerID and AIM in this file -- collapsed, only the first occurrence is applied. error: blocks the whole commit until fixed and re-uploaded (unknown\/ambiguous learnerID, blank\/unrecognised AIM, or conflicting AIM values for the same learnerID within the file).'),
+  "existingMaths": zod.union([zod.boolean(),zod.null()]),
+  "existingEnglish": zod.union([zod.boolean(),zod.null()]),
+  "existingStatus": zod.union([zod.enum(['recorded', 'cleared']),zod.null()]),
+  "proposedMaths": zod.union([zod.boolean(),zod.null()]),
+  "proposedEnglish": zod.union([zod.boolean(),zod.null()]),
+  "errors": zod.array(zod.string()),
+  "warnings": zod.array(zod.string()),
+  "importResult": zod.union([zod.string(),zod.null()]),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const ConfirmFsRequirementImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const ConfirmFsRequirementImportJobResponse = zod.looseObject({
+
+})
+
+
+export const CancelFsRequirementImportJobParams = zod.object({
+  "jobId": zod.coerce.number()
+})
+
+export const CancelFsRequirementImportJobResponse = zod.object({
+  "id": zod.number(),
+  "filename": zod.string(),
+  "uploadedBy": zod.number(),
+  "status": zod.enum(['ready', 'importing', 'completed', 'cancelled']),
+  "totalRows": zod.number(),
+  "newCount": zod.number(),
+  "changedCount": zod.number(),
+  "unchangedCount": zod.number(),
+  "warningCount": zod.number(),
+  "errorCount": zod.number(),
+  "resultSummary": zod.union([zod.record(zod.string(), zod.unknown()),zod.null()]),
+  "lastError": zod.union([zod.string(),zod.null()]),
+  "startedImportingAt": zod.union([zod.coerce.date(),zod.null()]),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * Admin-only allocation view (item 6). Defaults to active learners; a learner appears whenever they have an uploaded requirement OR an existing active secondary enrollment, so a pre-existing enrollment with no uploaded requirement is still visible, labelled "Requirement not recorded" rather than asserted inappropriate.
+ */
+export const getFsRequirementAllocationQueryMissingOnlyDefault = false;
+export const getFsRequirementAllocationQueryPageDefault = 1;
+export const getFsRequirementAllocationQueryPageSizeDefault = 25;
+
+export const GetFsRequirementAllocationQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "subject": zod.enum(['math', 'english', 'both']).optional(),
+  "missingOnly": zod.coerce.boolean().default(getFsRequirementAllocationQueryMissingOnlyDefault),
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']).optional(),
+  "page": zod.coerce.number().default(getFsRequirementAllocationQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getFsRequirementAllocationQueryPageSizeDefault)
+})
+
+export const GetFsRequirementAllocationResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "learnerRef": zod.string(),
+  "learnerName": zod.string(),
+  "status": zod.enum(['active', 'withdrawn', 'completed', 'paused']),
+  "maths": zod.boolean(),
+  "english": zod.boolean(),
+  "requirementRecorded": zod.boolean(),
+  "requirementStatus": zod.union([zod.enum(['recorded', 'cleared']),zod.null()]),
+  "source": zod.union([zod.string(),zod.null()]).optional(),
+  "importBatchId": zod.union([zod.number(),zod.null()]).optional(),
+  "updatedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "updatedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "missingSubjects": zod.array(zod.enum(['math', 'english'])).describe('Required subject(s) with no active, actively-tutored covering cohort.'),
+  "missingTutorSubjects": zod.array(zod.enum(['math', 'english'])).describe('Required subject(s) that ARE covered by an active enrollment, but whose cohort\'s tutor is missing\/inactive -- flagged separately from missingSubjects.'),
+  "activeSecondaryCohorts": zod.array(zod.object({
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "subject": zod.enum(['math', 'english', 'both']),
+  "tutorId": zod.union([zod.number(),zod.null()]),
+  "tutorName": zod.union([zod.string(),zod.null()]),
+  "tutorActive": zod.union([zod.boolean(),zod.null()])
+}))
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+/**
+ * Shown on the learner detail screen within existing access permissions (require_learner_access, not admin-only).
+ */
+export const GetLearnerFsRequirementParams = zod.object({
+  "learnerId": zod.coerce.number()
+})
+
+export const GetLearnerFsRequirementResponse = zod.union([zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "maths": zod.boolean(),
+  "english": zod.boolean(),
+  "status": zod.enum(['recorded', 'cleared']).describe('recorded = an active requirement is on file. cleared = an admin explicitly removed it (row retained, history preserved) -- never confused with \"no requirement data uploaded\" (a null response, no row at all).'),
+  "source": zod.enum(['manual_upload']),
+  "importBatchId": zod.union([zod.number(),zod.null()]),
+  "updatedBy": zod.number(),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}).describe('\"Uploaded Functional Skills requirement\" -- an interim, manually- sourced record of subject need, never verified open ILR aims or funding eligibility.'),zod.null()])
+
+
+export const ClearLearnerFsRequirementParams = zod.object({
+  "learnerId": zod.coerce.number()
+})
+
+export const ClearLearnerFsRequirementBody = zod.object({
+  "reason": zod.string()
+})
+
+export const ClearLearnerFsRequirementResponse = zod.object({
+  "id": zod.number(),
+  "learnerId": zod.number(),
+  "maths": zod.boolean(),
+  "english": zod.boolean(),
+  "status": zod.enum(['recorded', 'cleared']).describe('recorded = an active requirement is on file. cleared = an admin explicitly removed it (row retained, history preserved) -- never confused with \"no requirement data uploaded\" (a null response, no row at all).'),
+  "source": zod.enum(['manual_upload']),
+  "importBatchId": zod.union([zod.number(),zod.null()]),
+  "updatedBy": zod.number(),
+  "updatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}).describe('\"Uploaded Functional Skills requirement\" -- an interim, manually- sourced record of subject need, never verified open ILR aims or funding eligibility.')
+
+
 export const GetLearnerParams = zod.object({
   "id": zod.coerce.number()
 })
@@ -1907,6 +2124,137 @@ export const ListAllocationHistoryResponseItem = zod.object({
   "changedDate": zod.coerce.date()
 })
 export const ListAllocationHistoryResponse = zod.array(ListAllocationHistoryResponseItem)
+
+
+/**
+ * Stage 1 operational allocation audit (admin only, read-only): reconciles Bud's "In Progress" learning-plan population against this app's active cohort allocations, using the same matching hierarchy as the Bud sync trial. Visibility only -- never writes anything.
+ */
+export const getAllocationReconciliationQueryViewDefault = `assigned`;
+export const getAllocationReconciliationQueryPageDefault = 1;
+export const getAllocationReconciliationQueryPageSizeDefault = 25;
+
+export const GetAllocationReconciliationQueryParams = zod.object({
+  "view": zod.enum(['assigned', 'unassigned', 'needs_review']).default(getAllocationReconciliationQueryViewDefault),
+  "tutorSource": zod.enum(['internal', 'bud']).optional().describe('Which side of the reconciliation the tutor filter applies to -- see tutorValue.'),
+  "tutorValue": zod.coerce.string().optional().describe('An internal tutor id (as a string) when tutorSource=internal, or a Bud tutor_name (or the literal \"Unknown\" for a blank\/unmatched one) when tutorSource=bud.'),
+  "programmeSource": zod.enum(['internal', 'bud']).optional().describe('Which side of the reconciliation the programme filter applies to -- see programmeValue.'),
+  "programmeValue": zod.coerce.string().optional().describe('A programme name, or the literal \"Unknown\" for a blank one.'),
+  "search": zod.coerce.string().optional().describe('Case-insensitive substring match against learner name or learner reference.'),
+  "page": zod.coerce.number().default(getAllocationReconciliationQueryPageDefault),
+  "pageSize": zod.coerce.number().default(getAllocationReconciliationQueryPageSizeDefault)
+})
+
+export const GetAllocationReconciliationResponse = zod.object({
+  "items": zod.array(zod.object({
+  "learnerName": zod.string().nullable(),
+  "learnerRef": zod.string().nullable(),
+  "internalLearnerId": zod.number().nullable(),
+  "budLearningPlanId": zod.string().nullable(),
+  "internalStatus": zod.string().nullable(),
+  "budStatus": zod.string().nullable(),
+  "internalTutorId": zod.number().nullable(),
+  "internalTutorName": zod.string().nullable(),
+  "budTutorName": zod.string().nullable(),
+  "programme": zod.string().nullable(),
+  "programmeSource": zod.string().nullable(),
+  "homeCohortId": zod.number().nullable(),
+  "homeCohortName": zod.string().nullable(),
+  "homeCohortActive": zod.boolean().nullable(),
+  "homeCohortDeleted": zod.boolean().nullable(),
+  "homeCohortMembershipType": zod.string().nullable(),
+  "classification": zod.enum(['assigned', 'unassigned', 'needs_review']),
+  "reviewReason": zod.string().nullable(),
+  "issueFlags": zod.array(zod.string())
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "counts": zod.object({
+  "confirmedAssigned": zod.number().describe('Distinct internal learners classified as assigned.'),
+  "confirmedUnassigned": zod.number().describe('Distinct internal learners classified as unassigned.'),
+  "needsReview": zod.object({
+  "recordCount": zod.number(),
+  "distinctPeopleCount": zod.number(),
+  "budLearningPlanRowCount": zod.number()
+}).describe('Deliberately three separate numbers, never one: a single person can appear on more than one Needs Review row (e.g. once per ambiguous Bud learning plan), so recordCount is not a person count.')
+}),
+  "availableFilters": zod.object({
+  "budTutorNames": zod.array(zod.string()),
+  "budProgrammes": zod.array(zod.string())
+}),
+  "sourceInfo": zod.object({
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "latestAppSyncJob": zod.union([zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "sourceCompletenessNote": zod.string()
+}),
+  "ambiguousPlanBreakdown": zod.object({
+  "distinctLearnerReferences": zod.number(),
+  "affectedBudLearningPlans": zod.number(),
+  "affectedInternalLearners": zod.number(),
+  "withMultipleInProgressPlans": zod.number(),
+  "withOneInProgressPlusHistorical": zod.number(),
+  "withOnlyHistoricalPlans": zod.number()
+}),
+  "calculatedAt": zod.coerce.date()
+})
+
+
+/**
+ * Stage 2 corrected, same-snapshot Stage 1 population summary (admin only, read-only). Replaces the original completion report's mislabelled "220"/"429"/"191" comparison figures with populations computed fresh and named for what they actually are.
+ */
+export const GetAllocationReconciliationPopulationSummaryResponse = zod.object({
+  "calculatedAt": zod.coerce.date(),
+  "confirmedAssigned": zod.number(),
+  "confirmedUnassigned": zod.number(),
+  "needsReview": zod.object({
+  "recordCount": zod.number(),
+  "distinctPeopleCount": zod.number(),
+  "budLearningPlanRowCount": zod.number()
+}).describe('Deliberately three separate numbers, never one: a single person can appear on more than one Needs Review row (e.g. once per ambiguous Bud learning plan), so recordCount is not a person count.'),
+  "broaderActiveWithoutActiveHomeCohort": zod.number().describe('Every internally active learner lacking a valid home cohort, regardless of Bud status.'),
+  "budCorroboratedActiveWithoutActiveHomeCohort": zod.number().describe('The same population narrowed to learners Bud references at all (any status, any resolution cleanliness).'),
+  "exclusionBreakdown": zod.array(zod.object({
+  "reason": zod.string(),
+  "count": zod.number()
+})).describe('Mutually-exclusive partition of broaderActiveWithoutActiveHomeCohort by reconciliation reason.'),
+  "sourceInfo": zod.object({
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "latestAppSyncJob": zod.union([zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "sourceCompletenessNote": zod.string()
+})
+})
+
+
+/**
+ * Stage 2, item 7 (admin only, read-only): for learners with one current In Progress Bud plan plus historical plans, whether an existing Bud link points at the current plan, a historical one, or doesn't exist. Read-only visibility -- never relinks anything.
+ */
+export const GetAllocationReconciliationMultiplePlanBreakdownResponse = zod.object({
+  "linkPointsToCurrentPlan": zod.number(),
+  "linkPointsToHistoricalPlan": zod.number(),
+  "noExistingLink": zod.number(),
+  "conflictingOrUnresolved": zod.number(),
+  "details": zod.array(zod.object({
+  "learnerReference": zod.string(),
+  "internalLearnerId": zod.number().nullable(),
+  "learnerName": zod.string().nullable(),
+  "category": zod.enum(['link_points_to_current', 'link_points_to_historical', 'no_existing_link', 'conflicting_or_unresolved']),
+  "currentPlanId": zod.string(),
+  "linkedPlanId": zod.string().nullable(),
+  "totalPlansForReference": zod.number()
+}))
+})
 
 
 /**
@@ -2807,6 +3155,232 @@ export const MarkAllPresentResponse = zod.object({
   "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.')
 }))
 })
+
+
+export const GetCatchupStateParams = zod.object({
+  "sessionId": zod.coerce.number(),
+  "learnerId": zod.coerce.number()
+})
+
+export const GetCatchupStateResponse = zod.object({
+  "catchup": zod.union([zod.object({
+  "id": zod.number(),
+  "sessionId": zod.number(),
+  "learnerId": zod.number(),
+  "status": zod.enum(['recorded', 'revoked']),
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.string(),
+  "originalStatusAtRecording": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn', 'bil']).describe('The attendance status this catch-up was recorded against at the time -- retained even if the original attendance is later corrected.'),
+  "recordedBy": zod.number(),
+  "recordedAt": zod.coerce.date(),
+  "lastUpdatedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "updatedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "revocationReason": zod.union([zod.string(),zod.null()]).optional()
+}),zod.null()]).describe('Null when no catch-up has ever been recorded for this learner\/session. \"Not recorded\" must never be presented as proof the learner did no work.'),
+  "effective": zod.boolean().describe('True only when the catch-up is recorded (not revoked), the session is not cancelled, and the current original attendance status is still an eligible absence.'),
+  "ineligibleReason": zod.union([zod.enum(['revoked', 'session_cancelled', 'original_status_changed']),zod.null()])
+}).describe('The live-derived \"does this catch-up currently count\" state -- never a stored flag. Returned by the GET endpoint and by every write endpoint\'s response.')
+
+
+export const RecordCatchupParams = zod.object({
+  "sessionId": zod.coerce.number(),
+  "learnerId": zod.coerce.number()
+})
+
+export const RecordCatchupBody = zod.object({
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.string().describe('Required tutor-entered description of the completion evidence or activity -- this is tutor confirmation, not automated tracking.')
+})
+
+export const RecordCatchupResponse = zod.object({
+  "catchup": zod.union([zod.object({
+  "id": zod.number(),
+  "sessionId": zod.number(),
+  "learnerId": zod.number(),
+  "status": zod.enum(['recorded', 'revoked']),
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.string(),
+  "originalStatusAtRecording": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn', 'bil']).describe('The attendance status this catch-up was recorded against at the time -- retained even if the original attendance is later corrected.'),
+  "recordedBy": zod.number(),
+  "recordedAt": zod.coerce.date(),
+  "lastUpdatedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "updatedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "revocationReason": zod.union([zod.string(),zod.null()]).optional()
+}),zod.null()]).describe('Null when no catch-up has ever been recorded for this learner\/session. \"Not recorded\" must never be presented as proof the learner did no work.'),
+  "effective": zod.boolean().describe('True only when the catch-up is recorded (not revoked), the session is not cancelled, and the current original attendance status is still an eligible absence.'),
+  "ineligibleReason": zod.union([zod.enum(['revoked', 'session_cancelled', 'original_status_changed']),zod.null()])
+}).describe('The live-derived \"does this catch-up currently count\" state -- never a stored flag. Returned by the GET endpoint and by every write endpoint\'s response.')
+
+
+export const CorrectCatchupParams = zod.object({
+  "sessionId": zod.coerce.number(),
+  "learnerId": zod.coerce.number()
+})
+
+export const CorrectCatchupBody = zod.object({
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.string(),
+  "reason": zod.string().describe('Required reason for the correction, retained in the audit history.')
+})
+
+export const CorrectCatchupResponse = zod.object({
+  "catchup": zod.union([zod.object({
+  "id": zod.number(),
+  "sessionId": zod.number(),
+  "learnerId": zod.number(),
+  "status": zod.enum(['recorded', 'revoked']),
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.string(),
+  "originalStatusAtRecording": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn', 'bil']).describe('The attendance status this catch-up was recorded against at the time -- retained even if the original attendance is later corrected.'),
+  "recordedBy": zod.number(),
+  "recordedAt": zod.coerce.date(),
+  "lastUpdatedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "updatedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "revocationReason": zod.union([zod.string(),zod.null()]).optional()
+}),zod.null()]).describe('Null when no catch-up has ever been recorded for this learner\/session. \"Not recorded\" must never be presented as proof the learner did no work.'),
+  "effective": zod.boolean().describe('True only when the catch-up is recorded (not revoked), the session is not cancelled, and the current original attendance status is still an eligible absence.'),
+  "ineligibleReason": zod.union([zod.enum(['revoked', 'session_cancelled', 'original_status_changed']),zod.null()])
+}).describe('The live-derived \"does this catch-up currently count\" state -- never a stored flag. Returned by the GET endpoint and by every write endpoint\'s response.')
+
+
+export const RevokeCatchupParams = zod.object({
+  "sessionId": zod.coerce.number(),
+  "learnerId": zod.coerce.number()
+})
+
+export const RevokeCatchupBody = zod.object({
+  "reason": zod.string().describe('Required reason for the revocation, retained in the audit history.')
+})
+
+export const RevokeCatchupResponse = zod.object({
+  "catchup": zod.union([zod.object({
+  "id": zod.number(),
+  "sessionId": zod.number(),
+  "learnerId": zod.number(),
+  "status": zod.enum(['recorded', 'revoked']),
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.string(),
+  "originalStatusAtRecording": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn', 'bil']).describe('The attendance status this catch-up was recorded against at the time -- retained even if the original attendance is later corrected.'),
+  "recordedBy": zod.number(),
+  "recordedAt": zod.coerce.date(),
+  "lastUpdatedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "updatedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "revokedBy": zod.union([zod.number(),zod.null()]).optional(),
+  "revocationReason": zod.union([zod.string(),zod.null()]).optional()
+}),zod.null()]).describe('Null when no catch-up has ever been recorded for this learner\/session. \"Not recorded\" must never be presented as proof the learner did no work.'),
+  "effective": zod.boolean().describe('True only when the catch-up is recorded (not revoked), the session is not cancelled, and the current original attendance status is still an eligible absence.'),
+  "ineligibleReason": zod.union([zod.enum(['revoked', 'session_cancelled', 'original_status_changed']),zod.null()])
+}).describe('The live-derived \"does this catch-up currently count\" state -- never a stored flag. Returned by the GET endpoint and by every write endpoint\'s response.')
+
+
+export const GetCatchupHistoryParams = zod.object({
+  "sessionId": zod.coerce.number(),
+  "learnerId": zod.coerce.number()
+})
+
+export const GetCatchupHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "userId": zod.union([zod.number(),zod.null()]).optional(),
+  "userName": zod.union([zod.string(),zod.null()]).optional(),
+  "action": zod.string().describe('catchup_recorded | catchup_re_recorded | catchup_corrected | catchup_revoked'),
+  "previousValue": zod.union([zod.record(zod.string(), zod.unknown()),zod.null()]).optional(),
+  "newValue": zod.union([zod.record(zod.string(), zod.unknown()),zod.null()]).optional(),
+  "timestamp": zod.coerce.date()
+})
+export const GetCatchupHistoryResponse = zod.array(GetCatchupHistoryResponseItem)
+
+
+/**
+ * Weekly absence-follow-up list (item 4) -- one row per absent learner/session pair, selected by the ORIGINAL session date range. A catch-up completed later still appears against that original absence. Read-only.
+ */
+export const listCatchupFollowUpQueryPageDefault = 1;
+export const listCatchupFollowUpQueryPageSizeDefault = 25;
+
+export const ListCatchupFollowUpQueryParams = zod.object({
+  "weekStart": zod.date(),
+  "weekEnd": zod.date(),
+  "cohortId": zod.coerce.number().optional(),
+  "learnerId": zod.coerce.number().optional(),
+  "status": zod.enum(['outstanding', 'completed']).optional(),
+  "search": zod.coerce.string().optional().describe('Free-text learner-name filter, applied server-side before pagination.'),
+  "page": zod.coerce.number().default(listCatchupFollowUpQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listCatchupFollowUpQueryPageSizeDefault)
+})
+
+export const ListCatchupFollowUpResponse = zod.object({
+  "items": zod.array(zod.object({
+  "learnerId": zod.number(),
+  "learnerName": zod.string(),
+  "sessionId": zod.number(),
+  "cohortId": zod.number(),
+  "cohortName": zod.string(),
+  "sessionDate": zod.coerce.date(),
+  "sessionTitle": zod.union([zod.string(),zod.null()]).optional(),
+  "originalStatus": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn', 'bil']),
+  "catchupId": zod.union([zod.number(),zod.null()]).optional(),
+  "catchupStatus": zod.union([zod.enum(['recorded', 'revoked']),zod.null()]).optional(),
+  "completionDate": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "method": zod.union([zod.enum(['recording_watched', 'activity_completed']),zod.null()]).optional(),
+  "note": zod.union([zod.string(),zod.null()]).optional(),
+  "effective": zod.boolean().describe('Whether the currently-recorded catch-up (if any) is effective -- false for outstanding, revoked, or none.')
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+export const getParticipationReportQueryPeriodDefault = `current_month`;
+
+export const GetParticipationReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(getParticipationReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "learnerId": zod.coerce.number().optional()
+})
+
+export const GetParticipationReportResponse = zod.object({
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "expectedLearnerSessions": zod.number(),
+  "liveAttendedLearnerSessions": zod.number().describe('Present or late (late counts as one attended learner-session, not full minutes).'),
+  "recordedAbsences": zod.number().describe('Authorised or unauthorised, regardless of catch-up.'),
+  "caughtUp": zod.number().describe('Subset of recordedAbsences with an effective confirmed catch-up.'),
+  "absencesWithoutCatchup": zod.number(),
+  "attendanceNotRecorded": zod.number(),
+  "totalParticipation": zod.number(),
+  "participationRate": zod.union([zod.number(),zod.null()]).describe('Null when expectedLearnerSessions is zero -- never a fabricated 0%.'),
+  "calculatedAt": zod.coerce.date().describe('When this figure was produced. Catch-up known as of this moment only -- a later catch-up confirmation can raise an earlier period\'s participation on a subsequent call.')
+}).describe('Session-based figures (distinct expected learner\/session pairs), entirely separate from AttendanceMetrics\' minutes-based attendancePercentage above. totalParticipation = liveAttendedLearnerSessions + caughtUp. participationRate = totalParticipation \/ expectedLearnerSessions \* 100, null when expectedLearnerSessions is zero. recordedAbsences and caughtUp intentionally overlap (caughtUp is a subset of recordedAbsences).')
+
+
+export const exportParticipationReportQueryPeriodDefault = `current_month`;
+
+export const ExportParticipationReportQueryParams = zod.object({
+  "period": zod.enum(['current_week', 'current_month', 'previous_month', 'last_30_days', 'custom']).default(exportParticipationReportQueryPeriodDefault),
+  "dateFrom": zod.date().optional(),
+  "dateTo": zod.date().optional(),
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "learnerId": zod.coerce.number().optional()
+})
+
+export const ExportParticipationReportResponse = zod.unknown()
 
 
 export const GetLearnerReportV2Params = zod.object({
@@ -3915,6 +4489,140 @@ export const ExportLastAttendanceReportQueryParams = zod.object({
 export const ExportLastAttendanceReportResponse = zod.unknown()
 
 
+export const GetEngagementRecencySummaryQueryParams = zod.object({
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional()
+})
+
+export const GetEngagementRecencySummaryResponse = zod.object({
+  "totalLearners": zod.number(),
+  "noRecordedEngagementCount": zod.number(),
+  "calculatedAt": zod.coerce.date(),
+  "scopeLabel": zod.string()
+})
+
+
+export const exportEngagementRecencyQueryNoEngagementOnlyDefault = false;
+export const exportEngagementRecencyQueryMinDaysSinceMin = 0;
+
+
+
+export const ExportEngagementRecencyQueryParams = zod.object({
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "programme": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "noEngagementOnly": zod.coerce.boolean().default(exportEngagementRecencyQueryNoEngagementOnlyDefault),
+  "minDaysSince": zod.coerce.number().min(exportEngagementRecencyQueryMinDaysSinceMin).optional()
+})
+
+export const ExportEngagementRecencyResponse = zod.unknown()
+
+
+export const listEngagementRecencyQueryNoEngagementOnlyDefault = false;
+export const listEngagementRecencyQueryMinDaysSinceMin = 0;
+
+export const listEngagementRecencyQueryPageDefault = 1;
+export const listEngagementRecencyQueryPageSizeDefault = 25;
+
+export const ListEngagementRecencyQueryParams = zod.object({
+  "tutorId": zod.coerce.number().optional(),
+  "cohortId": zod.coerce.number().optional(),
+  "programme": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "noEngagementOnly": zod.coerce.boolean().default(listEngagementRecencyQueryNoEngagementOnlyDefault),
+  "minDaysSince": zod.coerce.number().min(listEngagementRecencyQueryMinDaysSinceMin).optional().describe('\"At least N days since engagement\" -- always excludes learners with no recorded engagement at all (kept distinct, never swept in by an implicit \"infinite days\").'),
+  "page": zod.coerce.number().default(listEngagementRecencyQueryPageDefault),
+  "pageSize": zod.coerce.number().default(listEngagementRecencyQueryPageSizeDefault)
+})
+
+export const ListEngagementRecencyResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "learnerRef": zod.string(),
+  "learnerName": zod.string(),
+  "tutorName": zod.union([zod.string(),zod.null()]).optional(),
+  "programme": zod.string(),
+  "lastLiveAttendance": zod.union([zod.coerce.date(),zod.null()]).describe('Most recent session date with status present\/late, drawn only from sessions the caller has session-level authority over -- future, cancelled and deleted sessions excluded. Contributes to latestEngagementDate.'),
+  "lastBudSubmission": zod.union([zod.coerce.date(),zod.null()]).describe('Reference only -- learner_progress.last_submission_date\'s upstream meaning (learner-initiated vs assessor\/system update) has not been confirmed. NEVER included in latestEngagementDate\/sources\/daysSinceEngagement. Null whenever budStatus is not \"resolved\" (unauthorised, unlinked, missing, or the linked plan isn\'t the relevant current one).'),
+  "lastBudCompletedActivity": zod.union([zod.coerce.date(),zod.null()]).describe('Same caveats as lastBudSubmission -- learner_progress.last_completed_activity\'s real-world meaning is unverified.'),
+  "lastCatchupCompletion": zod.union([zod.coerce.date(),zod.null()]).describe('The catch-up\'s own completion date, drawn only from sessions the caller has session-level authority over -- never the original missed session date, never when the tutor entered the confirmation. Contributes to latestEngagementDate.'),
+  "latestEngagementDate": zod.union([zod.coerce.date(),zod.null()]).describe('The most recent valid qualifying date across ONLY the verified sources (live attendance, effective catch-up) -- Bud dates never contribute. Null means \"No recorded engagement\", not zero days.'),
+  "sources": zod.array(zod.enum(['attendance', 'bud_submission', 'bud_completed_activity', 'catchup'])).describe('Currently only ever contains attendance\/catchup -- see latestEngagementDate.'),
+  "sourcesText": zod.string().optional().describe('Same as sources, semicolon-joined (used by the CSV export).'),
+  "daysSinceEngagement": zod.union([zod.number(),zod.null()]),
+  "budStatus": zod.enum(['not_authorized', 'not_linked', 'missing_source', 'needs_review', 'resolved']).describe('not_authorized: the caller does not have an established permission to view this learner\'s Bud activity (no Bud dates or plan id are returned at all). not_linked: no admin-confirmed Bud learning-plan link exists for this learner. missing_source: a link exists but the plan is not present in the current Bud extract (needs review). needs_review: the linked plan does not appear to be the learner\'s relevant CURRENT plan (see budPlanCurrency) -- its dates are withheld, not shown as current. resolved: the linked plan was found, is the relevant current plan (or the learner has no current plan at all to conflict with it), and its dates (if any) are shown for reference -- but never included in latestEngagementDate; see EngagementRecencyItem\'s description.'),
+  "budPlanCurrency": zod.union([zod.enum(['current', 'no_current_plan', 'linked_plan_not_current', 'multiple_current_plans_ambiguous']).describe('Null when budStatus is not_authorized\/not_linked\/missing_source (the question doesn\'t apply). current: the linked plan is the learner\'s only\/most-recently-confirmed \'In Progress\' plan. no_current_plan: the linked plan isn\'t \'In Progress\', and no OTHER plan sharing its learner_reference is either -- not ambiguous, just inactive. linked_plan_not_current: a DIFFERENT plan sharing the same learner_reference is \'In Progress\' while the linked one is not -- the link may be stale. multiple_current_plans_ambiguous: 2+ plans sharing the same learner_reference are concurrently \'In Progress\' -- which is relevant cannot be determined automatically.'),zod.null()]).optional(),
+  "hasIncompleteSourceCoverage": zod.boolean().describe('True whenever Bud could not be reliably and authorisedly resolved to a current plan for this caller (budStatus != \"resolved\").'),
+  "dataQualityIssues": zod.array(zod.string()).describe('Human-readable notes for any attendance\/catch-up candidate date excluded for being in the future.'),
+  "dataQualityIssuesText": zod.string().optional(),
+  "sourceLimitations": zod.array(zod.string()).describe('Human-readable caveats about Bud source coverage\/permission\/currency for this row and this caller (item 5\'s \"Source\/matching limitations\" column) -- always includes an \"unverified\" note whenever a Bud date is shown.'),
+  "sourceLimitationsText": zod.string().optional(),
+  "budLinkedPlanId": zod.union([zod.string(),zod.null()]).optional().describe('Null when budStatus is \"not_authorized\" -- the plan id itself is withheld, not just its dates.'),
+  "budResolvedPlanId": zod.union([zod.string(),zod.null()]).optional(),
+  "budSyncedAt": zod.union([zod.coerce.date(),zod.null()]).optional().describe('Source-refresh freshness only -- never engagement evidence. Null unless budStatus is \"resolved\" or \"needs_review\".'),
+  "budStatusDesc": zod.union([zod.string(),zod.null()]).optional()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "calculatedAt": zod.coerce.date(),
+  "scopeLabel": zod.string().describe('States the population this result is based on for the caller\'s authorised scope.')
+})
+
+
+/**
+ * Traceability drill-down (item 6): the exact same combination rule as the list, with full supporting-evidence references. This is a current view of available evidence, not a reconstruction of what was known on any historical date.
+ */
+export const GetEngagementRecencyDetailParams = zod.object({
+  "learnerId": zod.coerce.number()
+})
+
+export const GetEngagementRecencyDetailResponse = zod.object({
+  "latestEngagementDate": zod.union([zod.coerce.date(),zod.null()]),
+  "sources": zod.array(zod.enum(['attendance', 'bud_submission', 'bud_completed_activity', 'catchup'])),
+  "daysSinceEngagement": zod.union([zod.number(),zod.null()]),
+  "dataQualityIssues": zod.array(zod.string()),
+  "budStatus": zod.enum(['not_authorized', 'not_linked', 'missing_source', 'needs_review', 'resolved']).describe('not_authorized: the caller does not have an established permission to view this learner\'s Bud activity (no Bud dates or plan id are returned at all). not_linked: no admin-confirmed Bud learning-plan link exists for this learner. missing_source: a link exists but the plan is not present in the current Bud extract (needs review). needs_review: the linked plan does not appear to be the learner\'s relevant CURRENT plan (see budPlanCurrency) -- its dates are withheld, not shown as current. resolved: the linked plan was found, is the relevant current plan (or the learner has no current plan at all to conflict with it), and its dates (if any) are shown for reference -- but never included in latestEngagementDate; see EngagementRecencyItem\'s description.'),
+  "budPlanCurrency": zod.union([zod.enum(['current', 'no_current_plan', 'linked_plan_not_current', 'multiple_current_plans_ambiguous']).describe('Null when budStatus is not_authorized\/not_linked\/missing_source (the question doesn\'t apply). current: the linked plan is the learner\'s only\/most-recently-confirmed \'In Progress\' plan. no_current_plan: the linked plan isn\'t \'In Progress\', and no OTHER plan sharing its learner_reference is either -- not ambiguous, just inactive. linked_plan_not_current: a DIFFERENT plan sharing the same learner_reference is \'In Progress\' while the linked one is not -- the link may be stale. multiple_current_plans_ambiguous: 2+ plans sharing the same learner_reference are concurrently \'In Progress\' -- which is relevant cannot be determined automatically.'),zod.null()]).optional(),
+  "hasIncompleteSourceCoverage": zod.boolean(),
+  "sourceLimitations": zod.array(zod.string()),
+  "lastBudSubmission": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "lastBudCompletedActivity": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "budLinkedPlanId": zod.union([zod.string(),zod.null()]).optional(),
+  "budResolvedPlanId": zod.union([zod.string(),zod.null()]).optional(),
+  "budSyncedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "budStatusDesc": zod.union([zod.string(),zod.null()]).optional(),
+  "attendanceEvidence": zod.union([zod.object({
+  "sessionId": zod.number(),
+  "sessionDate": zod.coerce.date(),
+  "sessionTitle": zod.union([zod.string(),zod.null()]).optional(),
+  "status": zod.enum(['present', 'absent_authorised', 'absent_unauthorised', 'late', 'not_expected', 'withdrawn', 'bil'])
+}),zod.null()]).optional(),
+  "catchupEvidence": zod.union([zod.object({
+  "catchupId": zod.number(),
+  "sessionId": zod.number(),
+  "sessionDate": zod.coerce.date(),
+  "completionDate": zod.coerce.date(),
+  "method": zod.enum(['recording_watched', 'activity_completed']),
+  "note": zod.union([zod.string(),zod.null()]).optional(),
+  "confirmedAt": zod.coerce.date(),
+  "confirmedByUserId": zod.number()
+}),zod.null()]).optional(),
+  "budEvidence": zod.union([zod.object({
+  "linkedPlanId": zod.union([zod.string(),zod.null()]).optional(),
+  "resolvedPlanId": zod.union([zod.string(),zod.null()]).optional(),
+  "lastSubmissionDate": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "lastCompletedActivity": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "syncedAt": zod.union([zod.coerce.date(),zod.null()]).optional(),
+  "statusDesc": zod.union([zod.string(),zod.null()]).optional(),
+  "learningPlanUrl": zod.union([zod.string(),zod.null()]).optional()
+}),zod.null()]).optional().describe('Only populated when budStatus is \"resolved\" (authorised, linked, current) -- withheld entirely otherwise, not just its dates.'),
+  "calculatedAt": zod.coerce.date(),
+  "scopeLabel": zod.string().describe('States whether this result is the caller\'s full authorised evidence (admin) or restricted to what they can individually see (a tutor) -- e.g. \"Based on engagement visible to you\".')
+})
+
+
 export const getAllocationHistoryReportQueryPageDefault = 1;
 export const getAllocationHistoryReportQueryPageSizeDefault = 25;
 
@@ -4271,6 +4979,203 @@ export const UpdateSettingsResponse = zod.object({
   "budSyncMaxLearnerUpdates": zod.number(),
   "budSyncMaxCohortCreations": zod.number(),
   "budSyncMaxTutorTransfers": zod.number()
+})
+
+
+/**
+ * Stage 2 (admin only, read-only): Bud tutor identifiers with no valid internal mapping, held only by an inactive tutor record, attached to more than one internal tutor record, and potential duplicate tutor records for human review. Never merges or changes anything -- see tutor_identity_lib.py's module docstring.
+ */
+export const GetTutorIdentityDiagnosticsResponse = zod.object({
+  "unmatchedBudTutorIds": zod.array(zod.object({
+  "budTutorId": zod.string(),
+  "budTutorName": zod.string().nullable(),
+  "affectedLearnerReferences": zod.number(),
+  "affectedBudLearningPlanRows": zod.number()
+})),
+  "budIdsHeldOnlyByInactiveTutor": zod.array(zod.object({
+  "budTutorId": zod.string(),
+  "budTutorName": zod.string().nullable(),
+  "inactiveTutor": zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "employeeRef": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+}),
+  "affectedLearnerReferences": zod.number(),
+  "affectedBudLearningPlanRows": zod.number()
+})),
+  "budIdAttachedToMultipleTutors": zod.array(zod.object({
+  "budTutorId": zod.string(),
+  "budTutorName": zod.string().nullable(),
+  "tutors": zod.array(zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "employeeRef": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+})),
+  "affectedLearnerReferences": zod.number(),
+  "affectedBudLearningPlanRows": zod.number()
+})),
+  "duplicateTutorCandidates": zod.array(zod.object({
+  "normalizedName": zod.string(),
+  "tutors": zod.array(zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "employeeRef": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+}))
+})),
+  "totals": zod.object({
+  "distinctAffectedLearnerReferences": zod.number(),
+  "affectedBudLearningPlanRows": zod.number()
+})
+})
+
+
+/**
+ * Stage 2 (admin only, read-only): previews reassigning a Bud tutor identifier from one internal tutor record to another. Writes nothing.
+ */
+export const PreviewTutorMappingCorrectionBody = zod.object({
+  "sourceTutorId": zod.number(),
+  "targetTutorId": zod.number(),
+  "budTutorId": zod.string()
+})
+
+export const PreviewTutorMappingCorrectionResponse = zod.object({
+  "sourceTutor": zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "employeeRef": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+}),
+  "targetTutor": zod.object({
+  "id": zod.number(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "email": zod.string(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "employeeRef": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+}),
+  "budTutorId": zod.string(),
+  "nameMatch": zod.boolean().describe('A supporting signal only -- two different people can share a name. Never treated as proof.'),
+  "supportingSignals": zod.array(zod.string()).describe('Signals for a human to weigh (e.g. shared phone, a prior direct transfer between these two records) -- none of them, singly or combined, constitute identity confirmation.'),
+  "requiresManualIdentityConfirmation": zod.boolean().describe('Always true -- every correction requires an explicit identityConfirmedByAdmin=true at commit, regardless of supportingSignals.'),
+  "conflictingIdentifierOwnership": zod.array(zod.string()),
+  "fieldChanges": zod.array(zod.object({
+  "tutorId": zod.number(),
+  "field": zod.string(),
+  "before": zod.string().nullable(),
+  "after": zod.string().nullable()
+})),
+  "downstreamEffects": zod.array(zod.string()),
+  "remainingUnresolved": zod.array(zod.string()),
+  "preview": zod.object({
+  "sourceTutorUpdatedAt": zod.coerce.date(),
+  "targetTutorUpdatedAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * Stage 2 (admin only): applies a previewed tutor mapping correction. Requires a non-blank reason and the exact updated_at values the preview showed for both tutors (rejected with 409 if either has changed since). Atomic; writes an audit_logs entry with before/after values; never touches learners, cohorts, or attendance, and never triggers a Bud learner-sync commit.
+ */
+export const commitTutorMappingCorrectionBodyIdentityConfirmedByAdminDefault = false;
+
+export const CommitTutorMappingCorrectionBody = zod.object({
+  "sourceTutorId": zod.number(),
+  "targetTutorId": zod.number(),
+  "budTutorId": zod.string(),
+  "expectedSourceTutorUpdatedAt": zod.coerce.date(),
+  "expectedTargetTutorUpdatedAt": zod.coerce.date(),
+  "reason": zod.string(),
+  "identityConfirmedByAdmin": zod.boolean().default(commitTutorMappingCorrectionBodyIdentityConfirmedByAdminDefault).describe('Required (true) when the preview\'s identityConfirmed was false -- an explicit admin acknowledgement that a human, not the system, verified these are the same person.')
+})
+
+export const CommitTutorMappingCorrectionResponse = zod.object({
+  "sourceTutorId": zod.number(),
+  "targetTutorId": zod.number(),
+  "budTutorId": zod.string(),
+  "appliedAt": zod.coerce.date().nullable(),
+  "reason": zod.string(),
+  "invalidatedPreviewJobIds": zod.array(zod.number()).describe('Any \'ready\' (unapplied) Bud sync preview jobs marked \'failed\' by this correction, since their proposed values may reference the old tutor mapping. Generate a new preview to see the corrected matching.')
+})
+
+
+/**
+ * Stage 2, item 6 (admin only, READ-ONLY): reverse-presence exceptions for previously-linked, internally active learners whose linked Bud learning-plan row is missing from the source. Lists whatever the last POST /bud-missing-source/refresh detected -- never triggers detection itself. Never infers completion/ withdrawal/deletion or changes a learner's status.
+ */
+export const getBudMissingSourceExceptionsQueryStatusDefault = `open`;
+
+export const GetBudMissingSourceExceptionsQueryParams = zod.object({
+  "status": zod.enum(['open', 'resolved']).default(getBudMissingSourceExceptionsQueryStatusDefault)
+})
+
+export const GetBudMissingSourceExceptionsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "internalLearnerId": zod.number(),
+  "budLearningPlanId": zod.string(),
+  "learnerReference": zod.string().nullable(),
+  "status": zod.enum(['open', 'resolved']),
+  "firstDetectedAt": zod.coerce.date(),
+  "lastConfirmedMissingAt": zod.coerce.date(),
+  "resolvedAt": zod.coerce.date().nullable(),
+  "learnerName": zod.string().nullable(),
+  "learnerStatus": zod.string().nullable(),
+  "otherPlansForPersonStillPresent": zod.boolean(),
+  "personEntirelyAbsentFromSource": zod.boolean(),
+  "sourceReferenceUnknown": zod.boolean()
+})),
+  "sourceInfo": zod.object({
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "sourceRowCount": zod.number(),
+  "latestAppSyncJob": zod.union([zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+}),zod.null()]),
+  "sourceCompletenessNote": zod.string()
+}),
+  "refreshStatus": zod.object({
+  "lastAttemptedAt": zod.coerce.date().nullable(),
+  "lastTriggeredBy": zod.number().nullable(),
+  "lastSucceededAt": zod.coerce.date().nullable(),
+  "lastNewlyOpened": zod.number().nullable(),
+  "lastResolved": zod.number().nullable(),
+  "lastError": zod.string().nullable().describe('Set only when the LAST attempt failed; cleared on the next success. Never affects lastSucceededAt\/lastNewlyOpened\/lastResolved, which always reflect the last successful run.')
+})
+})
+
+
+/**
+ * Stage 2, item 6 (admin only): runs reverse-presence detection now, transactionally and idempotently, and returns the updated refresh status. A failure here never discards the last successful results -- only last_attempted_at/last_error move; last_succeeded_at and the exceptions themselves are untouched.
+ */
+export const RefreshBudMissingSourceResponse = zod.object({
+  "lastAttemptedAt": zod.coerce.date().nullable(),
+  "lastTriggeredBy": zod.number().nullable(),
+  "lastSucceededAt": zod.coerce.date().nullable(),
+  "lastNewlyOpened": zod.number().nullable(),
+  "lastResolved": zod.number().nullable(),
+  "lastError": zod.string().nullable().describe('Set only when the LAST attempt failed; cleared on the next success. Never affects lastSucceededAt\/lastNewlyOpened\/lastResolved, which always reflect the last successful run.')
 })
 
 

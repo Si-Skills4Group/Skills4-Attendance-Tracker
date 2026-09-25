@@ -1,11 +1,13 @@
 import * as React from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   useListLearners,
   getListLearnersQueryKey,
   useGetLearnerReportV2,
   getGetLearnerReportV2QueryKey,
   exportLearnerReport,
+  useGetEngagementRecencyDetail,
+  getGetEngagementRecencyDetailQueryKey,
 } from "@workspace/api-client-react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,14 +21,27 @@ import { AttendanceStatusBadge } from "@/components/status-badges";
 import { useDebounce } from "@/hooks/use-debounce";
 import { downloadCsv } from "@/lib/csv-download";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Loader2, Download, GraduationCap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Loader2, Download, GraduationCap, ChevronLeft, ChevronRight, History } from "lucide-react";
 import { format } from "date-fns";
+
+const ENGAGEMENT_SOURCE_LABELS: Record<string, string> = {
+  attendance: "live attendance",
+  bud_submission: "Bud submission",
+  bud_completed_activity: "Bud completed activity",
+  catchup: "confirmed catch-up",
+};
 
 export default function LearnerReportPage() {
   const { toast } = useToast();
+  const searchString = useSearch();
   const [search, setSearch] = React.useState("");
   const debouncedSearch = useDebounce(search, 300);
-  const [selectedLearnerId, setSelectedLearnerId] = React.useState<number | null>(null);
+  // Supports deep-linking from another report's drill-down action (e.g.
+  // the Engagement Recency report's "View" link) via ?learnerId=<id>.
+  const [selectedLearnerId, setSelectedLearnerId] = React.useState<number | null>(() => {
+    const id = new URLSearchParams(searchString).get("learnerId");
+    return id ? Number(id) : null;
+  });
   const [dateFilter, setDateFilter] = React.useState<DateFilterValue>({ period: "current_month" });
   const [page, setPage] = React.useState(1);
   const [isExporting, setIsExporting] = React.useState(false);
@@ -46,6 +61,10 @@ export default function LearnerReportPage() {
     selectedLearnerId as number,
     learnerReportParams,
     { query: { enabled: selectedLearnerId !== null, queryKey: getGetLearnerReportV2QueryKey(selectedLearnerId as number, learnerReportParams) } },
+  );
+  const { data: engagement } = useGetEngagementRecencyDetail(
+    selectedLearnerId as number,
+    { query: { enabled: selectedLearnerId !== null, queryKey: getGetEngagementRecencyDetailQueryKey(selectedLearnerId as number) } },
   );
 
   const handleExport = async () => {
@@ -142,7 +161,49 @@ export default function LearnerReportPage() {
                     <div><p className="text-muted-foreground">Activity progress</p><p className="font-mono font-medium">{report.bud.activityProgress != null ? `${report.bud.activityProgress}%` : "—"}</p></div>
                     <div><p className="text-muted-foreground">Activities overdue</p><p className="font-mono font-medium">{report.bud.activitiesOverdue ?? "—"}</p></div>
                     <div><p className="text-muted-foreground">Status</p><p className="font-medium">{report.bud.statusDesc ?? "—"}</p></div>
-                    {report.bud.syncedAt && <div className="col-span-full text-xs text-muted-foreground">Synced {format(new Date(report.bud.syncedAt), "d MMM yyyy HH:mm")}</div>}
+                    <div><p className="text-muted-foreground">Last submission</p><p className="font-medium">{report.bud.lastSubmissionDate ? format(new Date(report.bud.lastSubmissionDate), "d MMM yyyy") : "—"}</p></div>
+                    <div><p className="text-muted-foreground">Last completed activity</p><p className="font-medium">{report.bud.lastCompletedActivity ? format(new Date(report.bud.lastCompletedActivity), "d MMM yyyy") : "—"}</p></div>
+                    {report.bud.syncedAt && <div className="col-span-full text-xs text-muted-foreground">Source last refreshed {format(new Date(report.bud.syncedAt), "d MMM yyyy HH:mm")} -- this is when Bud data was last synced, not when the learner was last active.</div>}
+                  </CardContent>
+                </Card>
+              )}
+
+              {engagement && (
+                <Card className="shadow-sm mb-6">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Latest Recorded Engagement</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="flex flex-wrap items-baseline gap-3 mb-3">
+                      <p className="text-2xl font-bold font-mono">
+                        {engagement.latestEngagementDate ? format(new Date(engagement.latestEngagementDate), "d MMM yyyy") : "No recorded engagement"}
+                      </p>
+                      {engagement.daysSinceEngagement != null && (
+                        <p className="text-sm text-muted-foreground">{engagement.daysSinceEngagement} day{engagement.daysSinceEngagement === 1 ? "" : "s"} ago</p>
+                      )}
+                    </div>
+                    {engagement.sources.length > 0 && (
+                      <p className="text-xs text-muted-foreground mb-3">Source: {engagement.sources.map((s) => ENGAGEMENT_SOURCE_LABELS[s]).join(", ")}</p>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
+                      <div><p className="text-muted-foreground">Live attendance</p><p className="font-medium">{engagement.attendanceEvidence ? format(new Date(engagement.attendanceEvidence.sessionDate), "d MMM yyyy") : "—"}</p></div>
+                      <div><p className="text-muted-foreground">Bud submission (unverified)</p><p className="font-medium">{engagement.budEvidence?.lastSubmissionDate ? format(new Date(engagement.budEvidence.lastSubmissionDate), "d MMM yyyy") : "—"}</p></div>
+                      <div><p className="text-muted-foreground">Bud activity (unverified)</p><p className="font-medium">{engagement.budEvidence?.lastCompletedActivity ? format(new Date(engagement.budEvidence.lastCompletedActivity), "d MMM yyyy") : "—"}</p></div>
+                      <div><p className="text-muted-foreground">Catch-up</p><p className="font-medium">{engagement.catchupEvidence ? format(new Date(engagement.catchupEvidence.completionDate), "d MMM yyyy") : "—"}</p></div>
+                    </div>
+                    {engagement.sourceLimitations.length > 0 && (
+                      <ul className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md p-2 space-y-1 list-disc list-inside">
+                        {engagement.sourceLimitations.map((note, i) => <li key={i}>{note}</li>)}
+                      </ul>
+                    )}
+                    {engagement.dataQualityIssues.length > 0 && (
+                      <ul className="text-xs text-rose-700 dark:text-rose-400 mt-2 list-disc list-inside">
+                        {engagement.dataQualityIssues.map((issue, i) => <li key={i}>{issue}</li>)}
+                      </ul>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Calculated {format(new Date(engagement.calculatedAt), "d MMM yyyy HH:mm")} -- a current view of available evidence, not a reconstruction of what was known on a historical date. {engagement.scopeLabel}.
+                    </p>
                   </CardContent>
                 </Card>
               )}

@@ -16,6 +16,8 @@ import {
   UserX,
   ArrowRight,
   BookOpenCheck,
+  ListChecks,
+  Activity,
 } from "lucide-react";
 
 interface ReportCard {
@@ -38,6 +40,8 @@ const CARDS: ReportCard[] = [
   { href: "/reports/register-completion", title: "Register Completion", description: "Which registers are outstanding, in progress, completed or locked.", icon: ClipboardCheck },
   { href: "/reports/last-attendance", title: "Last Attendance", description: "Every learner's most recently attended session, to spot who's gone quiet.", icon: UserX },
   { href: "/reports/allocation-history", title: "Allocation History", description: "Learner transfers between tutors and cohorts over time.", icon: History, adminOnly: true },
+  { href: "/reports/participation", title: "Session Participation", description: "Expected vs. attended learner-sessions including confirmed catch-up, clearly separate from the attendance percentage.", icon: ListChecks },
+  { href: "/reports/engagement-recency", title: "Engagement Recency", description: "The most recent recorded engagement per learner across attendance, Bud and catch-up, with source and traceability.", icon: Activity },
 ];
 
 export default function ReportsHubPage() {

@@ -18,7 +18,12 @@ import {
   LogOut,
   Menu,
   X,
-  RefreshCw
+  RefreshCw,
+  ClipboardList,
+  UserRoundSearch,
+  SearchX,
+  ClipboardCheck,
+  FileWarning
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSpinner } from "@/components/page-loading-spinner";
@@ -114,9 +119,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { name: "Cohorts", href: "/cohorts", icon: BookOpen, roles: ['admin', 'tutor'] },
     { name: "Allocation", href: "/allocation", icon: UserPlus, roles: ['admin'] },
     { name: "Attendance", href: "/attendance", icon: CalendarDays, roles: ['admin', 'tutor'] },
+    { name: "Absence Follow-up", href: "/catchup/follow-up", icon: ClipboardCheck, roles: ['admin', 'tutor'] },
     { name: "Reports", href: "/reports", icon: FileBarChart, roles: ['admin', 'tutor'] },
     { name: "Audit Log", href: "/audit-log", icon: History, roles: ['admin'] },
     { name: "Bud Sync Trial", href: "/bud-sync-trial", icon: RefreshCw, roles: ['admin'] },
+    { name: "Allocation Reconciliation", href: "/allocation-reconciliation", icon: ClipboardList, roles: ['admin'] },
+    { name: "Tutor Identity", href: "/tutor-identity", icon: UserRoundSearch, roles: ['admin'] },
+    { name: "Missing Source Records", href: "/bud-missing-source", icon: SearchX, roles: ['admin'] },
+    { name: "Functional Skills Allocation", href: "/functional-skills-requirements/allocation", icon: FileWarning, roles: ['admin'] },
     { name: "Settings", href: "/settings", icon: Settings, roles: ['admin'] },
   ];
 

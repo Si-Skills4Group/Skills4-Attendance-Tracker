@@ -17,5 +17,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: [path.resolve(import.meta.dirname, 'src/test/setup.ts')],
+    // The default 5000ms is occasionally too tight for a userEvent.type()-heavy
+    // test under full-suite parallel load (confirmed repeatedly this session:
+    // different individual tests in the same file time out on different runs,
+    // never the same one twice -- a resource-contention pattern, not a slow
+    // test) -- widened rather than patched test-by-test.
+    testTimeout: 15000,
   },
 });

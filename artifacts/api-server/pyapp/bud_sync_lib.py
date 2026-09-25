@@ -271,7 +271,77 @@ def _fetch_bud_rows(cur) -> list[dict]:
     return list(by_plan.values())
 
 
-def _find_link_by_plan_id(cur, learning_plan_id: str) -> dict | None:
+def build_bulk_lookups(cur) -> dict:
+    """Pre-loads every table classify_row's matching hierarchy would
+    otherwise query once PER Bud row, into a handful of in-memory maps --
+    turning an O(rows) query count into O(1) bulk SELECTs while preserving
+    the matching hierarchy's semantics exactly (each _find_*/classify_row
+    helper below takes this as an optional `lookups` parameter and, when
+    given, reads from it instead of issuing its own query -- the query
+    shape/column list/filters below are copies of those functions' own
+    original queries, not a re-derivation).
+
+    Deliberately opt-in via an optional parameter, never a default:
+    run_preview/run_commit (and every existing test) call these functions
+    with no `lookups` argument at all, so their behaviour -- and their
+    per-row query pattern -- is completely unchanged. This is built once
+    per caller (e.g. once per allocation-reconciliation report request)
+    and must never be reused across two different requests/calls: it is a
+    point-in-time snapshot, not a cache with its own invalidation."""
+    cur.execute(
+        """
+        SELECT id, internal_learner_id AS "internalLearnerId", bud_learning_plan_id AS "budLearningPlanId",
+               bud_apprentice_id AS "budApprenticeId", bud_uln AS "budUln",
+               accepted_synced_at AS "acceptedSyncedAt", accepted_values AS "acceptedValues"
+        FROM bud_learner_link
+        """
+    )
+    links = cur.fetchall()
+    links_by_plan_id = {link["budLearningPlanId"]: link for link in links}
+    links_by_learner_id = {link["internalLearnerId"]: link for link in links}
+
+    cur.execute(
+        'SELECT id, first_name AS "firstName", last_name AS "lastName", email, mobile, programme, uln, '
+        'learner_ref AS "learnerRef", tutor_id AS "tutorId", cohort_id AS "cohortId", '
+        'start_date AS "startDate", updated_at AS "updatedAt", status '
+        "FROM learners WHERE deleted_at IS NULL"
+    )
+    learners = cur.fetchall()
+    learners_by_id = {learner["id"]: learner for learner in learners}
+    learners_by_reference: dict[str, list[dict]] = {}
+    learners_by_uln: dict[str, list[dict]] = {}
+    for learner in learners:
+        # Truthy checks mirror _find_learners_by_reference/_find_learners_by_uln's
+        # own callers, which never look either up for a falsy value (an
+        # empty-string uln is common -- see classify_row's `if bud_row.get("uln")`
+        # guard -- and must never be treated as a shared "blank" match).
+        if learner["learnerRef"]:
+            learners_by_reference.setdefault(learner["learnerRef"], []).append(learner)
+        if learner["uln"]:
+            learners_by_uln.setdefault(learner["uln"], []).append(learner)
+
+    cur.execute('SELECT id, first_name AS "firstName", last_name AS "lastName", active, external_system_id AS "externalSystemId" FROM tutors')
+    tutors = cur.fetchall()
+    tutors_by_id = {tutor["id"]: tutor for tutor in tutors}
+    tutors_by_external_id: dict[str, list[dict]] = {}
+    for tutor in tutors:
+        if tutor["externalSystemId"]:
+            tutors_by_external_id.setdefault(tutor["externalSystemId"], []).append(tutor)
+
+    return {
+        "linksByPlanId": links_by_plan_id,
+        "linksByLearnerId": links_by_learner_id,
+        "learnersById": learners_by_id,
+        "learnersByReference": learners_by_reference,
+        "learnersByUln": learners_by_uln,
+        "tutorsById": tutors_by_id,
+        "tutorsByExternalId": tutors_by_external_id,
+    }
+
+
+def _find_link_by_plan_id(cur, learning_plan_id: str, lookups: dict | None = None) -> dict | None:
+    if lookups is not None:
+        return lookups["linksByPlanId"].get(learning_plan_id)
     cur.execute(
         """
         SELECT id, internal_learner_id AS "internalLearnerId", bud_learning_plan_id AS "budLearningPlanId",
@@ -284,7 +354,9 @@ def _find_link_by_plan_id(cur, learning_plan_id: str) -> dict | None:
     return cur.fetchone()
 
 
-def _find_link_by_learner_id(cur, learner_id: int) -> dict | None:
+def _find_link_by_learner_id(cur, learner_id: int, lookups: dict | None = None) -> dict | None:
+    if lookups is not None:
+        return lookups["linksByLearnerId"].get(learner_id)
     cur.execute(
         """
         SELECT id, internal_learner_id AS "internalLearnerId", bud_learning_plan_id AS "budLearningPlanId",
@@ -297,7 +369,9 @@ def _find_link_by_learner_id(cur, learner_id: int) -> dict | None:
     return cur.fetchone()
 
 
-def _find_learners_by_uln(cur, uln: str) -> list[dict]:
+def _find_learners_by_uln(cur, uln: str, lookups: dict | None = None) -> list[dict]:
+    if lookups is not None:
+        return lookups["learnersByUln"].get(uln, [])
     cur.execute(
         'SELECT id, first_name AS "firstName", last_name AS "lastName", tutor_id AS "tutorId", '
         'cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
@@ -307,12 +381,14 @@ def _find_learners_by_uln(cur, uln: str) -> list[dict]:
     return cur.fetchall()
 
 
-def _find_learners_by_reference(cur, learner_reference: str) -> list[dict]:
+def _find_learners_by_reference(cur, learner_reference: str, lookups: dict | None = None) -> list[dict]:
     """Primary matching hierarchy step: learner_progress.learner_reference
     against learners.learner_ref (NOT NULL UNIQUE on every internal
     learner). Confirmed against real production data as the fix for the
     trial's previous 0-matched-learner defect -- uln alone matches almost
     nothing since it's populated on very few internal learners."""
+    if lookups is not None:
+        return lookups["learnersByReference"].get(learner_reference, [])
     cur.execute(
         'SELECT id, first_name AS "firstName", last_name AS "lastName", tutor_id AS "tutorId", '
         'cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
@@ -344,7 +420,7 @@ def _get_ambiguous_learner_references(cur) -> set[str]:
     return {row["learner_reference"] for row in cur.fetchall()}
 
 
-def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None) -> dict | None:
+def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None, lookups: dict | None = None) -> dict | None:
     """Bud's tutor_id has no dedicated internal column -- tutors.external_system_id
     (an existing, generic, admin-editable reference field) is the agreed home
     for it. Ambiguous (more than one match, since external_system_id has no
@@ -352,11 +428,14 @@ def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None) -> dict | None:
     never guessed from tutor_name."""
     if not bud_tutor_id:
         return None
-    cur.execute(
-        'SELECT id, first_name AS "firstName", last_name AS "lastName", active FROM tutors WHERE external_system_id = %s',
-        (str(bud_tutor_id),),
-    )
-    matches = cur.fetchall()
+    if lookups is not None:
+        matches = lookups["tutorsByExternalId"].get(str(bud_tutor_id), [])
+    else:
+        cur.execute(
+            'SELECT id, first_name AS "firstName", last_name AS "lastName", active FROM tutors WHERE external_system_id = %s',
+            (str(bud_tutor_id),),
+        )
+        matches = cur.fetchall()
     if len(matches) != 1 or not matches[0]["active"]:
         return None
     return matches[0]
@@ -384,6 +463,7 @@ def _diff_simple_fields(bud_row: dict, accepted_or_current: dict, current_uln: s
 def classify_row(
     cur, bud_row: dict, baseline: dict,
     ambiguous_learner_references: set[str] | None = None,
+    lookups: dict | None = None,
 ) -> dict:
     """Pure classification against current DB state -- never writes
     anything. Returns a dict shaped for insertion into bud_sync_item
@@ -392,6 +472,14 @@ def classify_row(
     ambiguous_learner_references is precomputed once per run_preview call
     to avoid a query per row; if omitted, it's fetched here for a
     single-row call (e.g. tests/one-off checks).
+
+    lookups, when given (see build_bulk_lookups), replaces every one of
+    this function's own per-row queries with an in-memory dict read --
+    used by the allocation-reconciliation report, which classifies every
+    Bud row in one request and cannot afford run_preview's per-row query
+    pattern. Omitted (the default), this function's query count and
+    behaviour are byte-for-byte what they always were -- run_preview and
+    run_commit both call this with no `lookups` argument.
 
     `baseline` is still required -- it's the anchor for
     _classify_existing_learner_update's "did this already-matched
@@ -419,7 +507,7 @@ def classify_row(
         "reason": None,
     }
 
-    link = _find_link_by_plan_id(cur, plan_id)
+    link = _find_link_by_plan_id(cur, plan_id, lookups)
     matched_learner: dict | None = None
 
     if link is None:
@@ -429,14 +517,14 @@ def classify_row(
             if learner_reference in ambiguous_learner_references:
                 return {**base_item, "match_status": "conflict", "action_type": "none",
                         "reason": "learner_reference_matches_multiple_bud_rows"}
-            reference_matches = _find_learners_by_reference(cur, learner_reference)
+            reference_matches = _find_learners_by_reference(cur, learner_reference, lookups)
             if len(reference_matches) > 1:
                 return {**base_item, "match_status": "conflict", "action_type": "none",
                         "reason": "learner_reference_matches_multiple_internal_learners"}
 
         uln_matches: list[dict] = []
         if bud_row.get("uln"):
-            uln_matches = _find_learners_by_uln(cur, bud_row["uln"])
+            uln_matches = _find_learners_by_uln(cur, bud_row["uln"], lookups)
             if len(uln_matches) > 1:
                 return {**base_item, "match_status": "conflict", "action_type": "none",
                         "reason": "uln_matches_multiple_internal_learners"}
@@ -449,7 +537,7 @@ def classify_row(
 
         if matched_learner is not None:
             base_item["internal_learner_id"] = matched_learner["id"]
-            existing_link_for_learner = _find_link_by_learner_id(cur, matched_learner["id"])
+            existing_link_for_learner = _find_link_by_learner_id(cur, matched_learner["id"], lookups)
             if existing_link_for_learner and existing_link_for_learner["budLearningPlanId"] != plan_id:
                 return {**base_item, "match_status": "conflict", "action_type": "none",
                         "reason": "learner_already_linked_to_a_different_bud_record"}
@@ -468,13 +556,13 @@ def classify_row(
                 # new-learner detection): a match is a match regardless of
                 # when the Bud record first appeared.
                 return _classify_existing_learner_update(
-                    cur, bud_row, base_item, {"acceptedValues": {}, "acceptedSyncedAt": None},
+                    cur, bud_row, base_item, {"acceptedValues": {}, "acceptedSyncedAt": None}, lookups,
                 )
             link = existing_link_for_learner
 
     if link is not None:
         base_item["internal_learner_id"] = link["internalLearnerId"]
-        return _classify_existing_learner_update(cur, bud_row, base_item, link)
+        return _classify_existing_learner_update(cur, bud_row, base_item, link, lookups)
 
     # No match at all -- proposed as new regardless of whether this Bud
     # record predates the trial's baseline (the historical-backfill guard
@@ -488,12 +576,12 @@ def classify_row(
     if bud_row.get("statusDesc") != _ELIGIBLE_STATUS_DESC:
         return {**base_item, "match_status": "existing_before_trial", "action_type": "none",
                 "reason": "unmatched_non_actionable_status"}
-    return _classify_new_learner(cur, bud_row, base_item)
+    return _classify_new_learner(cur, bud_row, base_item, lookups)
 
 
-def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
+def _classify_new_learner(cur, bud_row: dict, base_item: dict, lookups: dict | None = None) -> dict:
     warnings: list[str] = []
-    tutor = _find_tutor_by_bud_id(cur, bud_row.get("budTutorId"))
+    tutor = _find_tutor_by_bud_id(cur, bud_row.get("budTutorId"), lookups)
     if tutor is None:
         return {**base_item, "match_status": "conflict", "action_type": "create_learner",
                 "reason": "tutor_unmatched", "warnings": ["No active internal Tutor is linked to this Bud tutor_id."]}
@@ -538,14 +626,17 @@ def _classify_new_learner(cur, bud_row: dict, base_item: dict) -> dict:
     }
 
 
-def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link: dict) -> dict:
-    cur.execute(
-        'SELECT id, first_name AS "firstName", last_name AS "lastName", email, mobile, programme, uln, '
-        'tutor_id AS "tutorId", cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
-        'status FROM learners WHERE id = %s AND deleted_at IS NULL',
-        (base_item["internal_learner_id"],),
-    )
-    learner = cur.fetchone()
+def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link: dict, lookups: dict | None = None) -> dict:
+    if lookups is not None:
+        learner = lookups["learnersById"].get(base_item["internal_learner_id"])
+    else:
+        cur.execute(
+            'SELECT id, first_name AS "firstName", last_name AS "lastName", email, mobile, programme, uln, '
+            'tutor_id AS "tutorId", cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
+            'status FROM learners WHERE id = %s AND deleted_at IS NULL',
+            (base_item["internal_learner_id"],),
+        )
+        learner = cur.fetchone()
     if not learner:
         return {**base_item, "match_status": "conflict", "action_type": "none", "reason": "matched_learner_no_longer_exists"}
 
@@ -559,7 +650,7 @@ def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link:
 
     tutor_transfer = None
     if bud_row.get("budTutorId"):
-        tutor = _find_tutor_by_bud_id(cur, bud_row["budTutorId"])
+        tutor = _find_tutor_by_bud_id(cur, bud_row["budTutorId"], lookups)
         if tutor is not None and tutor["id"] != learner["tutorId"]:
             tutor_transfer = {"budTutorId": bud_row["budTutorId"], "internalTutorId": tutor["id"],
                               "currentTutorId": learner["tutorId"]}
@@ -677,59 +768,106 @@ def _is_auto_approvable(item: dict) -> bool:
 
 
 def run_preview(cur, request: Request, session: dict) -> dict:
+    """Stage 2, item 5: a failed preview must never be mistaken for a
+    completed one, and a partial preview must never be committable. The job
+    row is created as its own, immediately-committed statement (status=
+    'generating') BEFORE anything that can fail, so it survives even if
+    everything after it rolls back -- there is always something to attach
+    failure diagnostics to. Every bud_sync_item insert plus the job's own
+    summary-count update then happens inside ONE transaction, with the
+    status flip to 'ready' as its LAST statement -- so 'ready' can only ever
+    mean "every item for this job was inserted and the counts reflect all
+    of them", never a partial set. A failure anywhere in that block rolls
+    the items back completely (autocommit=True means nothing here is atomic
+    on its own; the transaction block is what actually gives this
+    guarantee), and a separate, post-rollback statement marks the job
+    'failed' with error_summary -- mirroring run_commit's own
+    already-established failure pattern exactly, not a new one invented
+    here. Retrying (calling this function again) always creates a fresh,
+    independent job row -- a failed job's zero, rolled-back items can never
+    be mistaken for "nothing to sync" by get_unmatched_pre_baseline, which
+    only ever looks at the most recent 'ready' or 'completed' job."""
     baseline = get_active_baseline(cur)
     if baseline is None:
         raise HTTPException(status_code=409, detail="No active trial baseline. Establish one before previewing.")
 
-    bud_rows = _fetch_bud_rows(cur)
-    ambiguous_learner_references = _get_ambiguous_learner_references(cur)
+    # Stamped now, at the very start of classification -- see run_commit's
+    # matching check for why this is what actually protects against a
+    # tutor mapping correction landing WHILE this preview is still
+    # 'generating' (a plain 'ready'-job sweep at correction time can't see
+    # a job that hasn't reached 'ready' yet).
+    cur.execute("SELECT tutor_mapping_generation FROM app_settings WHERE id = 1")
+    tutor_mapping_generation = cur.fetchone()["tutor_mapping_generation"]
 
     cur.execute(
         """
-        INSERT INTO bud_sync_job (baseline_id, started_by, source_max_synced_at, total_source_rows_examined, correlation_id)
-        VALUES (%s, %s, %s, %s, %s) RETURNING id
+        INSERT INTO bud_sync_job (baseline_id, started_by, source_max_synced_at, status, correlation_id,
+                                   tutor_mapping_generation_at_preview)
+        VALUES (%s, %s, %s, 'generating', %s, %s) RETURNING id
         """,
-        (baseline["id"], session["userId"], baseline["sourceMaxSyncedAt"], len(bud_rows), get_correlation_id() or None),
+        (baseline["id"], session["userId"], baseline["sourceMaxSyncedAt"], get_correlation_id() or None,
+         tutor_mapping_generation),
     )
     job_id = cur.fetchone()["id"]
 
-    counts = {"new": 0, "existing_update": 0, "unchanged": 0, "conflict": 0,
-              "existing_before_trial": 0, "status_change": 0}
-    # cohorts_proposed/allocations_proposed are always 0 now -- new-learner
-    # creation no longer creates a cohort or an allocation (see
-    # _classify_new_learner/_apply_new_learner), only a tutor assignment.
-    # The columns/fields stay (not surfaced in the frontend, confirmed) so
-    # the job-summary shape doesn't need to change.
-    action_counts = {"cohorts_proposed": 0, "allocations_proposed": 0, "transfers_proposed": 0}
-    for bud_row in bud_rows:
-        item = classify_row(cur, bud_row, baseline, ambiguous_learner_references)
-        counts[item["match_status"]] += 1
-        if item["action_type"] == "transfer_tutor":
-            action_counts["transfers_proposed"] += 1
+    try:
+        bud_rows = _fetch_bud_rows(cur)
+        ambiguous_learner_references = _get_ambiguous_learner_references(cur)
 
+        counts = {"new": 0, "existing_update": 0, "unchanged": 0, "conflict": 0,
+                  "existing_before_trial": 0, "status_change": 0}
+        # cohorts_proposed/allocations_proposed are always 0 now -- new-learner
+        # creation no longer creates a cohort or an allocation (see
+        # _classify_new_learner/_apply_new_learner), only a tutor assignment.
+        # The columns/fields stay (not surfaced in the frontend, confirmed) so
+        # the job-summary shape doesn't need to change.
+        action_counts = {"cohorts_proposed": 0, "allocations_proposed": 0, "transfers_proposed": 0}
+
+        with cur.connection.transaction():
+            for bud_row in bud_rows:
+                item = classify_row(cur, bud_row, baseline, ambiguous_learner_references)
+                counts[item["match_status"]] += 1
+                if item["action_type"] == "transfer_tutor":
+                    action_counts["transfers_proposed"] += 1
+
+                cur.execute(
+                    _ITEM_INSERT_SQL,
+                    (
+                        job_id, item["source_identifier"], item["match_status"], item["action_type"],
+                        item["internal_learner_id"], json.dumps(item["proposed_values"], default=str),
+                        json.dumps(item["previous_values"], default=str), json.dumps(item["warnings"]), item["reason"],
+                        _is_auto_approvable(item),
+                        bud_row.get("learnerReference"), bud_row.get("learnerForename"), bud_row.get("learnerSurname"),
+                    ),
+                )
+
+            cur.execute(
+                """
+                UPDATE bud_sync_job SET
+                    status = 'ready', total_source_rows_examined = %s,
+                    new_learners_detected = %s, learner_updates_detected = %s,
+                    cohorts_proposed = %s, allocations_proposed = %s, transfers_proposed = %s,
+                    conflict_count = %s, skipped_count = %s, status_changes_detected = %s
+                WHERE id = %s
+                """,
+                (len(bud_rows), counts["new"], counts["existing_update"], action_counts["cohorts_proposed"],
+                 action_counts["allocations_proposed"], action_counts["transfers_proposed"],
+                 counts["conflict"], counts["existing_before_trial"], counts["status_change"], job_id),
+            )
+    except Exception as exc:
+        # Outside the failed transaction (which already rolled back every
+        # item insert above) -- autocommit=True means this UPDATE is its own
+        # fresh, independent statement, exactly like run_commit's own
+        # failure handler.
         cur.execute(
-            _ITEM_INSERT_SQL,
-            (
-                job_id, item["source_identifier"], item["match_status"], item["action_type"],
-                item["internal_learner_id"], json.dumps(item["proposed_values"], default=str),
-                json.dumps(item["previous_values"], default=str), json.dumps(item["warnings"]), item["reason"],
-                _is_auto_approvable(item),
-                bud_row.get("learnerReference"), bud_row.get("learnerForename"), bud_row.get("learnerSurname"),
-            ),
+            "UPDATE bud_sync_job SET status = 'failed', error_summary = %s WHERE id = %s",
+            (str(exc.detail) if isinstance(exc, HTTPException) else str(exc), job_id),
         )
-
-    cur.execute(
-        """
-        UPDATE bud_sync_job SET
-            new_learners_detected = %s, learner_updates_detected = %s,
-            cohorts_proposed = %s, allocations_proposed = %s, transfers_proposed = %s,
-            conflict_count = %s, skipped_count = %s, status_changes_detected = %s
-        WHERE id = %s
-        """,
-        (counts["new"], counts["existing_update"], action_counts["cohorts_proposed"],
-         action_counts["allocations_proposed"], action_counts["transfers_proposed"],
-         counts["conflict"], counts["existing_before_trial"], counts["status_change"], job_id),
-    )
+        write_audit_log(
+            request, action="bud_sync_preview_failed", entity_type="bud_sync_job", entity_id=job_id,
+            new_value={"error": str(exc.detail) if isinstance(exc, HTTPException) else str(exc)},
+        )
+        raise
 
     write_audit_log(
         request, action="bud_sync_preview_created", entity_type="bud_sync_job", entity_id=job_id,
@@ -814,20 +952,27 @@ def get_unmatched_pre_baseline(cur, page: int, page_size: int) -> dict:
     ever tracked them. The name/route (unmatched-pre-baseline) predates
     that change and is a bit stale, but left as-is to avoid an
     unnecessary API/frontend rename."""
+    # Stage 2, item 5: scoped to the most recent job that actually HAS a
+    # valid, complete item set -- 'ready' (freshly previewed) or
+    # 'completed' (already committed). A plain max(id) would pick up a
+    # 'generating'/'failed' job whose items were rolled back, silently
+    # showing zero unmatched rows instead of surfacing that the last
+    # preview attempt failed.
+    latest_valid_job_id_sql = "(SELECT max(id) FROM bud_sync_job WHERE status IN ('ready', 'completed'))"
     cur.execute(
-        """
+        f"""
         SELECT count(*)::int AS count FROM bud_sync_item
-        WHERE match_status = 'existing_before_trial' AND sync_job_id = (SELECT max(id) FROM bud_sync_job)
+        WHERE match_status = 'existing_before_trial' AND sync_job_id = {latest_valid_job_id_sql}
         """
     )
     total = cur.fetchone()["count"]
     cur.execute(
-        """
+        f"""
         SELECT source_identifier AS "sourceIdentifier", internal_learner_id AS "internalLearnerId", reason,
                source_learner_reference AS "sourceLearnerReference",
                source_first_name AS "sourceFirstName", source_last_name AS "sourceLastName"
         FROM bud_sync_item
-        WHERE match_status = 'existing_before_trial' AND sync_job_id = (SELECT max(id) FROM bud_sync_job)
+        WHERE match_status = 'existing_before_trial' AND sync_job_id = {latest_valid_job_id_sql}
         ORDER BY id LIMIT %s OFFSET %s
         """,
         (page_size, (page - 1) * page_size),
@@ -1411,6 +1556,27 @@ def run_commit(cur, job_id: int, item_ids: list[int], approval_reason: str, limi
         # own; this is what actually gives the "whole batch or nothing"
         # guarantee, not merely the try/except around it).
         with cur.connection.transaction():
+            # Stage 2 verification pass, item 2: a plain updated_at/
+            # ownership check (run above, before this transaction) cannot
+            # by itself close the race against a tutor mapping correction
+            # committing in the exact window between this job being
+            # claimed and its writes actually landing -- only a genuinely
+            # locking read, held for the rest of THIS transaction, can. If
+            # a correction's own UPDATE of this same row is concurrently
+            # in flight, this blocks until it finishes (commit or
+            # rollback) rather than racing it; either way this always sees
+            # the true, final value, never a stale one.
+            cur.execute("SELECT tutor_mapping_generation FROM app_settings WHERE id = 1 FOR SHARE")
+            current_tutor_mapping_generation = cur.fetchone()["tutor_mapping_generation"]
+            cur.execute("SELECT tutor_mapping_generation_at_preview AS g FROM bud_sync_job WHERE id = %s", (job_id,))
+            stamped_generation = cur.fetchone()["g"]
+            if stamped_generation is not None and stamped_generation != current_tutor_mapping_generation:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Tutor mappings changed since this preview was generated (a tutor mapping correction "
+                           "was applied) -- generate a new preview.",
+                )
+
             if over_limit and limit_override_reason:
                 write_audit_log(
                     request, action="bud_sync_commit_limit_override", entity_type="bud_sync_job", entity_id=job_id,

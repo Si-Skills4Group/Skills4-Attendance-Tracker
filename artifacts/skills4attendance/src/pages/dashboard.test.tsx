@@ -47,6 +47,7 @@ let mockAdminTutors: any;
 let mockAdminCohorts: any;
 let mockTutorLowAttendance: any;
 let mockAdminLowAttendance: any;
+let mockEngagementSummary: any;
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetCurrentUser: () => mockCurrentUser,
@@ -58,6 +59,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useGetAdminDashboardCohorts: () => mockAdminCohorts,
   useGetTutorLowAttendanceLearners: () => mockTutorLowAttendance,
   useGetAdminLowAttendanceLearners: () => mockAdminLowAttendance,
+  useGetEngagementRecencySummary: () => mockEngagementSummary,
   getGetAdminDashboardQueryKey: () => ['getAdminDashboard'],
   getGetTutorDashboardQueryKey: () => ['getTutorDashboard'],
 }));
@@ -80,6 +82,7 @@ describe('DashboardPage', () => {
     mockAdminCohorts = { data: { items: [], total: 0, page: 1, pageSize: 50 }, isLoading: false, isError: false };
     mockTutorLowAttendance = { data: { items: [], total: 0, page: 1, pageSize: 50 }, isLoading: false, isError: false };
     mockAdminLowAttendance = { data: { items: [], total: 0, page: 1, pageSize: 50 }, isLoading: false, isError: false };
+    mockEngagementSummary = { data: { totalLearners: 0, noRecordedEngagementCount: 0, calculatedAt: '2026-01-01T00:00:00Z', scopeLabel: 'Your authorised learners' }, isLoading: false, isError: false };
   });
 
   describe('as a tutor', () => {
