@@ -53,9 +53,11 @@ export function RegisterStatusBadge({ status }: { status: RegisterStatus }) {
   return <Badge variant="outline" className={`${v.className} bg-opacity-50 font-medium px-2 py-0`}>{v.label}</Badge>;
 }
 
-/** Next to a learner's name wherever they're listed -- flags an active
- * Functional Skills secondary enrollment, and which subject(s), without
- * implying anything about their home cohort/tutor shown alongside it. */
+/** Next to a learner's name wherever they're listed -- flags that a learner
+ * needs Functional Skills support and which subject(s), from either an
+ * active FS cohort enrollment or an admin-uploaded requirement (whichever
+ * applies), without implying anything about their home cohort/tutor shown
+ * alongside it, or that they're enrolled in a matching cohort. */
 export function FunctionalSkillsBadges({ subjects }: { subjects?: FunctionalSkillsSubject[] | null }) {
   if (!subjects || subjects.length === 0) return null;
 
