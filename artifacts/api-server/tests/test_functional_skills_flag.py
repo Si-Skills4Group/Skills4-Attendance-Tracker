@@ -1,9 +1,11 @@
 """functionalSkillsSubjects: a small flag/badge next to a learner's name
 wherever they're listed, showing which Functional Skills subject(s)
-(math/english/both) they're currently actively enrolled in. Backed by
-secondary_enrollment_lib.functional_skills_subjects_sql, wired into the
-Learners directory / Allocation screen (LEARNERS_WITH_NAMES_SELECT) and the
-attendance register roster (routers/attendance.py)."""
+(math/english/both) a learner currently needs -- from an active FS cohort
+enrollment, an admin-uploaded Functional Skills requirement (Stage 5,
+learner_fs_requirements), or both. Backed by secondary_enrollment_lib.
+functional_skills_subjects_sql, wired into the Learners directory /
+Allocation screen (LEARNERS_WITH_NAMES_SELECT) and the attendance register
+roster (routers/attendance.py)."""
 import datetime
 
 from pyapp.routers.attendance import (
@@ -13,6 +15,13 @@ from pyapp.routers.attendance import (
     get_session_expected_learners,
 )
 from pyapp.routers.learners import list_learners
+
+
+def _seed_requirement(db, admin_user, learner_id, maths, english, status="recorded"):
+    db.execute(
+        "INSERT INTO learner_fs_requirements (learner_id, maths, english, status, updated_by) VALUES (%s,%s,%s,%s,%s)",
+        (learner_id, maths, english, status, admin_user["userId"]),
+    )
 
 
 class TestFunctionalSkillsSubjectsOnLearnerLists:
@@ -54,6 +63,46 @@ class TestFunctionalSkillsSubjectsOnLearnerLists:
 
         result = list_learners(search=learner["learner_ref"], session=admin_user)
         assert result["items"][0]["functionalSkillsSubjects"] == []
+
+    def test_shows_an_uploaded_requirement_even_with_no_matching_cohort_enrollment(
+        self, db, request_factory, admin_user, learner_factory,
+    ):
+        """Not every learner who needs Functional Skills support is expected
+        to sit in a dedicated FS cohort for it -- an uploaded requirement
+        alone is sufficient to flag them, the same as an enrollment is."""
+        learner = learner_factory(cohort_id=None)
+        _seed_requirement(db, admin_user, learner["id"], maths=True, english=False)
+
+        result = list_learners(search=learner["learner_ref"], session=admin_user)
+        assert result["items"][0]["functionalSkillsSubjects"] == ["math"]
+
+    def test_shows_both_when_the_uploaded_requirement_flags_both_subjects(
+        self, db, request_factory, admin_user, learner_factory,
+    ):
+        learner = learner_factory(cohort_id=None)
+        _seed_requirement(db, admin_user, learner["id"], maths=True, english=True)
+
+        result = list_learners(search=learner["learner_ref"], session=admin_user)
+        assert result["items"][0]["functionalSkillsSubjects"] == ["both"]
+
+    def test_a_cleared_requirement_no_longer_shows(self, db, request_factory, admin_user, learner_factory):
+        learner = learner_factory(cohort_id=None)
+        _seed_requirement(db, admin_user, learner["id"], maths=True, english=False, status="cleared")
+
+        result = list_learners(search=learner["learner_ref"], session=admin_user)
+        assert result["items"][0]["functionalSkillsSubjects"] == []
+
+    def test_enrollment_and_requirement_together_are_unioned_not_duplicated(
+        self, db, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        """Same subject from both sources -- shows once, not twice."""
+        fs_cohort = cohort_factory(membership_type="secondary", subject="math")
+        learner = learner_factory(cohort_id=cohort_factory()["id"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+        _seed_requirement(db, admin_user, learner["id"], maths=True, english=False)
+
+        result = list_learners(search=learner["learner_ref"], session=admin_user)
+        assert result["items"][0]["functionalSkillsSubjects"] == ["math"]
 
 
 class TestFunctionalSkillsSubjectsOnRegisterRoster:

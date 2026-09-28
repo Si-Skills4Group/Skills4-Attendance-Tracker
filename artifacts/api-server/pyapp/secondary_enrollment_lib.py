@@ -80,17 +80,39 @@ def learner_reachable_via_tutor_now_sql(learner_alias: str, tutor_id_column: str
 
 def functional_skills_subjects_sql(learner_id_column: str) -> str:
     """SQL fragment (scalar subquery): the distinct, sorted list of
-    Functional Skills subjects ('math'/'english'/'both') this learner is
-    currently actively enrolled in, as a Postgres text array (empty, never
-    NULL, when they have none) -- the source for a "Functional Skills"
-    flag/badge next to a learner's name. `learner_id_column` must be a
-    trusted SQL column reference composed by the caller, never raw user
-    input."""
+    Functional Skills subjects ('math'/'english'/'both') this learner
+    currently needs, as a Postgres text array (empty, never NULL, when they
+    have none) -- the source for a "Functional Skills" flag/badge next to a
+    learner's name. A subject is included from EITHER an active
+    secondary-cohort enrollment teaching it OR an admin-uploaded Functional
+    Skills requirement (learner_fs_requirements, status='recorded')
+    flagging it, whichever applies: a learner an admin has uploaded a
+    requirement for is never hidden just because they aren't (yet, or ever
+    going to be) enrolled in a matching cohort -- not every learner who
+    needs Functional Skills support is expected to sit in a dedicated FS
+    cohort for it -- and an existing enrollment with no uploaded requirement
+    still shows too. The two sources are unioned, not collapsed: two
+    separate single-subject enrollments still show as two distinct entries,
+    exactly as before this fragment gained the requirement source.
+    `learner_id_column` must be a trusted SQL column reference composed by
+    the caller, never raw user input."""
     return f"""(
-        SELECT COALESCE(array_agg(DISTINCT fs_c.subject ORDER BY fs_c.subject), ARRAY[]::text[])
-        FROM learner_cohort_enrollments fs_e
-        JOIN cohorts fs_c ON fs_c.id = fs_e.cohort_id
-        WHERE fs_e.learner_id = {learner_id_column} AND fs_e.status = 'active' AND fs_c.subject IS NOT NULL
+        SELECT COALESCE(array_agg(DISTINCT subj ORDER BY subj), ARRAY[]::text[])
+        FROM (
+            SELECT fs_c.subject AS subj
+            FROM learner_cohort_enrollments fs_e
+            JOIN cohorts fs_c ON fs_c.id = fs_e.cohort_id
+            WHERE fs_e.learner_id = {learner_id_column} AND fs_e.status = 'active' AND fs_c.subject IS NOT NULL
+
+            UNION ALL
+
+            SELECT CASE WHEN fs_r.maths AND fs_r.english THEN 'both'
+                        WHEN fs_r.maths THEN 'math'
+                        WHEN fs_r.english THEN 'english'
+                   END
+            FROM learner_fs_requirements fs_r
+            WHERE fs_r.learner_id = {learner_id_column} AND fs_r.status = 'recorded' AND (fs_r.maths OR fs_r.english)
+        ) fs_subjects
     )"""
 
 
