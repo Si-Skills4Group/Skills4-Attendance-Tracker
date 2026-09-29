@@ -6674,6 +6674,8 @@ components:
           activeCohorts,
           attendancePercentageWeek,
           attendancePercentageMonth,
+          participationPercentageWeek,
+          participationPercentageMonth,
           sessionsAwaitingCompletion,
           recentlyEditedAttendance,
           lowAttendanceLearners,
@@ -6684,6 +6686,12 @@ components:
         activeCohorts: { type: integer }
         attendancePercentageWeek: { type: number }
         attendancePercentageMonth: { type: number }
+        participationPercentageWeek:
+          type: number
+          description: Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up.
+        participationPercentageMonth:
+          type: number
+          description: Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up.
         sessionsAwaitingCompletion:
           type: array
           items: { $ref: "#/components/schemas/SessionSummary" }
@@ -6702,6 +6710,10 @@ components:
           nextSession,
           sessionsAwaitingCompletion,
           lowAttendanceLearners,
+          attendancePercentageWeek,
+          attendancePercentageMonth,
+          participationPercentageWeek,
+          participationPercentageMonth,
         ]
       properties:
         cohorts:
@@ -6717,6 +6729,14 @@ components:
         lowAttendanceLearners:
           type: array
           items: { $ref: "#/components/schemas/LearnerAttendanceSummaryRow" }
+        attendancePercentageWeek: { type: number }
+        attendancePercentageMonth: { type: number }
+        participationPercentageWeek:
+          type: number
+          description: Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up.
+        participationPercentageMonth:
+          type: number
+          description: Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up.
 
     # ---------- Phase 8: attendance calculations and dashboards ----------
 

@@ -60,19 +60,30 @@ function AdminDashboardView({ data, threshold, filter, onFilterChange }: {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard title="Active Learners" value={data.activeLearners} icon={GraduationCap} delayCls="stagger-1" />
         <StatCard title="Active Tutors" value={data.activeTutors} icon={Users} delayCls="stagger-2" />
         <StatCard title="Active Cohorts" value={data.activeCohorts} icon={BookOpen} delayCls="stagger-3" />
         <Card className="shadow-sm page-transition-enter stagger-4">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Attendance (Month)</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Live Attendance (Month)</CardTitle>
             <Activity className="w-4 h-4 text-muted-foreground/60" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-foreground font-mono">{data.attendancePercentageMonth.toFixed(1)}%</div>
             <Progress value={data.attendancePercentageMonth} className="h-2 mt-3" />
             <p className="text-xs text-muted-foreground mt-2">This week: {data.attendancePercentageWeek.toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm page-transition-enter stagger-5">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Participation (Month)</CardTitle>
+            <Activity className="w-4 h-4 text-muted-foreground/60" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-foreground font-mono">{data.participationPercentageMonth.toFixed(1)}%</div>
+            <Progress value={data.participationPercentageMonth} className="h-2 mt-3" />
+            <p className="text-xs text-muted-foreground mt-2">This week: {data.participationPercentageWeek.toFixed(1)}%</p>
           </CardContent>
         </Card>
       </div>
@@ -252,6 +263,31 @@ function TutorDashboardView({ data, threshold, filter, onFilterChange }: {
 
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="shadow-sm page-transition-enter stagger-1">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Live Attendance (Month)</CardTitle>
+            <Activity className="w-4 h-4 text-muted-foreground/60" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-foreground font-mono">{data.attendancePercentageMonth.toFixed(1)}%</div>
+            <Progress value={data.attendancePercentageMonth} className="h-2 mt-3" />
+            <p className="text-xs text-muted-foreground mt-2">This week: {data.attendancePercentageWeek.toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm page-transition-enter stagger-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Participation (Month)</CardTitle>
+            <Activity className="w-4 h-4 text-muted-foreground/60" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-foreground font-mono">{data.participationPercentageMonth.toFixed(1)}%</div>
+            <Progress value={data.participationPercentageMonth} className="h-2 mt-3" />
+            <p className="text-xs text-muted-foreground mt-2">This week: {data.participationPercentageWeek.toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="shadow-sm page-transition-enter stagger-1 col-span-1 lg:col-span-2">
           <CardHeader className="pb-2">
@@ -374,7 +410,7 @@ function TutorDashboardView({ data, threshold, filter, onFilterChange }: {
                       </div>
                       <div>
                         <p className="text-lg font-bold font-mono leading-none">{row.attendancePercentage != null ? `${row.attendancePercentage.toFixed(0)}%` : "—"}</p>
-                        <p className="text-[11px] text-muted-foreground mt-1">Attendance</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">Live Attendance</p>
                       </div>
                     </div>
                     <RegisterCompletionSummaryView completion={row.registerCompletion} />

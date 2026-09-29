@@ -93,9 +93,19 @@ describe('DashboardPage', () => {
         data: {
           cohorts: [], nextSession: null, sessionsAwaitingCompletion: [],
           lowAttendanceLearners: [],
+          attendancePercentageWeek: 82.0, attendancePercentageMonth: 79.5,
+          participationPercentageWeek: 90.0, participationPercentageMonth: 87.0,
         },
         isLoading: false,
       };
+    });
+
+    it("shows the tutor's own Live Attendance and Participation figures", () => {
+      renderDashboard();
+      expect(screen.getByText('Live Attendance (Month)')).toBeInTheDocument();
+      expect(screen.getByText('79.5%')).toBeInTheDocument();
+      expect(screen.getByText('Participation (Month)')).toBeInTheDocument();
+      expect(screen.getByText('87.0%')).toBeInTheDocument();
     });
 
     it('shows only the tutor-scoped dashboard, not organisation-wide admin data', () => {
@@ -151,7 +161,7 @@ describe('DashboardPage', () => {
         isLoading: false, isError: false,
       };
       renderDashboard();
-      expect(screen.getByText('Attendance')).toBeInTheDocument();
+      expect(screen.getByText('Live Attendance')).toBeInTheDocument();
       expect(screen.getByText('Register completion')).toBeInTheDocument();
     });
 
@@ -212,6 +222,7 @@ describe('DashboardPage', () => {
         data: {
           activeLearners: 42, activeTutors: 6, activeCohorts: 8,
           attendancePercentageWeek: 91.2, attendancePercentageMonth: 88.4,
+          participationPercentageWeek: 95.0, participationPercentageMonth: 93.7,
           sessionsAwaitingCompletion: [], recentlyEditedAttendance: [],
           lowAttendanceLearners: [],
         },
@@ -224,6 +235,14 @@ describe('DashboardPage', () => {
       expect(screen.getByText('Active Learners')).toBeInTheDocument();
       expect(screen.getByText('42')).toBeInTheDocument();
       expect(screen.getByText('88.4%')).toBeInTheDocument();
+    });
+
+    it('labels the live-attendance figure distinctly from the separate participation figure', () => {
+      renderDashboard();
+      expect(screen.getByText('Live Attendance (Month)')).toBeInTheDocument();
+      expect(screen.getByText('Participation (Month)')).toBeInTheDocument();
+      expect(screen.getByText('93.7%')).toBeInTheDocument();
+      expect(screen.queryByText('Attendance (Month)')).not.toBeInTheDocument();
     });
 
     it('shows the tutor overview table without an employee-reference column', () => {

@@ -9,6 +9,7 @@ from ..attendance_metrics import (
     fetch_attendance_metrics,
     fetch_attendance_metrics_grouped,
     fetch_register_completion,
+    fetch_session_participation_metrics,
     is_low_attendance,
     resolve_period,
 )
@@ -196,6 +197,16 @@ def get_admin_dashboard(_session: dict = Depends(require_admin)):
         pct_month = fetch_attendance_metrics(
             cur, scope="organisation", scope_id=None, period_start=month_start, period_end=month_end
         ).attendancePercentage
+        # Participation additionally counts an effective (non-revoked)
+        # catch-up completion of a recorded absence -- deliberately a
+        # separate figure from attendancePercentage*, which is minutes-based
+        # live attendance only and never reflects a catch-up.
+        participation_week = fetch_session_participation_metrics(
+            cur, scope="organisation", scope_id=None, period_start=week_start, period_end=week_end
+        ).participationRate
+        participation_month = fetch_session_participation_metrics(
+            cur, scope="organisation", scope_id=None, period_start=month_start, period_end=month_end
+        ).participationRate
 
         sessions_awaiting = _sessions_awaiting_completion(cur, None)
         recent_edits = _recently_edited(cur, None)
@@ -217,6 +228,8 @@ def get_admin_dashboard(_session: dict = Depends(require_admin)):
         "activeCohorts": active_cohorts,
         "attendancePercentageWeek": pct_week if pct_week is not None else 0.0,
         "attendancePercentageMonth": pct_month if pct_month is not None else 0.0,
+        "participationPercentageWeek": participation_week if participation_week is not None else 0.0,
+        "participationPercentageMonth": participation_month if participation_month is not None else 0.0,
         "sessionsAwaitingCompletion": sessions_awaiting,
         "recentlyEditedAttendance": recent_edits,
         "lowAttendanceLearners": low_attendance,
@@ -234,10 +247,26 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
         cohorts = cur.fetchall()
         cohort_ids = [c["id"] for c in cohorts]
 
+        week_start, week_end = resolve_period("current_week")
         month_start, month_end = resolve_period("current_month")
         metrics_by_cohort = fetch_attendance_metrics_grouped(
             cur, group_by="cohort", group_ids=cohort_ids, period_start=month_start, period_end=month_end
         )
+        # Own-scope equivalents of the admin dashboard's organisation-wide
+        # figures -- scope="tutor" is this tutor's own home cohorts only,
+        # the same population get_tutor_dashboard_cohorts summarises below.
+        pct_week = fetch_attendance_metrics(
+            cur, scope="tutor", scope_id=tutor_id, period_start=week_start, period_end=week_end
+        ).attendancePercentage
+        pct_month = fetch_attendance_metrics(
+            cur, scope="tutor", scope_id=tutor_id, period_start=month_start, period_end=month_end
+        ).attendancePercentage
+        participation_week = fetch_session_participation_metrics(
+            cur, scope="tutor", scope_id=tutor_id, period_start=week_start, period_end=week_end
+        ).participationRate
+        participation_month = fetch_session_participation_metrics(
+            cur, scope="tutor", scope_id=tutor_id, period_start=month_start, period_end=month_end
+        ).participationRate
 
         cohort_summaries = []
         for cohort in cohorts:
@@ -304,6 +333,10 @@ def get_tutor_dashboard(session: dict = Depends(require_auth)):
         "nextSession": next_session,
         "sessionsAwaitingCompletion": sessions_awaiting,
         "lowAttendanceLearners": low_attendance,
+        "attendancePercentageWeek": pct_week if pct_week is not None else 0.0,
+        "attendancePercentageMonth": pct_month if pct_month is not None else 0.0,
+        "participationPercentageWeek": participation_week if participation_week is not None else 0.0,
+        "participationPercentageMonth": participation_month if participation_month is not None else 0.0,
     }
 
 
