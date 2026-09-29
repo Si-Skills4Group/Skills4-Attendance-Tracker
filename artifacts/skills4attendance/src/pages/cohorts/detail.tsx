@@ -1,5 +1,6 @@
 import * as React from "react";
-import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useDeleteCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useDeleteCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, useEndLearnerSecondaryEnrollment, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
 import { useLocation, useParams, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { Loader2, Save, ArrowLeft, Users, Trash2 } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Users, Trash2, CheckCircle2 } from "lucide-react";
 import { LearnerStatusBadge } from "@/components/status-badges";
 import { format, parseISO } from "date-fns";
 
@@ -65,8 +66,12 @@ export default function CohortDetailPage() {
 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [deleteReason, setDeleteReason] = React.useState("");
+  const [completeTarget, setCompleteTarget] = React.useState<{ enrollmentId: number; learnerName: string } | null>(null);
+  const [completeDate, setCompleteDate] = React.useState(format(new Date(), "yyyy-MM-dd"));
+  const [completeNote, setCompleteNote] = React.useState("");
 
   const { data: cohort, isLoading: isLoadingCohort } = useGetCohort(cohortId, {
     query: { enabled: !isNew, queryKey: getGetCohortQueryKey(cohortId) }
@@ -85,6 +90,7 @@ export default function CohortDetailPage() {
   const activateMutation = useActivateCohort();
   const deactivateMutation = useDeactivateCohort();
   const deleteMutation = useDeleteCohort();
+  const completeEnrollmentMutation = useEndLearnerSecondaryEnrollment();
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   const handleToggleActive = (newActive: boolean) => {
@@ -93,6 +99,28 @@ export default function CohortDetailPage() {
       onSuccess: () => toast({ title: newActive ? "Cohort activated" : "Cohort deactivated" }),
       onError: (err) => toast({ title: "Update failed", description: getErrorMessage(err), variant: "destructive" }),
     });
+  };
+
+  // Ends the learner's Functional Skills enrollment into THIS cohort --
+  // they stop being expected in its future sessions -- without ever
+  // touching their uploaded Functional Skills requirement (a separate
+  // table/concept: completing this course doesn't mean they no longer
+  // need the subject overall).
+  const onMarkCompleted = () => {
+    if (!completeTarget) return;
+    const reason = completeNote.trim() ? `Completed the course -- ${completeNote.trim()}` : "Completed the course";
+    completeEnrollmentMutation.mutate(
+      { id: completeTarget.enrollmentId, data: { endDate: completeDate, reason } },
+      {
+        onSuccess: () => {
+          toast({ title: "Marked as completed", description: `${completeTarget.learnerName} will no longer be expected in future sessions of this cohort.` });
+          setCompleteTarget(null);
+          setCompleteNote("");
+          queryClient.invalidateQueries({ queryKey: getGetCohortLearnersQueryKey(cohortId) });
+        },
+        onError: (err) => toast({ title: "Could not mark as completed", description: getErrorMessage(err), variant: "destructive" }),
+      },
+    );
   };
 
   const form = useForm<z.infer<typeof cohortSchema>>({
@@ -454,7 +482,8 @@ export default function CohortDetailPage() {
                           <TableRow>
                             <TableHead>Learner</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Enrolled</TableHead>
+                            <TableHead>Enrolled</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -467,8 +496,24 @@ export default function CohortDetailPage() {
                                 <div className="text-xs text-muted-foreground font-mono">{l.learnerRef}</div>
                               </TableCell>
                               <TableCell><LearnerStatusBadge status={l.status} /></TableCell>
-                              <TableCell className="text-right text-sm text-muted-foreground">
+                              <TableCell className="text-sm text-muted-foreground">
                                 {format(parseISO(l.startDate), "MMM d, yyyy")}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {l.secondaryEnrollmentId != null && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    title="This learner completed the course with this Functional Skills cohort -- they'll no longer be expected in its future sessions. Their uploaded Functional Skills requirement is not affected."
+                                    onClick={() => {
+                                      setCompleteTarget({ enrollmentId: l.secondaryEnrollmentId!, learnerName: `${l.firstName} ${l.lastName}` });
+                                      setCompleteDate(format(new Date(), "yyyy-MM-dd"));
+                                      setCompleteNote("");
+                                    }}
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Mark Completed
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -508,6 +553,42 @@ export default function CohortDetailPage() {
             <Button variant="destructive" onClick={onDeleteCohort} disabled={deleteMutation.isPending || !deleteReason.trim()}>
               {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Delete Cohort
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={completeTarget !== null} onOpenChange={(o) => { if (!o) { setCompleteTarget(null); setCompleteNote(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Completed</DialogTitle>
+            <DialogDescription>
+              {completeTarget?.learnerName} completed the course with this Functional Skills cohort. They'll stop
+              being expected in its future sessions. This does not affect their uploaded Functional Skills
+              requirement -- if they still need this subject, that stays recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="complete-date">Completion Date</Label>
+              <Input id="complete-date" type="date" value={completeDate} onChange={(e) => setCompleteDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="complete-note">Note (Optional)</Label>
+              <Textarea
+                id="complete-note"
+                value={completeNote}
+                onChange={(e) => setCompleteNote(e.target.value)}
+                rows={3}
+                placeholder="Anything else worth recording about this completion?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompleteTarget(null)}>Go Back</Button>
+            <Button onClick={onMarkCompleted} disabled={completeEnrollmentMutation.isPending}>
+              {completeEnrollmentMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Mark Completed
             </Button>
           </DialogFooter>
         </DialogContent>

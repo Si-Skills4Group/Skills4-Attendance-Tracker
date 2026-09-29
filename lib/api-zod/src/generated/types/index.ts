@@ -97,6 +97,7 @@ export * from './cohortDeleteInput';
 export * from './cohortDetail';
 export * from './cohortIdQueryParamParameter';
 export * from './cohortInput';
+export * from './cohortLearner';
 export * from './cohortLearnerBreakdownListResponse';
 export * from './cohortLearnerBreakdownRow';
 export * from './cohortMembershipType';

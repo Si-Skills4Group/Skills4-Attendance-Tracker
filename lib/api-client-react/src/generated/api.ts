@@ -69,6 +69,7 @@ import type {
   CohortDeleteInput,
   CohortDetail,
   CohortInput,
+  CohortLearner,
   CohortReportResponse,
   CohortUpdate,
   CompleteRegisterInput,
@@ -4953,9 +4954,9 @@ export const getGetCohortLearnersUrl = (id: number,) => {
   return `/api/cohorts/${id}/learners`
 }
 
-export const getCohortLearners = async (id: number, options?: RequestInit): Promise<Learner[]> => {
+export const getCohortLearners = async (id: number, options?: RequestInit): Promise<CohortLearner[]> => {
 
-  return customFetch<Learner[]>(getGetCohortLearnersUrl(id),
+  return customFetch<CohortLearner[]>(getGetCohortLearnersUrl(id),
   {
     ...options,
     method: 'GET'
