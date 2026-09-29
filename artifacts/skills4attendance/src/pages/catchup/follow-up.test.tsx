@@ -132,7 +132,7 @@ describe('CatchupFollowUpPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(screen.getByLabelText('Revoke catch-up'));
+    await user.click(screen.getByRole('button', { name: 'Revoke' }));
     expect(await screen.findByRole('heading', { name: 'Revoke Catch-up' })).toBeInTheDocument();
 
     const revokeButton = screen.getByRole('button', { name: 'Revoke Catch-up' });
@@ -152,7 +152,7 @@ describe('CatchupFollowUpPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(screen.getByLabelText(/view catch-up history/i));
+    await user.click(screen.getByRole('button', { name: 'History' }));
     expect(await screen.findByText('Catch-up recorded')).toBeInTheDocument();
     expect(screen.getByText(/watched it/i)).toBeInTheDocument();
   });

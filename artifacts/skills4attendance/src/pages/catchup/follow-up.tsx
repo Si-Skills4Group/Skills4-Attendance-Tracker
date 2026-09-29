@@ -286,8 +286,12 @@ function FollowUpRow({
       <TableCell className="text-right space-x-1 whitespace-nowrap">
         {row.effective ? (
           <>
-            <Button variant="outline" size="sm" onClick={onCorrect}>Correct</Button>
-            <Button variant="outline" size="sm" aria-label="Revoke catch-up" onClick={onRevoke}><Ban className="w-3.5 h-3.5" /></Button>
+            <Button variant="outline" size="sm" onClick={onCorrect} title="Edit the recorded completion date, method, or note">
+              Correct
+            </Button>
+            <Button variant="outline" size="sm" onClick={onRevoke} title="Undo this catch-up -- the learner reverts to an outstanding absence">
+              <Ban className="w-3.5 h-3.5 mr-1.5" /> Revoke
+            </Button>
           </>
         ) : (
           <Button variant="outline" size="sm" onClick={onRecord}>
@@ -296,7 +300,9 @@ function FollowUpRow({
           </Button>
         )}
         {hasHistory && (
-          <Button variant="ghost" size="sm" onClick={onHistory} aria-label="View catch-up history"><History className="w-3.5 h-3.5" /></Button>
+          <Button variant="ghost" size="sm" onClick={onHistory} title="View the history of corrections/revocations for this catch-up">
+            <History className="w-3.5 h-3.5 mr-1.5" /> History
+          </Button>
         )}
       </TableCell>
     </TableRow>
