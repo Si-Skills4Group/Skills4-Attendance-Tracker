@@ -176,6 +176,50 @@ class TestDashboardEndpointPermissions:
         body = response.json()
         assert "attendancePercentageWeek" in body
         assert "attendancePercentageMonth" in body
+        assert "participationPercentageWeek" in body
+        assert "participationPercentageMonth" in body
+
+    def test_a_catchup_raises_participation_but_never_attendance(
+        self, db, admin_user, request_factory, tutor_factory, cohort_factory, learner_factory, attendance_session_factory,
+    ):
+        """The whole point of having a separate participation figure: an
+        effective catch-up completion counts toward it, but attendancePercentage*
+        stays exactly as if the absence had never been followed up -- these
+        two numbers must be able to visibly disagree, on both dashboards."""
+        from datetime import date
+
+        from pyapp.catchup_lib import record_catchup
+        from pyapp.routers.attendance import AttendanceRegisterInput, RegisterEntryInput, save_attendance_register
+        from pyapp.routers.dashboard import get_admin_dashboard, get_tutor_dashboard
+
+        tutor = tutor_factory()
+        tutor_session = {"userId": tutor["userId"], "role": "tutor", "tutorId": tutor["tutorId"]}
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner = learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"], start_date="2026-01-01")
+        session = attendance_session_factory(
+            cohort_id=cohort["id"], session_date=date.today().isoformat(),
+            planned_duration_hours=7, created_by=admin_user["userId"],
+        )
+        save_attendance_register(
+            session["id"],
+            AttendanceRegisterInput(registerVersion=1, entries=[
+                RegisterEntryInput(learnerId=learner["id"], status="absent_authorised", hoursAttended=0, minutesLate=0),
+            ]),
+            request_factory(), admin_user,
+        )
+        record_catchup(db, session["id"], learner["id"], date.today(), "recording_watched", "watched it", request_factory(), admin_user)
+
+        admin_result = get_admin_dashboard(admin_user)
+        tutor_result = get_tutor_dashboard(tutor_session)
+
+        # Tutor scope is isolated to this test's own fresh cohort/learner, so
+        # an exact value is safe there; organisation scope shares the same
+        # long-lived test database across the whole suite, so only the
+        # participation >= attendance relationship (never a false decrease)
+        # is asserted for it, not an absolute number.
+        assert tutor_result["attendancePercentageMonth"] == 0.0, "a caught-up absence is still zero minutes attended"
+        assert tutor_result["participationPercentageMonth"] > 0.0, "but it does count as participation"
+        assert admin_result["participationPercentageMonth"] >= admin_result["attendancePercentageMonth"]
 
     def test_unauthenticated_tutor_dashboard_is_rejected(self, client):
         response = client.get("/api/dashboard/tutor")

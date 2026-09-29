@@ -14,4 +14,10 @@ export interface TutorDashboard {
   nextSession: SessionSummary | null;
   sessionsAwaitingCompletion: SessionSummary[];
   lowAttendanceLearners: LearnerAttendanceSummaryRow[];
+  attendancePercentageWeek: number;
+  attendancePercentageMonth: number;
+  /** Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up. */
+  participationPercentageWeek: number;
+  /** Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up. */
+  participationPercentageMonth: number;
 }

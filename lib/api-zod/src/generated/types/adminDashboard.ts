@@ -15,6 +15,10 @@ export interface AdminDashboard {
   activeCohorts: number;
   attendancePercentageWeek: number;
   attendancePercentageMonth: number;
+  /** Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up. */
+  participationPercentageWeek: number;
+  /** Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage*, which never includes catch-up. */
+  participationPercentageMonth: number;
   sessionsAwaitingCompletion: SessionSummary[];
   recentlyEditedAttendance: RecentEdit[];
   lowAttendanceLearners: LearnerAttendanceSummaryRow[];

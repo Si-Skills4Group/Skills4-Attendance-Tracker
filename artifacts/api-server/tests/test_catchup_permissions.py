@@ -92,6 +92,46 @@ class TestOrdinaryTutorAccess:
         response = client.get(f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}")
         assert response.status_code == 403
 
+    def test_owning_tutor_can_undo_their_own_learners_catchup(self, client, monkeypatch, scenario):
+        _as_tutor(client, monkeypatch, scenario["owner"]["tutorId"], scenario["owner"]["userId"])
+        record = client.post(
+            f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}",
+            json={"completionDate": PAST_SESSION_DATE, "method": "recording_watched", "note": "Watched it"},
+        )
+        assert record.status_code == 200
+
+        revoke = client.post(
+            f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}/revoke",
+            json={"reason": "recorded in error"},
+        )
+        assert revoke.status_code == 200
+        assert revoke.json()["effective"] is False
+
+        read_back = client.get(f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}")
+        assert read_back.status_code == 200
+        assert read_back.json()["effective"] is False
+
+    def test_non_owning_tutor_cannot_undo_another_tutors_learners_catchup(self, client, monkeypatch, scenario):
+        # Record it as the owning tutor first, via the real endpoint, so this
+        # matches how the scenario would actually arise.
+        _as_tutor(client, monkeypatch, scenario["owner"]["tutorId"], scenario["owner"]["userId"])
+        client.post(
+            f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}",
+            json={"completionDate": PAST_SESSION_DATE, "method": "recording_watched", "note": "Watched it"},
+        )
+
+        _as_tutor(client, monkeypatch, scenario["other"]["tutorId"], scenario["other"]["userId"])
+        response = client.post(
+            f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}/revoke",
+            json={"reason": "not my session"},
+        )
+        assert response.status_code == 403
+
+        # Confirm the catch-up was NOT actually revoked by the denied request.
+        _as_tutor(client, monkeypatch, scenario["owner"]["tutorId"], scenario["owner"]["userId"])
+        state = client.get(f"/api/attendance/sessions/{scenario['session']['id']}/catchup/{scenario['learner']['id']}")
+        assert state.json()["effective"] is True
+
     def test_admin_can_always_record_correct_and_revoke(self, client, monkeypatch, scenario):
         _as_admin(client, monkeypatch)
         record = client.post(

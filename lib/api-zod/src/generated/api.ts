@@ -69,6 +69,8 @@ export const GetAdminDashboardResponse = zod.object({
   "activeCohorts": zod.number(),
   "attendancePercentageWeek": zod.number(),
   "attendancePercentageMonth": zod.number(),
+  "participationPercentageWeek": zod.number().describe('Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage\*, which never includes catch-up.'),
+  "participationPercentageMonth": zod.number().describe('Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage\*, which never includes catch-up.'),
   "sessionsAwaitingCompletion": zod.array(zod.object({
   "id": zod.number(),
   "cohortId": zod.number(),
@@ -196,7 +198,11 @@ export const GetTutorDashboardResponse = zod.object({
   "learningPlanUrl": zod.union([zod.string(),zod.null()]).optional(),
   "syncedAt": zod.union([zod.coerce.date(),zod.null()]).optional()
 }).describe('Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.'),zod.null()]).optional().describe('Null when no Bud sync match exists yet -- never breaks the row.')
-}))
+})),
+  "attendancePercentageWeek": zod.number(),
+  "attendancePercentageMonth": zod.number(),
+  "participationPercentageWeek": zod.number().describe('Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage\*, which never includes catch-up.'),
+  "participationPercentageMonth": zod.number().describe('Live attendance plus effective (non-revoked) catch-up completions, as a share of expected sessions -- distinct from attendancePercentage\*, which never includes catch-up.')
 })
 
 
