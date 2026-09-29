@@ -518,10 +518,26 @@ def get_cohort_learners(cohort_id: int, session: dict = Depends(require_auth)):
 
     with get_cursor() as cur:
         require_cohort_access(cur, cohort_id, session)
+        # secondaryEnrollmentId is null for a learner listed via their home
+        # cohort, and the learner_cohort_enrollments row id for one listed
+        # via an active Functional Skills enrollment into THIS cohort --
+        # the two are mutually exclusive (enrolling into your own home
+        # cohort is rejected elsewhere), so this is never ambiguous. Kept as
+        # an addition on top of the shared LEARNERS_WITH_NAMES_SELECT rather
+        # than a change to it, since that fragment is reused by endpoints
+        # with no single cohort_id to scope this to.
         cur.execute(
-            f"""{LEARNERS_WITH_NAMES_SELECT}
-            WHERE {learner_in_cohort_now_sql("l", "%s")} AND l.deleted_at IS NULL
+            f"""
+            WITH base AS (
+                {LEARNERS_WITH_NAMES_SELECT}
+                WHERE {learner_in_cohort_now_sql("l", "%s")} AND l.deleted_at IS NULL
+            )
+            SELECT base.*, (
+                SELECT e.id FROM learner_cohort_enrollments e
+                WHERE e.learner_id = base.id AND e.cohort_id = %s AND e.status = 'active'
+            ) AS "secondaryEnrollmentId"
+            FROM base
             """,
-            (cohort_id, cohort_id),
+            (cohort_id, cohort_id, cohort_id),
         )
         return cur.fetchall()

@@ -2084,7 +2084,9 @@ export const GetCohortLearnersResponseItem = zod.object({
   "functionalSkillsSubjects": zod.array(zod.enum(['math', 'english', 'both'])).describe('Distinct subjects of this learner\'s currently active Functional Skills secondary enrollments -- empty when they have none.'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
-})
+}).and(zod.object({
+  "secondaryEnrollmentId": zod.number().nullable().describe('Null when this learner is on the roster via their home cohort. The learner_cohort_enrollments row id when they\'re here via an active Functional Skills secondary enrollment into this cohort -- use this to end that enrollment (e.g. marking the course completed) without affecting their uploaded Functional Skills requirement or any other cohort.')
+})).describe('A Learner as listed on a specific cohort\'s own roster, with the one extra field (\"is this learner here via an active Functional Skills enrollment into THIS cohort, and if so which enrollment\") that\'s only meaningful in the context of one particular cohort.')
 export const GetCohortLearnersResponse = zod.array(GetCohortLearnersResponseItem)
 
 

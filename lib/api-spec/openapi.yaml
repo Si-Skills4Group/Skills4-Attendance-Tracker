@@ -1579,7 +1579,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Learner" }
+                items: { $ref: "#/components/schemas/CohortLearner" }
 
   # ---------- Allocation ----------
   # listUnallocatedLearners/getAllocationByTutor were removed in favour of
@@ -4343,6 +4343,27 @@ components:
     FunctionalSkillsSubject:
       type: string
       enum: [math, english, both]
+
+    CohortLearner:
+      description: >-
+        A Learner as listed on a specific cohort's own roster, with the one
+        extra field ("is this learner here via an active Functional Skills
+        enrollment into THIS cohort, and if so which enrollment") that's only
+        meaningful in the context of one particular cohort.
+      allOf:
+        - $ref: "#/components/schemas/Learner"
+        - type: object
+          required: [secondaryEnrollmentId]
+          properties:
+            secondaryEnrollmentId:
+              type: ["integer", "null"]
+              description: >-
+                Null when this learner is on the roster via their home
+                cohort. The learner_cohort_enrollments row id when they're
+                here via an active Functional Skills secondary enrollment
+                into this cohort -- use this to end that enrollment (e.g.
+                marking the course completed) without affecting their
+                uploaded Functional Skills requirement or any other cohort.
 
     LearnerInput:
       type: object

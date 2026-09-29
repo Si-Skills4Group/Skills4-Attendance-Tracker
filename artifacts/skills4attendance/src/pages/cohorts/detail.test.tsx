@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQueryClient } from '@/test/test-utils';
 import { Toaster } from '@/components/ui/toaster';
@@ -32,19 +32,22 @@ const cohort = {
 
 let mockCurrentUser: { data: any };
 let mockCohort: { data: any; isLoading: boolean };
+let mockCohortLearners: { data: any[] };
 const mockDeleteMutate = vi.fn();
 const mockUpdateMutate = vi.fn();
+const mockEndSecondaryEnrollmentMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetCurrentUser: () => mockCurrentUser,
   useGetCohort: () => mockCohort,
-  useGetCohortLearners: () => ({ data: [] }),
+  useGetCohortLearners: () => mockCohortLearners,
   useListTutors: () => ({ data: tutors }),
   useCreateCohort: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateCohort: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useActivateCohort: () => ({ mutate: vi.fn() }),
   useDeactivateCohort: () => ({ mutate: vi.fn() }),
   useDeleteCohort: () => ({ mutate: mockDeleteMutate, isPending: false }),
+  useEndLearnerSecondaryEnrollment: () => ({ mutate: mockEndSecondaryEnrollmentMutate, isPending: false }),
   getGetCohortQueryKey: (id: number) => ['getCohort', id],
   getGetCohortLearnersQueryKey: (id: number) => ['getCohortLearners', id],
   getListTutorsQueryKey: (params: unknown) => ['listTutors', params],
@@ -55,6 +58,7 @@ describe('CohortDetailPage primary tutor field', () => {
     mockParams = {};
     mockCurrentUser = { data: { role: 'admin' } };
     mockCohort = { data: undefined, isLoading: false };
+    mockCohortLearners = { data: [] };
   });
 
   it('lets a tutor far down a long list be found by typing, instead of only scrolling a fixed-height list', async () => {
@@ -84,6 +88,7 @@ describe('CohortDetailPage delete action', () => {
     mockParams = { id: '5' };
     mockCurrentUser = { data: { role: 'admin' } };
     mockCohort = { data: cohort, isLoading: false };
+    mockCohortLearners = { data: [] };
     mockDeleteMutate.mockReset();
     mockSetLocation.mockReset();
   });
@@ -145,11 +150,81 @@ describe('CohortDetailPage delete action', () => {
   });
 });
 
+describe('CohortDetailPage roster -- marking a Functional Skills enrollment completed', () => {
+  const homeLearner = {
+    id: 20, firstName: 'Hana', lastName: 'Home', learnerRef: 'L-20', status: 'active',
+    startDate: '2026-01-01', secondaryEnrollmentId: null,
+  };
+  const fsLearner = {
+    id: 21, firstName: 'Fiona', lastName: 'FS', learnerRef: 'L-21', status: 'active',
+    startDate: '2026-01-01', secondaryEnrollmentId: 301,
+  };
+
+  beforeEach(() => {
+    mockParams = { id: '5' };
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCohort = { data: { ...cohort, membershipType: 'secondary', subject: 'math' }, isLoading: false };
+    mockCohortLearners = { data: [homeLearner, fsLearner] };
+    mockEndSecondaryEnrollmentMutate.mockReset();
+  });
+
+  it('offers Mark Completed only for a learner on the roster via a Functional Skills enrollment', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('tab', { name: /learner roster/i }));
+
+    const fsRow = screen.getByText('Fiona FS').closest('tr')!;
+    expect(within(fsRow).getByRole('button', { name: /mark completed/i })).toBeInTheDocument();
+
+    const homeRow = screen.getByText('Hana Home').closest('tr')!;
+    expect(within(homeRow).queryByRole('button', { name: /mark completed/i })).not.toBeInTheDocument();
+  });
+
+  it('confirms before marking completed, explaining the requirement is unaffected', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('tab', { name: /learner roster/i }));
+    const fsRow = screen.getByText('Fiona FS').closest('tr')!;
+    await user.click(within(fsRow).getByRole('button', { name: /mark completed/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Mark Completed' })).toBeInTheDocument();
+    expect(screen.getByText(/uploaded Functional Skills requirement/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^mark completed$/i }));
+
+    expect(mockEndSecondaryEnrollmentMutate).toHaveBeenCalledWith(
+      { id: 301, data: { endDate: expect.any(String), reason: 'Completed the course' } },
+      expect.anything(),
+    );
+  });
+
+  it('includes an optional note in the recorded reason', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('tab', { name: /learner roster/i }));
+    const fsRow = screen.getByText('Fiona FS').closest('tr')!;
+    await user.click(within(fsRow).getByRole('button', { name: /mark completed/i }));
+
+    await screen.findByRole('heading', { name: 'Mark Completed' });
+    await user.type(screen.getByLabelText(/note/i), 'Passed final assessment');
+    await user.click(screen.getByRole('button', { name: /^mark completed$/i }));
+
+    expect(mockEndSecondaryEnrollmentMutate).toHaveBeenCalledWith(
+      { id: 301, data: { endDate: expect.any(String), reason: 'Completed the course -- Passed final assessment' } },
+      expect.anything(),
+    );
+  });
+});
+
 describe('CohortDetailPage rename action for tutors', () => {
   beforeEach(() => {
     mockParams = { id: '5' };
     mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
     mockCohort = { data: cohort, isLoading: false };
+    mockCohortLearners = { data: [] };
     mockUpdateMutate.mockReset();
     mockSetLocation.mockReset();
   });
@@ -195,6 +270,7 @@ describe('CohortDetailPage cohort type field', () => {
     mockParams = { id: '5' };
     mockCurrentUser = { data: { role: 'admin' } };
     mockCohort = { data: cohort, isLoading: false };
+    mockCohortLearners = { data: [] };
     mockUpdateMutate.mockReset();
   });
 

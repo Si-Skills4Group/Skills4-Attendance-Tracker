@@ -305,6 +305,28 @@ class TestFunctionalSkillsSecondaryCohorts:
         roster = get_cohort_learners(fs_cohort["id"], session=admin_user)
         assert {r["id"] for r in roster} == {learner["id"]}
 
+    def test_roster_row_carries_the_enrollment_id_only_for_a_secondary_enrollment(
+        self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        """secondaryEnrollmentId is how the frontend knows which rows can
+        offer a "mark completed" action (ending a secondary enrollment) --
+        null for a learner on the roster via their home cohort, set to the
+        real learner_cohort_enrollments id for one there via an active
+        Functional Skills enrollment. The two are mutually exclusive by
+        construction (enrolling into your own home cohort is rejected), so
+        this asserts both directions in one pass."""
+        home_cohort = cohort_factory()
+        fs_cohort = cohort_factory(membership_type="secondary")
+        home_learner = learner_factory(cohort_id=home_cohort["id"])
+        fs_learner = learner_factory(cohort_id=cohort_factory()["id"])
+        enrollment = secondary_enrollment_factory(learner_id=fs_learner["id"], cohort_id=fs_cohort["id"])
+
+        home_roster = get_cohort_learners(home_cohort["id"], session=admin_user)
+        assert next(r for r in home_roster if r["id"] == home_learner["id"])["secondaryEnrollmentId"] is None
+
+        fs_roster = get_cohort_learners(fs_cohort["id"], session=admin_user)
+        assert next(r for r in fs_roster if r["id"] == fs_learner["id"])["secondaryEnrollmentId"] == enrollment["id"]
+
     def test_secondarily_enrolled_learner_counts_toward_learner_count(
         self, request_factory, admin_user, cohort_factory, learner_factory, secondary_enrollment_factory,
     ):
