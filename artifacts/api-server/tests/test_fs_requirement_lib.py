@@ -336,6 +336,19 @@ class TestClearRequirement:
 
 
 class TestAllocationView:
+    def test_search_matches_full_name_not_just_one_part(self, db, admin_user, learner_factory, request_factory):
+        """Regression: a single ILIKE against the concatenated full name,
+        not separate first_name/last_name ILIKEs -- see routers/learners.py's
+        own fix for the same underlying bug this mirrors."""
+        learner = learner_factory(first_name="Phoebe", last_name="Jones")
+        job = create_import_job(db, "f.csv", admin_user["userId"], [{"learnerID": learner["learner_ref"], "AIM": "Both"}])
+        confirm_import_job(db, job["id"], request_factory(), admin_user)
+
+        rows, total = fetch_allocation_rows(db, search="Phoebe Jones", subject=None, missing_only=False, status=None, page=1, page_size=25)
+        assert total == 1
+        assert rows[0]["id"] == learner["id"]
+
+
     def test_subject_coverage_through_a_single_both_cohort(
         self, db, admin_user, tutor_factory, cohort_factory, learner_factory, secondary_enrollment_factory, request_factory,
     ):

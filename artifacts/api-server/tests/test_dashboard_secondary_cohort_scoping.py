@@ -25,8 +25,18 @@ def _record(db, session_id, learner_id, status, hours_attended=0):
 
 
 def _make_sessions(db, admin_user, cohort_id, learner_id, status, count=3, start_day=date(2026, 1, 6)):
+    # Clamped to never exceed "today": a caller anchoring on the current
+    # calendar month's start (so the sessions fall within get_tutor_
+    # dashboard's "current month" scope) would otherwise schedule into the
+    # future whenever today is less than `count` days into the month --
+    # attendance_metrics._capped_period_end excludes those from every
+    # calculation, silently leaving fewer than MIN_COMPLETED_ROWS_FOR_
+    # ATTENDANCE_FLAG rows and making a genuinely-absent learner look like
+    # "insufficient data" instead of low attendance. A no-op for every
+    # caller using a fixed historical start_day, which is already <= today.
+    today = date.today()
     for offset in range(count):
-        session_date = date.fromordinal(start_day.toordinal() + offset)
+        session_date = min(date.fromordinal(start_day.toordinal() + offset), today)
         db.execute(
             """
             INSERT INTO attendance_sessions (cohort_id, session_date, planned_start_time, planned_end_time,

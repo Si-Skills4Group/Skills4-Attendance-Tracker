@@ -4,7 +4,21 @@ import pytest
 from fastapi import HTTPException
 
 from pyapp.auth import EntraIdentity, _load_entra_user
-from pyapp.routers.users import _apply_user_updates, _ensure_tutor_not_linked_elsewhere, _validate_role_mapping
+from pyapp.routers.users import _apply_user_updates, _ensure_tutor_not_linked_elsewhere, _validate_role_mapping, list_users
+
+
+def test_list_users_search_matches_full_name_not_just_one_part(db, admin_user):
+    """Regression: a single ILIKE against the concatenated full name, not
+    separate first_name/last_name ILIKEs -- see routers/learners.py's own
+    fix for the same underlying bug this mirrors."""
+    db.execute(
+        "INSERT INTO users (first_name, last_name, email, role, active) VALUES ('Phoebe', 'Jones', %s, 'tutor', true) RETURNING id",
+        (f"phoebe-jones-{os.urandom(4).hex()}@example.com",),
+    )
+    user_id = db.fetchone()["id"]
+
+    result = list_users(search="Phoebe Jones", _session=admin_user)
+    assert user_id in {row["id"] for row in result}
 
 
 def _make_unlinked_tutor(db) -> dict:
