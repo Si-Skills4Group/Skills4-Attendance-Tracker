@@ -310,6 +310,24 @@ class TestPopulation:
         assert total >= 1
 
 
+class TestSearch:
+    def test_matches_full_name_not_just_one_part(self, db, admin_user, tutor_factory, cohort_factory, learner_factory):
+        """Regression: a single ILIKE against the concatenated full name,
+        not separate first_name/last_name ILIKEs -- see routers/learners.py's
+        own fix for the same underlying bug this mirrors."""
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner = learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"], first_name="Phoebe", last_name="Jones")
+
+        rows, total = fetch_engagement_rows(
+            db, tutor_id=tutor["tutorId"], cohort_id=None, learner_id=None,
+            programme=None, search="Phoebe Jones", no_engagement_only=False, min_days_since=None,
+            evidence_tutor_id=tutor["tutorId"], page=1, page_size=25,
+        )
+        assert total == 1
+        assert rows[0]["id"] == learner["id"]
+
+
 class TestFiltersCountsAndPaginationAgree:
     def test_no_engagement_only_filter_matches_the_summary_count(
         self, db, admin_user, tutor_factory, cohort_factory, learner_factory, attendance_session_factory, request_factory,

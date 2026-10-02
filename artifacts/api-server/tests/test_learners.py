@@ -138,6 +138,29 @@ def test_patch_learner_ignores_a_tutorid_or_cohortid_in_the_request_body(db, req
     assert row["cohortId"] is None
 
 
+def test_list_learners_search_matches_full_name_not_just_one_part(db, admin_user, learner_factory):
+    """Regression: searching the full "First Last" name used to match
+    neither the separate first_name nor last_name ILIKE check, so an
+    existing learner silently vanished from search results. A single ILIKE
+    against the concatenated full name fixes first-name-only, last-name-only,
+    AND full-name search all at once."""
+    from pyapp.routers.learners import list_learners
+
+    learner = learner_factory(first_name="Phoebe", last_name="Jones")
+
+    full_name = list_learners(search="Phoebe Jones", session=admin_user)
+    assert learner["id"] in {row["id"] for row in full_name["items"]}
+
+    first_only = list_learners(search="Phoebe", session=admin_user)
+    assert learner["id"] in {row["id"] for row in first_only["items"]}
+
+    last_only = list_learners(search="Jones", session=admin_user)
+    assert learner["id"] in {row["id"] for row in last_only["items"]}
+
+    no_match = list_learners(search="Zzyzx", session=admin_user)
+    assert learner["id"] not in {row["id"] for row in no_match["items"]}
+
+
 def test_list_learners_unallocated_filter_returns_only_learners_with_no_tutor(db, admin_user, learner_factory, tutor_factory):
     from pyapp.routers.learners import list_learners
 

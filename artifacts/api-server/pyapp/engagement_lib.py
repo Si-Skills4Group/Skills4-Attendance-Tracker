@@ -216,7 +216,10 @@ def _learner_population_clause(
         clauses.append("l.programme = %(programme)s")
         params["programme"] = programme
     if search:
-        clauses.append("(l.first_name ILIKE %(search)s OR l.last_name ILIKE %(search)s OR l.learner_ref ILIKE %(search)s)")
+        # A single ILIKE against the concatenated full name handles a
+        # first-name-only, last-name-only, OR full "First Last" search --
+        # see routers/learners.py's own fix for the same bug this mirrors.
+        clauses.append("(concat(l.first_name, ' ', l.last_name) ILIKE %(search)s OR l.learner_ref ILIKE %(search)s)")
         params["search"] = f"%{search}%"
     return " AND ".join(clauses), params
 

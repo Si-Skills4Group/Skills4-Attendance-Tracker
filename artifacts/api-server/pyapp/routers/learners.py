@@ -109,9 +109,15 @@ def list_learners(
         clauses.append("l.tutor_id = %s")
         params.append(session["tutorId"])
     if search:
-        clauses.append("(l.first_name ILIKE %s OR l.last_name ILIKE %s OR l.learner_ref ILIKE %s)")
+        # A single ILIKE against the concatenated full name handles a
+        # first-name-only, last-name-only, OR full "First Last" search in
+        # one check -- separate first_name/last_name ILIKEs (the previous
+        # version) can each only ever match one name part, so "Phoebe
+        # Jones" matched neither individually and the learner silently
+        # vanished from search despite existing.
+        clauses.append("(concat(l.first_name, ' ', l.last_name) ILIKE %s OR l.learner_ref ILIKE %s)")
         like = f"%{search}%"
-        params.extend([like, like, like])
+        params.extend([like, like])
     if status:
         clauses.append("l.status = %s")
         params.append(status)

@@ -100,11 +100,14 @@ def list_users(
     clauses = []
     params: list = []
     if search:
+        # A single ILIKE against the concatenated full name handles a
+        # first-name-only, last-name-only, OR full "First Last" search --
+        # see routers/learners.py's own fix for the same bug this mirrors.
         clauses.append(
-            "(first_name ILIKE %s OR last_name ILIKE %s OR email ILIKE %s OR entra_object_id ILIKE %s)"
+            "(concat(first_name, ' ', last_name) ILIKE %s OR email ILIKE %s OR entra_object_id ILIKE %s)"
         )
         like = f"%{search}%"
-        params.extend([like, like, like, like])
+        params.extend([like, like, like])
     if role:
         clauses.append("role = %s")
         params.append(role)
