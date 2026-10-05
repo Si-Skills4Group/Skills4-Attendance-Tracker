@@ -5,8 +5,13 @@ import {
   useListAttendanceSessions,
   useCreateAttendanceSession,
   useGetCurrentUser,
+  usePreviewGenerateSessions,
+  useConfirmGenerateSessions,
   getGetCohortQueryKey,
   getListAttendanceSessionsQueryKey,
+  type DayOfWeek,
+  type SessionOccurrence,
+  type GenerateSessionsPreview,
 } from "@workspace/api-client-react";
 import { useParams, useSearch, useSearchParams, Link } from "wouter";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -21,12 +26,39 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
 import { format } from "date-fns";
-import { ArrowLeft, Plus, Loader2, User, Users, AlertCircle } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, User, Users, AlertCircle, Repeat } from "lucide-react";
 
 const CONFLICT_MESSAGES: Record<string, string> = {
   duplicate_session: "A session already exists for this cohort on this date and start time.",
   outside_cohort_date_range: "This date falls outside the cohort's start/end dates.",
 };
+
+const DAY_OF_WEEK_OPTIONS: { value: DayOfWeek; label: string }[] = [
+  { value: "monday", label: "Monday" },
+  { value: "tuesday", label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday", label: "Thursday" },
+  { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
+  { value: "sunday", label: "Sunday" },
+];
+
+const OCCURRENCE_OPTIONS: { value: SessionOccurrence; label: string }[] = [
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Bi-weekly" },
+  { value: "monthly", label: "Monthly (same weekday position)" },
+];
+
+const WEEKDAY_BY_JS_DAY: DayOfWeek[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+// Parsed as a local date (not UTC) so a YYYY-MM-DD string's weekday matches
+// what the user sees on a calendar, regardless of timezone.
+function weekdayOf(dateStr: string): DayOfWeek | null {
+  if (!dateStr) return null;
+  const parsed = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return WEEKDAY_BY_JS_DAY[parsed.getDay()];
+}
 
 // Rounds to the nearest whole hour rather than truncating, so e.g. 09:00-13:40
 // (4h40m) comes out as 5, not 4 -- closer to what the tutor actually planned.
@@ -116,6 +148,86 @@ export default function CohortSessionsPage() {
       setPlannedDurationHours(calculateDurationHours(start, end));
     }
   }, [cohort]);
+
+  const previewMutation = usePreviewGenerateSessions();
+  const confirmMutation = useConfirmGenerateSessions();
+  const [generateModalOpen, setGenerateModalOpen] = React.useState(false);
+  const [genDayOfWeek, setGenDayOfWeek] = React.useState<DayOfWeek>("monday");
+  const [genOccurrence, setGenOccurrence] = React.useState<SessionOccurrence>("weekly");
+  const [genStartTime, setGenStartTime] = React.useState<string>("");
+  const [genEndTime, setGenEndTime] = React.useState<string>("");
+  const [genDurationHours, setGenDurationHours] = React.useState<number>(0);
+  const [genFirstDate, setGenFirstDate] = React.useState<string>("");
+  const [genFinalDate, setGenFinalDate] = React.useState<string>("");
+  const [genTitle, setGenTitle] = React.useState<string>("");
+  const [genNotes, setGenNotes] = React.useState<string>("");
+  const [genPreview, setGenPreview] = React.useState<GenerateSessionsPreview | null>(null);
+
+  React.useEffect(() => {
+    if (cohort && generateModalOpen) {
+      setGenDayOfWeek(cohort.deliveryDay as DayOfWeek);
+      setGenStartTime(cohort.sessionStartTime.substring(0, 5));
+      setGenEndTime(cohort.sessionEndTime.substring(0, 5));
+      setGenDurationHours(calculateDurationHours(cohort.sessionStartTime.substring(0, 5), cohort.sessionEndTime.substring(0, 5)));
+    }
+  }, [cohort, generateModalOpen]);
+
+  const handleGenStartTimeChange = (value: string) => {
+    setGenStartTime(value);
+    setGenDurationHours(calculateDurationHours(value, genEndTime));
+  };
+
+  const handleGenEndTimeChange = (value: string) => {
+    setGenEndTime(value);
+    setGenDurationHours(calculateDurationHours(genStartTime, value));
+  };
+
+  const genFirstDateWeekday = weekdayOf(genFirstDate);
+  const isGenFirstDateMismatched = !!genFirstDate && genFirstDateWeekday !== null && genFirstDateWeekday !== genDayOfWeek;
+  const isGenFinalDateBeforeFirst = !!genFirstDate && !!genFinalDate && genFinalDate < genFirstDate;
+  const canPreviewGenerate = !!genFirstDate && !!genFinalDate && !!genStartTime && !!genEndTime
+    && !!genTitle.trim() && !isGenFirstDateMismatched && !isGenFinalDateBeforeFirst;
+
+  const resetGenerateDialog = () => {
+    setGenPreview(null);
+    setGenFirstDate("");
+    setGenFinalDate("");
+    setGenTitle("");
+    setGenNotes("");
+  };
+
+  const generatePayload = () => ({
+    cohortId,
+    dayOfWeek: genDayOfWeek,
+    occurrence: genOccurrence,
+    plannedStartTime: `${genStartTime}:00`,
+    plannedEndTime: `${genEndTime}:00`,
+    plannedDurationHours: genDurationHours,
+    firstSessionDate: genFirstDate,
+    finalSessionDate: genFinalDate,
+    title: genTitle.trim(),
+    notes: genNotes.trim() || undefined,
+  });
+
+  const handlePreviewGenerate = () => {
+    if (!canPreviewGenerate) return;
+    previewMutation.mutate({ data: generatePayload() }, {
+      onSuccess: (result) => setGenPreview(result),
+      onError: (err) => toast({ title: "Failed to preview sessions", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const handleConfirmGenerate = () => {
+    confirmMutation.mutate({ data: generatePayload() }, {
+      onSuccess: (result) => {
+        toast({ title: `${result.createdCount} session${result.createdCount === 1 ? "" : "s"} created` });
+        setGenerateModalOpen(false);
+        resetGenerateDialog();
+        queryClient.invalidateQueries({ queryKey: getListAttendanceSessionsQueryKey() });
+      },
+      onError: (err) => toast({ title: "Failed to generate sessions", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
 
   const handleStartTimeChange = (value: string) => {
     setPlannedStartTime(value);
@@ -243,6 +355,128 @@ export default function CohortSessionsPage() {
           </Select>
         </div>
 
+        <div className="flex items-center gap-2">
+        <Dialog open={generateModalOpen} onOpenChange={(o) => { setGenerateModalOpen(o); if (!o) resetGenerateDialog(); }}>
+          <DialogTrigger asChild>
+            <Button className="hover-elevate shadow-sm" size="sm" variant="outline">
+              <Repeat className="w-4 h-4 mr-2" /> Generate Sessions
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Generate Recurring Sessions</DialogTitle>
+              <DialogDescription>Create a batch of sessions for {cohort.name} from a repeating pattern.</DialogDescription>
+            </DialogHeader>
+
+            {genPreview ? (
+              <div className="py-4 space-y-4">
+                <div className="bg-muted/30 border rounded-md p-4 text-sm space-y-1">
+                  <p><span className="font-semibold">{genPreview.newCount}</span> session{genPreview.newCount === 1 ? "" : "s"} will be created.</p>
+                  {genPreview.conflictCount > 0 && (
+                    <p className="text-amber-600 dark:text-amber-500">
+                      <span className="font-semibold">{genPreview.conflictCount}</span> date{genPreview.conflictCount === 1 ? "" : "s"} will be skipped (already has a session at this time, or falls outside the cohort's start/end dates).
+                    </p>
+                  )}
+                </div>
+                <div className="max-h-56 overflow-y-auto border rounded-md divide-y text-sm">
+                  {genPreview.dates.map((d) => (
+                    <div key={d.sessionDate} className="flex items-center justify-between px-3 py-1.5">
+                      <span>{format(new Date(`${d.sessionDate}T00:00:00`), "EEE d MMM yyyy")}</span>
+                      {d.conflict ? (
+                        <span className="text-xs text-amber-600 dark:text-amber-500">
+                          {d.conflictReason === "outside_cohort_date_range" ? "Outside cohort dates" : "Already exists"} &middot; skipped
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">New</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <DialogFooter className="mt-2">
+                  <Button variant="outline" onClick={() => setGenPreview(null)}>Back</Button>
+                  <Button onClick={handleConfirmGenerate} disabled={confirmMutation.isPending || genPreview.newCount === 0}>
+                    {confirmMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Confirm &amp; Create {genPreview.newCount} Session{genPreview.newCount === 1 ? "" : "s"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-day-of-week">Day of Week</Label>
+                    <Select value={genDayOfWeek} onValueChange={(v) => setGenDayOfWeek(v as DayOfWeek)}>
+                      <SelectTrigger id="gen-day-of-week"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {DAY_OF_WEEK_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-occurrence">Occurrence</Label>
+                    <Select value={genOccurrence} onValueChange={(v) => setGenOccurrence(v as SessionOccurrence)}>
+                      <SelectTrigger id="gen-occurrence"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {OCCURRENCE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-start-time">Start Time</Label>
+                    <Input id="gen-start-time" type="time" value={genStartTime} onChange={e => handleGenStartTimeChange(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-end-time">End Time</Label>
+                    <Input id="gen-end-time" type="time" value={genEndTime} onChange={e => handleGenEndTimeChange(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gen-duration">Duration (Hours)</Label>
+                  <Input id="gen-duration" type="number" step="0.5" value={genDurationHours} onChange={e => setGenDurationHours(parseFloat(e.target.value))} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-first-date">First Session Date</Label>
+                    <Input id="gen-first-date" type="date" value={genFirstDate} onChange={e => setGenFirstDate(e.target.value)} />
+                    {isGenFirstDateMismatched && (
+                      <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        This date isn't a {DAY_OF_WEEK_OPTIONS.find(o => o.value === genDayOfWeek)?.label}.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-final-date">Final Session Date</Label>
+                    <Input id="gen-final-date" type="date" value={genFinalDate} onChange={e => setGenFinalDate(e.target.value)} />
+                    {isGenFinalDateBeforeFirst && (
+                      <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        Must be on or after the first session date.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gen-title">Title / Topic</Label>
+                  <Input id="gen-title" placeholder="e.g. Weekly Workshop" value={genTitle} onChange={e => setGenTitle(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gen-notes">Notes (optional)</Label>
+                  <Textarea id="gen-notes" value={genNotes} onChange={e => setGenNotes(e.target.value)} rows={2} />
+                </div>
+                <DialogFooter className="mt-2">
+                  <Button onClick={handlePreviewGenerate} disabled={!canPreviewGenerate || previewMutation.isPending}>
+                    {previewMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Preview Sessions
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={createModalOpen} onOpenChange={(o) => { setCreateModalOpen(o); setConflictReasons(null); setOverrideReason(""); }}>
           <DialogTrigger asChild>
             <Button className="hover-elevate shadow-sm" size="sm">
@@ -337,6 +571,7 @@ export default function CohortSessionsPage() {
             )}
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {isSessionsError ? (

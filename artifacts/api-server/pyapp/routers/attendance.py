@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -26,6 +27,7 @@ from ..cover_tutor_lib import (
 from ..db import get_cursor
 from ..rate_limit import check_and_record_rate_limit
 from ..secondary_enrollment_lib import functional_skills_subjects_sql
+from ..session_generation_lib import Occurrence, generate_sessions, preview_generated_sessions
 from ..session_register_lib import (
     apply_register_refresh,
     bump_register_version,
@@ -106,6 +108,19 @@ class AttendanceSessionInput(BaseModel):
     notes: str | None = None
     force: bool = False
     overrideReason: str | None = None
+
+
+class GenerateSessionsInput(BaseModel):
+    cohortId: int
+    dayOfWeek: Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    occurrence: Occurrence
+    plannedStartTime: str = Field(min_length=1)
+    plannedEndTime: str = Field(min_length=1)
+    plannedDurationHours: float = Field(ge=0)
+    firstSessionDate: date
+    finalSessionDate: date
+    title: str = Field(min_length=1)
+    notes: str | None = None
 
 
 class AttendanceSessionUpdate(BaseModel):
@@ -358,6 +373,57 @@ def create_attendance_session(payload: AttendanceSessionInput, request: Request,
             new_value={"reasons": conflict_reasons, "overrideReason": payload.overrideReason},
         )
     return full
+
+
+@router.post("/attendance/sessions/generate/preview")
+def preview_generate_sessions_endpoint(payload: GenerateSessionsInput, session: dict = Depends(require_auth)):
+    """Read-only. Resolves the recurrence pattern into its full date list
+    and flags which dates already have a session, so an admin can see
+    exactly what a confirm would do before anything is created."""
+    with get_cursor() as cur:
+        require_cohort_access(cur, payload.cohortId, session)
+        return preview_generated_sessions(
+            cur,
+            cohort_id=payload.cohortId,
+            day_of_week=payload.dayOfWeek,
+            occurrence=payload.occurrence,
+            planned_start_time=payload.plannedStartTime,
+            first_session_date=payload.firstSessionDate,
+            final_session_date=payload.finalSessionDate,
+        )
+
+
+@router.post("/attendance/sessions/generate/confirm", status_code=201)
+def confirm_generate_sessions_endpoint(payload: GenerateSessionsInput, request: Request, session: dict = Depends(require_auth)):
+    """Re-resolves the pattern and re-checks every date fresh -- never
+    trusts a client-supplied date list, and a date that gained a session
+    between this admin's preview and their confirm is skipped exactly like
+    one that already had one, never double-booked."""
+    with get_cursor() as cur:
+        require_cohort_access(cur, payload.cohortId, session)
+        result = generate_sessions(
+            cur,
+            cohort_id=payload.cohortId,
+            day_of_week=payload.dayOfWeek,
+            occurrence=payload.occurrence,
+            planned_start_time=payload.plannedStartTime,
+            planned_end_time=payload.plannedEndTime,
+            planned_duration_hours=payload.plannedDurationHours,
+            first_session_date=payload.firstSessionDate,
+            final_session_date=payload.finalSessionDate,
+            title=payload.title,
+            notes=payload.notes,
+            created_by=session["userId"],
+        )
+    write_audit_log(
+        request, action="generate_sessions", entity_type="cohort", entity_id=payload.cohortId,
+        new_value={
+            "dayOfWeek": payload.dayOfWeek, "occurrence": payload.occurrence,
+            "firstSessionDate": payload.firstSessionDate.isoformat(), "finalSessionDate": payload.finalSessionDate.isoformat(),
+            "createdCount": result["createdCount"], "skippedDates": [d.isoformat() for d in result["skippedDates"]],
+        },
+    )
+    return result
 
 
 @router.get("/attendance/sessions/{session_id}")

@@ -1831,6 +1831,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /attendance/sessions/generate/preview:
+    post:
+      operationId: previewGenerateSessions
+      tags: [attendance]
+      description: >-
+        Read-only. Resolves a recurrence pattern (day of week,
+        weekly/bi-weekly/monthly, a time, a first and final date) into its
+        full list of session dates, flagging which already have a session
+        for this cohort -- nothing is created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateSessionsInput" }
+      responses:
+        "200":
+          description: The resolved date list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenerateSessionsPreview" }
+        "400":
+          description: The pattern can't be resolved (first date not on the chosen weekday, inverted range, or too many sessions)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /attendance/sessions/generate/confirm:
+    post:
+      operationId: confirmGenerateSessions
+      tags: [attendance]
+      description: >-
+        Re-resolves the same pattern and re-checks every date fresh, then
+        creates a session (with its expected-learners snapshot) for every
+        date that doesn't already have one, in a single transaction. A date
+        that gained a session since the preview is skipped, never
+        double-booked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateSessionsInput" }
+      responses:
+        "201":
+          description: Sessions created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenerateSessionsResult" }
+        "400":
+          description: The pattern can't be resolved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /attendance/sessions/{id}:
     get:
       operationId: getAttendanceSession
@@ -5311,6 +5365,84 @@ components:
         notes: { type: string }
         force: { type: boolean, default: false }
         overrideReason: { type: string }
+
+    DayOfWeek:
+      type: string
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+
+    SessionOccurrence:
+      type: string
+      enum: [weekly, biweekly, monthly]
+      description: >-
+        monthly means the same weekday POSITION each month (e.g. a first
+        session on the month's 2nd Tuesday repeats on each later month's
+        own 2nd Tuesday) -- never a fixed 28-day interval, and a month with
+        no such position (e.g. no 5th Friday) is skipped, never substituted.
+
+    GenerateSessionsInput:
+      type: object
+      required:
+        [
+          cohortId,
+          dayOfWeek,
+          occurrence,
+          plannedStartTime,
+          plannedEndTime,
+          plannedDurationHours,
+          firstSessionDate,
+          finalSessionDate,
+          title,
+        ]
+      properties:
+        cohortId: { type: integer }
+        dayOfWeek: { $ref: "#/components/schemas/DayOfWeek" }
+        occurrence: { $ref: "#/components/schemas/SessionOccurrence" }
+        plannedStartTime: { type: string, minLength: 1 }
+        plannedEndTime: { type: string, minLength: 1 }
+        plannedDurationHours: { type: number, minimum: 0 }
+        firstSessionDate:
+          type: string
+          format: date
+          description: Must fall on the chosen dayOfWeek.
+        finalSessionDate: { type: string, format: date }
+        title: { type: string, minLength: 1 }
+        notes: { type: string }
+
+    GenerateSessionsPreviewDate:
+      type: object
+      required: [sessionDate, conflict]
+      properties:
+        sessionDate: { type: string, format: date }
+        conflict:
+          type: boolean
+          description: True when this date will be skipped on confirm rather than created -- see conflictReason for why.
+        conflictReason:
+          type: string
+          nullable: true
+          enum: [duplicate_session, outside_cohort_date_range]
+          description: Why this date is flagged as a conflict; null when conflict is false.
+
+    GenerateSessionsPreview:
+      type: object
+      required: [dates, newCount, conflictCount]
+      properties:
+        dates:
+          type: array
+          items: { $ref: "#/components/schemas/GenerateSessionsPreviewDate" }
+        newCount: { type: integer }
+        conflictCount: { type: integer }
+
+    GenerateSessionsResult:
+      type: object
+      required: [createdCount, createdIds, skippedDates]
+      properties:
+        createdCount: { type: integer }
+        createdIds:
+          type: array
+          items: { type: integer }
+        skippedDates:
+          type: array
+          items: { type: string, format: date }
 
     AttendanceSessionUpdate:
       type: object

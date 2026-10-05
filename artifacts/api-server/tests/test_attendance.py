@@ -1341,6 +1341,72 @@ class TestNewEndpointPermissions:
         assert response.status_code == 404
 
 
+def _generate_sessions_payload(cohort_id):
+    return {
+        "cohortId": cohort_id, "dayOfWeek": "monday", "occurrence": "weekly",
+        "plannedStartTime": "09:00", "plannedEndTime": "16:00", "plannedDurationHours": 7,
+        "firstSessionDate": "2026-01-05", "finalSessionDate": "2026-01-19",
+        "title": "Generated Session", "notes": None,
+    }
+
+
+class TestGenerateSessionsEndpointPermissions:
+    def test_tutor_can_preview_generated_sessions_for_their_own_cohort(
+        self, client, tutor_factory, cohort_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], start_date="2026-01-01")
+
+        _as_tutor_via_dependency_override(client, tutor["tutorId"], tutor["userId"])
+        try:
+            response = client.post("/api/attendance/sessions/generate/preview", json=_generate_sessions_payload(cohort["id"]))
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 200
+        assert response.json()["newCount"] == 3
+
+    def test_tutor_can_confirm_generated_sessions_for_their_own_cohort(
+        self, client, tutor_factory, cohort_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], start_date="2026-01-01")
+
+        _as_tutor_via_dependency_override(client, tutor["tutorId"], tutor["userId"])
+        try:
+            response = client.post("/api/attendance/sessions/generate/confirm", json=_generate_sessions_payload(cohort["id"]))
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 201
+        assert response.json()["createdCount"] == 3
+
+    def test_tutor_cannot_generate_sessions_for_another_tutors_cohort(
+        self, client, tutor_factory, cohort_factory,
+    ):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"], start_date="2026-01-01")
+
+        _as_tutor_via_dependency_override(client, other["tutorId"], other["userId"])
+        try:
+            preview_response = client.post("/api/attendance/sessions/generate/preview", json=_generate_sessions_payload(cohort["id"]))
+            confirm_response = client.post("/api/attendance/sessions/generate/confirm", json=_generate_sessions_payload(cohort["id"]))
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert preview_response.status_code == 403
+        assert confirm_response.status_code == 403
+
+    def test_admin_can_generate_sessions_for_any_cohort(self, client, cohort_factory):
+        cohort = cohort_factory(start_date="2026-01-01")
+
+        _as_admin_via_dependency_override(client)
+        try:
+            response = client.post("/api/attendance/sessions/generate/confirm", json=_generate_sessions_payload(cohort["id"]))
+        finally:
+            client.app.dependency_overrides.pop(auth_module.require_auth, None)
+        assert response.status_code == 201
+        assert response.json()["createdCount"] == 3
+
+
 class TestBackdatedAllocationCorrectionRegression:
     """The one gap live-dynamic eligibility resolution doesn't cover: an
     admin backdating a correction to learner_allocation_history after a

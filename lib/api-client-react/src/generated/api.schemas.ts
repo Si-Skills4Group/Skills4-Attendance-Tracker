@@ -1082,6 +1082,80 @@ export interface AttendanceSessionInput {
   overrideReason?: string;
 }
 
+export type DayOfWeek = typeof DayOfWeek[keyof typeof DayOfWeek];
+
+
+export const DayOfWeek = {
+  monday: 'monday',
+  tuesday: 'tuesday',
+  wednesday: 'wednesday',
+  thursday: 'thursday',
+  friday: 'friday',
+  saturday: 'saturday',
+  sunday: 'sunday',
+} as const;
+
+/**
+ * monthly means the same weekday POSITION each month (e.g. a first session on the month's 2nd Tuesday repeats on each later month's own 2nd Tuesday) -- never a fixed 28-day interval, and a month with no such position (e.g. no 5th Friday) is skipped, never substituted.
+ */
+export type SessionOccurrence = typeof SessionOccurrence[keyof typeof SessionOccurrence];
+
+
+export const SessionOccurrence = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+} as const;
+
+export interface GenerateSessionsInput {
+  cohortId: number;
+  dayOfWeek: DayOfWeek;
+  occurrence: SessionOccurrence;
+  /** @minLength 1 */
+  plannedStartTime: string;
+  /** @minLength 1 */
+  plannedEndTime: string;
+  /** @minimum 0 */
+  plannedDurationHours: number;
+  /** Must fall on the chosen dayOfWeek. */
+  firstSessionDate: string;
+  finalSessionDate: string;
+  /** @minLength 1 */
+  title: string;
+  notes?: string;
+}
+
+/**
+ * Why this date is flagged as a conflict; null when conflict is false.
+ */
+export type GenerateSessionsPreviewDateConflictReason = typeof GenerateSessionsPreviewDateConflictReason[keyof typeof GenerateSessionsPreviewDateConflictReason] | null;
+
+
+export const GenerateSessionsPreviewDateConflictReason = {
+  duplicate_session: 'duplicate_session',
+  outside_cohort_date_range: 'outside_cohort_date_range',
+} as const;
+
+export interface GenerateSessionsPreviewDate {
+  sessionDate: string;
+  /** True when this date will be skipped on confirm rather than created -- see conflictReason for why. */
+  conflict: boolean;
+  /** Why this date is flagged as a conflict; null when conflict is false. */
+  conflictReason?: GenerateSessionsPreviewDateConflictReason;
+}
+
+export interface GenerateSessionsPreview {
+  dates: GenerateSessionsPreviewDate[];
+  newCount: number;
+  conflictCount: number;
+}
+
+export interface GenerateSessionsResult {
+  createdCount: number;
+  createdIds: number[];
+  skippedDates: string[];
+}
+
 export interface AttendanceSessionUpdate {
   sessionDate?: string;
   /** @minLength 1 */
