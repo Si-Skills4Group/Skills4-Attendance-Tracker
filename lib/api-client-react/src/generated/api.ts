@@ -100,6 +100,9 @@ import type {
   FsRequirementImportJob,
   FsRequirementImportJobRowListResponse,
   FunctionalSkillsReportResponse,
+  GenerateSessionsInput,
+  GenerateSessionsPreview,
+  GenerateSessionsResult,
   GetAbsenceReportParams,
   GetAdminDashboardCohortsParams,
   GetAdminDashboardTutorsParams,
@@ -5676,6 +5679,142 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateAttendanceSessionMutationOptions(options));
+    }
+
+export const getPreviewGenerateSessionsUrl = () => {
+
+
+
+
+  return `/api/attendance/sessions/generate/preview`
+}
+
+/**
+ * Read-only. Resolves a recurrence pattern (day of week, weekly/bi-weekly/monthly, a time, a first and final date) into its full list of session dates, flagging which already have a session for this cohort -- nothing is created.
+ */
+export const previewGenerateSessions = async (generateSessionsInput: GenerateSessionsInput, options?: RequestInit): Promise<GenerateSessionsPreview> => {
+
+  return customFetch<GenerateSessionsPreview>(getPreviewGenerateSessionsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(generateSessionsInput)
+  }
+);}
+
+
+
+
+
+export const getPreviewGenerateSessionsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewGenerateSessions>>, TError,{data: BodyType<GenerateSessionsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof previewGenerateSessions>>, TError,{data: BodyType<GenerateSessionsInput>}, TContext> => {
+
+const mutationKey = ['previewGenerateSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewGenerateSessions>>, {data: BodyType<GenerateSessionsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewGenerateSessions(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewGenerateSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof previewGenerateSessions>>>
+    export type PreviewGenerateSessionsMutationBody = BodyType<GenerateSessionsInput>
+    export type PreviewGenerateSessionsMutationError = ErrorType<ErrorResponse>
+
+    export const usePreviewGenerateSessions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewGenerateSessions>>, TError,{data: BodyType<GenerateSessionsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof previewGenerateSessions>>,
+        TError,
+        {data: BodyType<GenerateSessionsInput>},
+        TContext
+      > => {
+      return useMutation(getPreviewGenerateSessionsMutationOptions(options));
+    }
+
+export const getConfirmGenerateSessionsUrl = () => {
+
+
+
+
+  return `/api/attendance/sessions/generate/confirm`
+}
+
+/**
+ * Re-resolves the same pattern and re-checks every date fresh, then creates a session (with its expected-learners snapshot) for every date that doesn't already have one, in a single transaction. A date that gained a session since the preview is skipped, never double-booked.
+ */
+export const confirmGenerateSessions = async (generateSessionsInput: GenerateSessionsInput, options?: RequestInit): Promise<GenerateSessionsResult> => {
+
+  return customFetch<GenerateSessionsResult>(getConfirmGenerateSessionsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(generateSessionsInput)
+  }
+);}
+
+
+
+
+
+export const getConfirmGenerateSessionsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmGenerateSessions>>, TError,{data: BodyType<GenerateSessionsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmGenerateSessions>>, TError,{data: BodyType<GenerateSessionsInput>}, TContext> => {
+
+const mutationKey = ['confirmGenerateSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmGenerateSessions>>, {data: BodyType<GenerateSessionsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  confirmGenerateSessions(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmGenerateSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof confirmGenerateSessions>>>
+    export type ConfirmGenerateSessionsMutationBody = BodyType<GenerateSessionsInput>
+    export type ConfirmGenerateSessionsMutationError = ErrorType<ErrorResponse>
+
+    export const useConfirmGenerateSessions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmGenerateSessions>>, TError,{data: BodyType<GenerateSessionsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmGenerateSessions>>,
+        TError,
+        {data: BodyType<GenerateSessionsInput>},
+        TContext
+      > => {
+      return useMutation(getConfirmGenerateSessionsMutationOptions(options));
     }
 
 export const getGetAttendanceSessionUrl = (id: number,) => {

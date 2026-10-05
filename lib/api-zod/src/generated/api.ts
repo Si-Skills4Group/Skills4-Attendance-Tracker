@@ -2417,6 +2417,70 @@ export const CreateAttendanceSessionResponse = zod.object({
 })
 
 
+/**
+ * Read-only. Resolves a recurrence pattern (day of week, weekly/bi-weekly/monthly, a time, a first and final date) into its full list of session dates, flagging which already have a session for this cohort -- nothing is created.
+ */
+
+
+export const previewGenerateSessionsBodyPlannedDurationHoursMin = 0;
+
+
+
+
+export const PreviewGenerateSessionsBody = zod.object({
+  "cohortId": zod.number(),
+  "dayOfWeek": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "occurrence": zod.enum(['weekly', 'biweekly', 'monthly']).describe('monthly means the same weekday POSITION each month (e.g. a first session on the month\'s 2nd Tuesday repeats on each later month\'s own 2nd Tuesday) -- never a fixed 28-day interval, and a month with no such position (e.g. no 5th Friday) is skipped, never substituted.'),
+  "plannedStartTime": zod.string().min(1),
+  "plannedEndTime": zod.string().min(1),
+  "plannedDurationHours": zod.number().min(previewGenerateSessionsBodyPlannedDurationHoursMin),
+  "firstSessionDate": zod.coerce.date().describe('Must fall on the chosen dayOfWeek.'),
+  "finalSessionDate": zod.coerce.date(),
+  "title": zod.string().min(1),
+  "notes": zod.string().optional()
+})
+
+export const PreviewGenerateSessionsResponse = zod.object({
+  "dates": zod.array(zod.object({
+  "sessionDate": zod.coerce.date(),
+  "conflict": zod.boolean().describe('True when this date will be skipped on confirm rather than created -- see conflictReason for why.'),
+  "conflictReason": zod.enum(['duplicate_session', 'outside_cohort_date_range']).nullish().describe('Why this date is flagged as a conflict; null when conflict is false.')
+})),
+  "newCount": zod.number(),
+  "conflictCount": zod.number()
+})
+
+
+/**
+ * Re-resolves the same pattern and re-checks every date fresh, then creates a session (with its expected-learners snapshot) for every date that doesn't already have one, in a single transaction. A date that gained a session since the preview is skipped, never double-booked.
+ */
+
+
+export const confirmGenerateSessionsBodyPlannedDurationHoursMin = 0;
+
+
+
+
+export const ConfirmGenerateSessionsBody = zod.object({
+  "cohortId": zod.number(),
+  "dayOfWeek": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "occurrence": zod.enum(['weekly', 'biweekly', 'monthly']).describe('monthly means the same weekday POSITION each month (e.g. a first session on the month\'s 2nd Tuesday repeats on each later month\'s own 2nd Tuesday) -- never a fixed 28-day interval, and a month with no such position (e.g. no 5th Friday) is skipped, never substituted.'),
+  "plannedStartTime": zod.string().min(1),
+  "plannedEndTime": zod.string().min(1),
+  "plannedDurationHours": zod.number().min(confirmGenerateSessionsBodyPlannedDurationHoursMin),
+  "firstSessionDate": zod.coerce.date().describe('Must fall on the chosen dayOfWeek.'),
+  "finalSessionDate": zod.coerce.date(),
+  "title": zod.string().min(1),
+  "notes": zod.string().optional()
+})
+
+export const ConfirmGenerateSessionsResponse = zod.object({
+  "createdCount": zod.number(),
+  "createdIds": zod.array(zod.number()),
+  "skippedDates": zod.array(zod.coerce.date())
+})
+
+
 export const GetAttendanceSessionParams = zod.object({
   "id": zod.coerce.number()
 })

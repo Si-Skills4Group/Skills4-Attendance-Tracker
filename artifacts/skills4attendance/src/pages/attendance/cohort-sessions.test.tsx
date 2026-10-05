@@ -28,12 +28,16 @@ let mockCohort: { data: any; isLoading: boolean; isError: boolean };
 let mockSessions: { data: any[]; isLoading: boolean; isError: boolean };
 let mockCurrentUser: { data: any };
 const mockCreateMutate = vi.fn();
+const mockPreviewGenerateMutate = vi.fn();
+const mockConfirmGenerateMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetCurrentUser: () => mockCurrentUser,
   useGetCohort: () => mockCohort,
   useListAttendanceSessions: () => mockSessions,
   useCreateAttendanceSession: () => ({ mutate: mockCreateMutate, isPending: false }),
+  usePreviewGenerateSessions: () => ({ mutate: mockPreviewGenerateMutate, isPending: false }),
+  useConfirmGenerateSessions: () => ({ mutate: mockConfirmGenerateMutate, isPending: false }),
   getGetCohortQueryKey: (id: number) => ['getCohort', id],
   getListAttendanceSessionsQueryKey: (params: unknown) => ['listAttendanceSessions', params],
 }));
@@ -68,6 +72,8 @@ describe('CohortSessionsPage', () => {
   beforeEach(() => {
     mockCurrentUser = { data: { role: 'admin' } };
     mockCreateMutate.mockReset();
+    mockPreviewGenerateMutate.mockReset();
+    mockConfirmGenerateMutate.mockReset();
   });
 
   it('shows only the selected cohort\'s sessions, with an explicit completion label', () => {
@@ -298,5 +304,145 @@ describe('CohortSessionsPage', () => {
 
     expect(screen.getByText('All sessions')).toBeInTheDocument();
     expect(screen.getByText('Any register status')).toBeInTheDocument();
+  });
+});
+
+describe('CohortSessionsPage generate-sessions dialog', () => {
+  beforeEach(() => {
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCohort = { data: cohort, isLoading: false, isError: false };
+    mockSessions = { data: [], isLoading: false, isError: false };
+    mockPreviewGenerateMutate.mockReset();
+    mockConfirmGenerateMutate.mockReset();
+  });
+
+  it('offers a Generate Sessions action, pre-filled from the cohort\'s own day/time defaults', async () => {
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /generate sessions/i }));
+
+    expect(screen.getByRole('combobox', { name: /day of week/i })).toHaveTextContent('Monday');
+    expect(screen.getByLabelText('Start Time')).toHaveValue('09:00');
+    expect(screen.getByLabelText('End Time')).toHaveValue('16:00');
+    expect(screen.getByLabelText('Duration (Hours)')).toHaveValue(7);
+  });
+
+  it('warns when the first session date does not fall on the chosen day of week', async () => {
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /generate sessions/i }));
+    // Cohort delivery day defaults to Monday; 2026-02-03 is a Tuesday.
+    await user.type(screen.getByLabelText('First Session Date'), '2026-02-03');
+
+    expect(screen.getByText(/isn't a Monday/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /preview sessions/i })).toBeDisabled();
+  });
+
+  it('previews the generated sessions and shows the new/conflict counts', async () => {
+    mockPreviewGenerateMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess({
+      dates: [
+        { sessionDate: '2026-02-02', conflict: false, conflictReason: null },
+        { sessionDate: '2026-02-09', conflict: true, conflictReason: 'duplicate_session' },
+      ],
+      newCount: 1,
+      conflictCount: 1,
+    }));
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /generate sessions/i }));
+    await user.type(screen.getByLabelText('First Session Date'), '2026-02-02');
+    await user.type(screen.getByLabelText('Final Session Date'), '2026-02-09');
+    await user.type(screen.getByLabelText('Title / Topic'), 'Weekly Workshop');
+    await user.click(screen.getByRole('button', { name: /preview sessions/i }));
+
+    expect(mockPreviewGenerateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cohortId: 5, dayOfWeek: 'monday', occurrence: 'weekly',
+          firstSessionDate: '2026-02-02', finalSessionDate: '2026-02-09', title: 'Weekly Workshop',
+        }),
+      }),
+      expect.anything(),
+    );
+    // The count renders inside its own <span>, so the sentence's full text
+    // only exists in the paragraph's combined textContent, not in any single
+    // text node -- match against the element's full textContent instead.
+    expect(await screen.findByText((_, node) => node?.tagName === 'P' && node.textContent === '1 session will be created.')).toBeInTheDocument();
+    expect(screen.getByText(/date will be skipped/i)).toBeInTheDocument();
+    expect(screen.getByText(/Already exists/i)).toBeInTheDocument();
+  });
+
+  it('labels a date outside the cohort\'s own dates distinctly from a duplicate', async () => {
+    mockPreviewGenerateMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess({
+      dates: [
+        { sessionDate: '2026-02-02', conflict: false, conflictReason: null },
+        { sessionDate: '2026-02-09', conflict: true, conflictReason: 'outside_cohort_date_range' },
+      ],
+      newCount: 1,
+      conflictCount: 1,
+    }));
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /generate sessions/i }));
+    await user.type(screen.getByLabelText('First Session Date'), '2026-02-02');
+    await user.type(screen.getByLabelText('Final Session Date'), '2026-02-09');
+    await user.type(screen.getByLabelText('Title / Topic'), 'Weekly Workshop');
+    await user.click(screen.getByRole('button', { name: /preview sessions/i }));
+
+    expect(await screen.findByText(/Outside cohort dates/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Already exists/i)).not.toBeInTheDocument();
+  });
+
+  it('confirms generation after preview, closes the dialog and refreshes the session list', async () => {
+    mockPreviewGenerateMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess({
+      dates: [{ sessionDate: '2026-02-02', conflict: false }],
+      newCount: 1,
+      conflictCount: 0,
+    }));
+    mockConfirmGenerateMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess({
+      createdCount: 1, createdIds: [501], skippedDates: [],
+    }));
+    const user = userEvent.setup();
+    const { invalidateSpy } = renderWithSpiedQueryClient();
+
+    await user.click(screen.getByRole('button', { name: /generate sessions/i }));
+    await user.type(screen.getByLabelText('First Session Date'), '2026-02-02');
+    await user.type(screen.getByLabelText('Final Session Date'), '2026-02-02');
+    await user.type(screen.getByLabelText('Title / Topic'), 'Weekly Workshop');
+    await user.click(screen.getByRole('button', { name: /preview sessions/i }));
+
+    await user.click(await screen.findByRole('button', { name: /confirm & create 1 session/i }));
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith(
+      { queryKey: ['listAttendanceSessions', undefined] },
+    ));
+    expect(screen.queryByText('Generate Recurring Sessions')).not.toBeInTheDocument();
+  });
+
+  it('lets the admin go back from a preview to edit the pattern before confirming', async () => {
+    mockPreviewGenerateMutate.mockImplementation((_payload, { onSuccess }: any) => onSuccess({
+      dates: [{ sessionDate: '2026-02-02', conflict: false }],
+      newCount: 1,
+      conflictCount: 0,
+    }));
+    const user = userEvent.setup();
+    renderAtLocation();
+
+    await user.click(screen.getByRole('button', { name: /generate sessions/i }));
+    await user.type(screen.getByLabelText('First Session Date'), '2026-02-02');
+    await user.type(screen.getByLabelText('Final Session Date'), '2026-02-02');
+    await user.type(screen.getByLabelText('Title / Topic'), 'Weekly Workshop');
+    await user.click(screen.getByRole('button', { name: /preview sessions/i }));
+    expect(await screen.findByText((_, node) => node?.tagName === 'P' && node.textContent === '1 session will be created.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    expect(screen.getByLabelText('Final Session Date')).toHaveValue('2026-02-02');
+    expect(screen.getByRole('button', { name: /preview sessions/i })).toBeInTheDocument();
+    expect(mockConfirmGenerateMutate).not.toHaveBeenCalled();
   });
 });
