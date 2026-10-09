@@ -102,6 +102,57 @@ def test_second_admin_can_be_deactivated(db, admin_user):
         db.execute("DELETE FROM users WHERE id = %s", (second_admin_id,))
 
 
+class TestTutorActiveStaysInSyncWithUserActive:
+    """Regression: activate_tutor/deactivate_tutor (the Tutors screen) have
+    always updated both tutors.active and users.active together, but
+    _apply_user_updates (the Users screen's PATCH/activate/deactivate) used
+    to only ever touch users.active -- leaving a tutor able to log in again
+    while still invisible in every cohort-tutor dropdown, which all filter
+    on tutors.active specifically. See GET /tutors?active=true."""
+
+    def test_deactivating_a_tutor_linked_user_also_deactivates_the_tutor_record(self, db, admin_user, tutor_factory):
+        tutor = tutor_factory()
+
+        _apply_user_updates(db, admin_user, tutor["userId"], {"active": False})
+
+        db.execute("SELECT active FROM tutors WHERE id = %s", (tutor["tutorId"],))
+        assert db.fetchone()["active"] is False
+
+    def test_reactivating_a_tutor_linked_user_also_reactivates_the_tutor_record(self, db, admin_user, tutor_factory):
+        tutor = tutor_factory(active=False)
+
+        _apply_user_updates(db, admin_user, tutor["userId"], {"active": True})
+
+        db.execute("SELECT active FROM tutors WHERE id = %s", (tutor["tutorId"],))
+        assert db.fetchone()["active"] is True
+
+    def test_toggling_active_for_a_non_tutor_user_does_not_touch_the_tutors_table(self, db):
+        """A user with no tutorId (e.g. an admin) must not trip the sync
+        logic -- next_tutor_id is None for them, so there's nothing to
+        update."""
+        db.execute(
+            "INSERT INTO users (first_name, last_name, email, role, active) VALUES ('Plain', 'Admin', %s, 'admin', true) RETURNING id",
+            ("plain-admin-sync-check@example.com",),
+        )
+        user_id = db.fetchone()["id"]
+        acting_session = {"userId": user_id + 999_999, "role": "admin", "tutorId": None}
+        try:
+            _, updated = _apply_user_updates(db, acting_session, user_id, {"active": False})
+            assert updated["active"] is False
+        finally:
+            db.execute("DELETE FROM users WHERE id = %s", (user_id,))
+
+    def test_updating_an_unrelated_field_does_not_touch_the_tutor_record(self, db, admin_user, tutor_factory):
+        """Only an explicit change to `active` should sync tutors.active --
+        an unrelated field update (e.g. displayName) must leave it alone."""
+        tutor = tutor_factory()
+
+        _apply_user_updates(db, admin_user, tutor["userId"], {"displayName": "New Display Name"})
+
+        db.execute("SELECT active FROM tutors WHERE id = %s", (tutor["tutorId"],))
+        assert db.fetchone()["active"] is True
+
+
 def test_user_cannot_change_own_role(db, admin_user):
     tutor = _make_unlinked_tutor(db)
     try:
