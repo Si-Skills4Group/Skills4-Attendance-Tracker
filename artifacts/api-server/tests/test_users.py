@@ -126,18 +126,19 @@ class TestTutorActiveStaysInSyncWithUserActive:
         db.execute("SELECT active FROM tutors WHERE id = %s", (tutor["tutorId"],))
         assert db.fetchone()["active"] is True
 
-    def test_toggling_active_for_a_non_tutor_user_does_not_touch_the_tutors_table(self, db):
+    def test_toggling_active_for_a_non_tutor_user_does_not_touch_the_tutors_table(self, db, admin_user):
         """A user with no tutorId (e.g. an admin) must not trip the sync
         logic -- next_tutor_id is None for them, so there's nothing to
-        update."""
+        update. Deactivates a *second* admin (admin_user fixture provides
+        the first) so this doesn't itself trip the final-active-admin
+        guard, which would mask the thing this test actually checks."""
         db.execute(
             "INSERT INTO users (first_name, last_name, email, role, active) VALUES ('Plain', 'Admin', %s, 'admin', true) RETURNING id",
             ("plain-admin-sync-check@example.com",),
         )
         user_id = db.fetchone()["id"]
-        acting_session = {"userId": user_id + 999_999, "role": "admin", "tutorId": None}
         try:
-            _, updated = _apply_user_updates(db, acting_session, user_id, {"active": False})
+            _, updated = _apply_user_updates(db, admin_user, user_id, {"active": False})
             assert updated["active"] is False
         finally:
             db.execute("DELETE FROM users WHERE id = %s", (user_id,))
