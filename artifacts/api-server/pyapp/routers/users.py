@@ -241,6 +241,14 @@ def _apply_user_updates(cur, session: dict, user_id: int, updates: dict) -> tupl
             f"UPDATE users SET {', '.join(set_clauses)}, updated_at = now() WHERE id = %s",
             [*params, user_id],
         )
+    # Mirrors activate_tutor/deactivate_tutor's own dual-column update --
+    # tutors.active (not users.active) is what every cohort-tutor dropdown
+    # filters on, so toggling a tutor-linked user's active flag from here
+    # (the Users screen) must keep tutors.active in sync too, or a
+    # reactivated tutor silently stays invisible everywhere despite being
+    # able to log in again.
+    if "active" in updates and next_tutor_id is not None:
+        cur.execute("UPDATE tutors SET active = %s, updated_at = now() WHERE id = %s", (updates["active"], next_tutor_id))
     cur.execute(f"{USER_SELECT} WHERE id = %s", (user_id,))
     updated = cur.fetchone()
     return existing, updated
