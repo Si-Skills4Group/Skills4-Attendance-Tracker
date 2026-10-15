@@ -99,6 +99,56 @@ def test_inactive_tutor_cannot_be_assigned_on_update(db, request_factory, admin_
     assert exc.value.status_code == 400
 
 
+class TestReassigningATutorCascadesToItsHomeLearners:
+    """Regression: update_cohort used to only touch cohorts.tutor_id,
+    leaving every home learner's own tutor_id pointing at the old tutor --
+    undercounting the new tutor's learners (dashboards/Learners page filter
+    on learners.tutor_id) and leaving the old tutor with a stale
+    require_learner_access grant while the new tutor could be denied direct
+    access to the same learners."""
+
+    def test_reassigning_a_cohorts_tutor_updates_its_home_learners_tutor_id(
+        self, db, request_factory, admin_user, tutor_factory, cohort_factory, learner_factory,
+    ):
+        old_tutor = tutor_factory()
+        new_tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=old_tutor["tutorId"])
+        learner = learner_factory(cohort_id=cohort["id"], tutor_id=old_tutor["tutorId"])
+
+        update_cohort(cohort["id"], CohortUpdate(tutorId=new_tutor["tutorId"]), request_factory(), admin_user)
+
+        db.execute("SELECT tutor_id FROM learners WHERE id = %s", (learner["id"],))
+        assert db.fetchone()["tutor_id"] == new_tutor["tutorId"]
+
+    def test_does_not_touch_a_secondarily_enrolled_learner_whose_home_cohort_is_elsewhere(
+        self, db, request_factory, admin_user, tutor_factory, cohort_factory, learner_factory, secondary_enrollment_factory,
+    ):
+        home_tutor = tutor_factory()
+        fs_old_tutor = tutor_factory()
+        fs_new_tutor = tutor_factory()
+        home = cohort_factory(tutor_id=home_tutor["tutorId"])
+        fs_cohort = cohort_factory(tutor_id=fs_old_tutor["tutorId"], membership_type="secondary")
+        learner = learner_factory(cohort_id=home["id"], tutor_id=home_tutor["tutorId"])
+        secondary_enrollment_factory(learner_id=learner["id"], cohort_id=fs_cohort["id"])
+
+        update_cohort(fs_cohort["id"], CohortUpdate(tutorId=fs_new_tutor["tutorId"]), request_factory(), admin_user)
+
+        db.execute("SELECT tutor_id FROM learners WHERE id = %s", (learner["id"],))
+        assert db.fetchone()["tutor_id"] == home_tutor["tutorId"]
+
+    def test_renaming_a_cohort_does_not_touch_its_learners_tutor_id(
+        self, db, request_factory, tutor_factory, cohort_factory, learner_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"])
+        learner = learner_factory(cohort_id=cohort["id"], tutor_id=tutor["tutorId"])
+
+        update_cohort(cohort["id"], CohortUpdate(name="Renamed"), request_factory(), tutor["session"])
+
+        db.execute("SELECT tutor_id FROM learners WHERE id = %s", (learner["id"],))
+        assert db.fetchone()["tutor_id"] == tutor["tutorId"]
+
+
 class TestTutorCanRenameOwnCohort:
     def test_tutor_can_rename_their_own_cohort(self, request_factory, tutor_factory, cohort_factory):
         tutor = tutor_factory()

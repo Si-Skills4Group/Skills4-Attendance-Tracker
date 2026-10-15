@@ -409,6 +409,23 @@ def update_cohort(cohort_id: int, payload: CohortUpdate, request: Request, sessi
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="Cohort not found")
 
+        # Reassigning a cohort's tutor must cascade to every learner whose
+        # *home* cohort (learners.cohort_id) is this one -- otherwise
+        # learners.tutor_id drifts from the cohort's actual tutor, which
+        # both undercounts the new tutor's learners (dashboards/Learners
+        # page filter on learners.tutor_id) and leaves a stale access grant
+        # (require_learner_access gates on learners.tutor_id, so the old
+        # tutor would keep direct access to these learners' own records
+        # while the new tutor could be denied it). A learner's *secondary*
+        # (Functional Skills) enrollment into this cohort is unaffected --
+        # that's a second, independent membership that never touches
+        # learners.tutor_id/cohort_id.
+        if "tutorId" in updates and updates["tutorId"] != existing["tutor_id"]:
+            cur.execute(
+                "UPDATE learners SET tutor_id = %s, updated_at = now() WHERE cohort_id = %s AND deleted_at IS NULL",
+                (updates["tutorId"], cohort_id),
+            )
+
         cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
         full = cur.fetchone()
 
