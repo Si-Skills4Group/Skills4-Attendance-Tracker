@@ -11,6 +11,7 @@ import {
   useBulkApproveBudSyncJobItems,
   useCommitBudSyncJob,
   useLinkBudSyncJobItemToExistingLearner,
+  useRelinkBudSyncJobItem,
   useListLearners,
   useGetSettings,
   getGetBudSyncStatusQueryKey,
@@ -116,6 +117,7 @@ export default function BudSyncTrialPage() {
   const [overLimitInfo, setOverLimitInfo] = React.useState<Record<string, number> | null>(null);
   const [linkItem, setLinkItem] = React.useState<BudSyncItem | null>(null);
   const [linkSearch, setLinkSearch] = React.useState("");
+  const [relinkItem, setRelinkItem] = React.useState<BudSyncItem | null>(null);
 
   // New Learners bulk-ingest: per-row learnerRef/level drafts (Bud has no
   // equivalent for either, so they always need typing) and which rows are
@@ -135,6 +137,7 @@ export default function BudSyncTrialPage() {
   const bulkApproveMutation = useBulkApproveBudSyncJobItems();
   const commitMutation = useCommitBudSyncJob();
   const linkExistingMutation = useLinkBudSyncJobItemToExistingLearner();
+  const relinkMutation = useRelinkBudSyncJobItem();
 
   const { data: job } = useGetBudSyncJob(activeJobId ?? 0, {
     query: { enabled: activeJobId !== null, queryKey: getGetBudSyncJobQueryKey(activeJobId ?? 0) },
@@ -352,6 +355,29 @@ export default function BudSyncTrialPage() {
           toast({ title: "Linked to existing learner" });
         },
         onError: (err) => toast({ title: "Could not link learner", description: getErrorMessage(err), variant: "destructive" }),
+      },
+    );
+  };
+
+  const siblingOldEnrollmentOf = (item: BudSyncItem): BudSyncItem | undefined =>
+    conflictItems?.items.find(
+      (other) =>
+        other.id !== item.id &&
+        other.sourceLearnerReference === item.sourceLearnerReference &&
+        other.reason === "linked_bud_record_has_sibling_enrollment",
+    );
+
+  const submitRelink = () => {
+    if (!relinkItem) return;
+    relinkMutation.mutate(
+      { jobId: relinkItem.syncJobId, itemId: relinkItem.id },
+      {
+        onSuccess: () => {
+          invalidateJob();
+          setRelinkItem(null);
+          toast({ title: "Switched to the new enrolment" });
+        },
+        onError: (err) => toast({ title: "Could not switch enrolment", description: getErrorMessage(err), variant: "destructive" }),
       },
     );
   };
@@ -710,13 +736,14 @@ export default function BudSyncTrialPage() {
                           <TableHead>Last name</TableHead>
                           <TableHead>Reason</TableHead>
                           <TableHead>Warnings</TableHead>
+                          <TableHead>Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {conflictsLoading ? (
-                          <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading…</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="h-24 text-center">Loading…</TableCell></TableRow>
                         ) : (conflictItems?.items.length ?? 0) === 0 ? (
-                          <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No conflicts.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No conflicts.</TableCell></TableRow>
                         ) : (
                           conflictItems?.items.map((item) => (
                             <TableRow key={item.id}>
@@ -728,6 +755,11 @@ export default function BudSyncTrialPage() {
                                 {item.reason?.replace(/_/g, " ")}
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">{item.warnings.join("; ") || "—"}</TableCell>
+                              <TableCell>
+                                {item.reason === "learner_reference_matches_multiple_bud_rows" && (
+                                  <Button variant="ghost" size="sm" onClick={() => setRelinkItem(item)}>Resolve</Button>
+                                )}
+                              </TableCell>
                             </TableRow>
                           ))
                         )}
@@ -882,6 +914,43 @@ export default function BudSyncTrialPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setLinkItem(null); setLinkSearch(""); }}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Re-enrolment resolution dialog -- a learner has withdrawn from one
+          Bud standard and enrolled on another; the old enrolment is shown
+          alongside the new one so the Administrator can see exactly what
+          they're switching before confirming. */}
+      <Dialog open={!!relinkItem} onOpenChange={(o) => { if (!o) setRelinkItem(null); }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Switch {itemDisplayName(relinkItem)} to their new enrolment</DialogTitle>
+            <DialogDescription>
+              Bud shows more than one enrolment for this learner reference. Confirming updates their programme (and
+              other Bud-owned details) to the new enrolment below -- their attendance status is never changed by this.
+            </DialogDescription>
+          </DialogHeader>
+          {relinkItem && (
+            <div className="grid grid-cols-2 gap-3 py-2 text-sm">
+              <div className="space-y-1 bg-muted/40 rounded-md p-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Old enrolment</div>
+                <div>{(siblingOldEnrollmentOf(relinkItem)?.proposedValues?.programmeName as string | undefined) ?? "Unknown"}</div>
+                <div className="text-muted-foreground">{(siblingOldEnrollmentOf(relinkItem)?.proposedValues?.statusDesc as string | undefined) ?? "Unknown"}</div>
+              </div>
+              <div className="space-y-1 bg-muted/40 rounded-md p-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">New enrolment</div>
+                <div>{(relinkItem.proposedValues?.programmeName as string | undefined) ?? "Unknown"}</div>
+                <div className="text-muted-foreground">{(relinkItem.proposedValues?.statusDesc as string | undefined) ?? "Unknown"}</div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRelinkItem(null)}>Cancel</Button>
+            <Button onClick={submitRelink} disabled={relinkMutation.isPending}>
+              {relinkMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Switch to this enrolment
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

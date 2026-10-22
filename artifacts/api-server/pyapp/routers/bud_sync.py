@@ -123,6 +123,12 @@ def link_existing(
         return bud_sync_lib.link_existing_learner(cur, job_id, item_id, payload.learnerId, request, session)
 
 
+@router.post("/bud-sync/jobs/{job_id}/items/{item_id}/relink")
+def relink_item(job_id: int, item_id: int, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return bud_sync_lib.relink_to_new_enrollment(cur, job_id, item_id, request, session)
+
+
 @router.patch("/bud-sync/jobs/{job_id}/items/{item_id}")
 def update_item(job_id: int, item_id: int, payload: ItemUpdateInput, request: Request, session: dict = Depends(require_admin)):
     with get_cursor() as cur:

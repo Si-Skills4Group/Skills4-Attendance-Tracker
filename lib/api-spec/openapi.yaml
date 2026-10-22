@@ -4058,6 +4058,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /bud-sync/jobs/{jobId}/items/{itemId}/relink:
+    post:
+      operationId: relinkBudSyncJobItem
+      tags: [bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: >-
+            Resolves a "learner re-enrolled on a new standard" conflict:
+            switches the learner's single Bud link over to this new
+            enrolment (bringing their programme and other Bud-owned fields
+            in line with it) and marks the superseded old-enrolment conflict
+            item resolved as well. Never changes the learner's attendance
+            status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudSyncJob"
+        "400":
+          description: Only a "multiple Bud rows for this reference" conflict item can be resolved this way
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The Bud reference no longer resolves to exactly one learner, or the source row has disappeared since preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /bud-sync/jobs/{jobId}/commit:
     post:
       operationId: commitBudSyncJob
