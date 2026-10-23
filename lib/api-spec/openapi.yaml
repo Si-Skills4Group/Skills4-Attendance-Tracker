@@ -7477,6 +7477,7 @@ components:
           create_allocation,
           transfer_tutor,
           change_start_date,
+          change_end_date,
           change_status,
           none,
         ]

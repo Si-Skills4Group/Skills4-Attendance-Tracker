@@ -125,7 +125,7 @@ class TestRelinkToNewEnrollment:
         )
         new_row = bud_row_factory(
             learner_reference=learner["learner_ref"], programme_name="Pharmacy Technician (Integrated)",
-            status_desc="In Progress", synced_at="2099-01-01T00:00:00Z",
+            status_desc="In Progress", synced_at="2099-01-01T00:00:00Z", expected_end_date="2027-03-01",
         )
         job = run_preview(db, request_factory(admin_user), admin_user)
         db.execute(
@@ -149,10 +149,14 @@ class TestRelinkToNewEnrollment:
 
         relink_to_new_enrollment(db, job["id"], new_item_id, request_factory(admin_user), admin_user)
 
-        db.execute("SELECT programme, status FROM learners WHERE id = %s", (learner["id"],))
+        db.execute("SELECT programme, status, start_date, planned_end_date FROM learners WHERE id = %s", (learner["id"],))
         row = db.fetchone()
         assert row["programme"] == "Pharmacy Technician (Integrated)"
         assert row["status"] == "active"  # never touched by this action
+        # A re-enrolment's new standard carries its own start/end dates --
+        # both must move onto the learner record, not just the programme.
+        assert str(row["start_date"]) == str(new_row["startDate"])
+        assert str(row["planned_end_date"]) == "2027-03-01"
 
         link = _find_link_by_learner_id(db, learner["id"])
         assert link["budLearningPlanId"] == new_row["learningPlanId"]
@@ -173,6 +177,31 @@ class TestRelinkToNewEnrollment:
 
         db.execute("SELECT outcome FROM bud_sync_item WHERE id = %s", (old_item_id,))
         assert db.fetchone()["outcome"] == "superseded_by_relink"
+
+    def test_resolving_moves_both_items_off_conflict_without_a_new_preview(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        """Regression: relink_to_new_enrollment used to leave both items'
+        own match_status column at 'conflict' -- list_items (and the
+        Conflicts tab) filter purely on that column with no applied/outcome
+        exclusion, so a resolved item kept reappearing under its own,
+        still-open job (job stays 'ready', not committed) until a brand
+        new preview was generated. Confirmed against real production data
+        (Jessica Chase, BUD000329677)."""
+        learner, old_row, new_row, job, old_item_id, new_item_id = self._setup_sibling_scenario(
+            db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+        )
+
+        relink_to_new_enrollment(db, job["id"], new_item_id, request_factory(admin_user), admin_user)
+
+        db.execute("SELECT match_status FROM bud_sync_item WHERE id = ANY(%s)", ([old_item_id, new_item_id],))
+        statuses = {r["match_status"] for r in db.fetchall()}
+        assert "conflict" not in statuses
+
+        from pyapp.bud_sync_lib import list_items
+        conflicts_in_same_job = list_items(db, job["id"], "conflict", None, 1, 200)
+        assert new_item_id not in [i["id"] for i in conflicts_in_same_job["items"]]
+        assert old_item_id not in [i["id"] for i in conflicts_in_same_job["items"]]
 
     def test_a_later_preview_diffs_against_the_new_enrollment_not_the_old_one(
         self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,

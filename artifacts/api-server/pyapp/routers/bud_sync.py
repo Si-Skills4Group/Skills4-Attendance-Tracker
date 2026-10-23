@@ -106,7 +106,7 @@ def list_items(
     matchStatus: Literal["new", "existing_update", "unchanged", "conflict", "existing_before_trial",
                           "skipped", "status_change"] | None = None,
     actionType: Literal["create_learner", "update_learner", "create_cohort", "create_allocation",
-                         "transfer_tutor", "change_start_date", "change_status", "none"] | None = None,
+                         "transfer_tutor", "change_start_date", "change_end_date", "change_status", "none"] | None = None,
     page: int = 1,
     pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
     _session: dict = Depends(require_admin),

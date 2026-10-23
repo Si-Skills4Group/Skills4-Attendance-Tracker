@@ -139,10 +139,18 @@ def _learner_progress_table_for_tests():
                 learning_plan_url text,
                 programme_name text,
                 status_desc text,
-                synced_at timestamptz
+                synced_at timestamptz,
+                expected_end_date date
             )
             """
         )
+        # The throwaway table may already exist from an earlier test run
+        # (CREATE TABLE IF NOT EXISTS is a no-op against it) -- this column
+        # was added to match production's real learner_progress shape after
+        # that table had already been created in some environments, so it
+        # needs its own idempotent add, same as bootstrap.py's own pattern
+        # for the tables this app actually owns.
+        cur.execute("ALTER TABLE public.learner_progress ADD COLUMN IF NOT EXISTS expected_end_date date")
     yield
 
 
@@ -258,15 +266,16 @@ def learner_factory(db):
             cohort_id=None,
             withdrawal_date=None,
             actual_end_date=None,
+            planned_end_date=None,
         )
         defaults.update(overrides)
         defaults.setdefault("uln", None)
         db.execute(
             """
             INSERT INTO learners (learner_ref, uln, first_name, last_name, programme, level, start_date, status,
-                                   tutor_id, cohort_id, withdrawal_date, actual_end_date)
+                                   tutor_id, cohort_id, withdrawal_date, actual_end_date, planned_end_date)
             VALUES (%(learner_ref)s, %(uln)s, %(first_name)s, %(last_name)s, %(programme)s, %(level)s, %(start_date)s,
-                    %(status)s, %(tutor_id)s, %(cohort_id)s, %(withdrawal_date)s, %(actual_end_date)s)
+                    %(status)s, %(tutor_id)s, %(cohort_id)s, %(withdrawal_date)s, %(actual_end_date)s, %(planned_end_date)s)
             RETURNING id
             """,
             defaults,
@@ -357,6 +366,7 @@ def bud_row_factory(db):
             status_desc="In Progress",
             learning_plan_url=None,
             synced_at="2026-02-01T10:00:00Z",
+            expected_end_date=None,
         )
         defaults.update(overrides)
         columns = ", ".join(defaults.keys())
@@ -369,7 +379,8 @@ def bud_row_factory(db):
                    learner_forename AS "learnerForename", learner_surname AS "learnerSurname",
                    learner_email AS "learnerEmail", learner_mobile AS "learnerMobile",
                    learner_reference AS "learnerReference", unique_learner_number AS "uln",
-                   start_date AS "startDate", tutor_name AS "tutorName", tutor_id AS "budTutorId",
+                   start_date AS "startDate", expected_end_date AS "expectedEndDate",
+                   tutor_name AS "tutorName", tutor_id AS "budTutorId",
                    programme_name AS "programmeName", status_desc AS "statusDesc",
                    learning_plan_url AS "learningPlanUrl", synced_at AS "syncedAt"
             FROM public.learner_progress WHERE learning_plan_id = %s

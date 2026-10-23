@@ -573,7 +573,7 @@ ALTER TABLE bud_sync_item ADD CONSTRAINT bud_sync_item_match_status_check
 ALTER TABLE bud_sync_item DROP CONSTRAINT IF EXISTS bud_sync_item_action_type_check;
 ALTER TABLE bud_sync_item ADD CONSTRAINT bud_sync_item_action_type_check
   CHECK (action_type IN ('create_learner', 'update_learner', 'create_cohort', 'create_allocation',
-                          'transfer_tutor', 'change_start_date', 'change_status', 'none'));
+                          'transfer_tutor', 'change_start_date', 'change_end_date', 'change_status', 'none'));
 
 CREATE TABLE IF NOT EXISTS bud_learner_link (
   id serial PRIMARY KEY,

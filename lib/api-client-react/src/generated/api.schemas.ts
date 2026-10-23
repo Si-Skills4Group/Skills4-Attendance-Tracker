@@ -2554,6 +2554,7 @@ export const BudSyncActionType = {
   create_allocation: 'create_allocation',
   transfer_tutor: 'transfer_tutor',
   change_start_date: 'change_start_date',
+  change_end_date: 'change_end_date',
   change_status: 'change_status',
   none: 'none',
 } as const;

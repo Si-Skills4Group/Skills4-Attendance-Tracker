@@ -5447,7 +5447,7 @@ export const listBudSyncJobItemsQueryPageSizeDefault = 25;
 
 export const ListBudSyncJobItemsQueryParams = zod.object({
   "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped', 'status_change']).optional(),
-  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']).optional(),
+  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_end_date', 'change_status', 'none']).optional(),
   "page": zod.coerce.number().default(listBudSyncJobItemsQueryPageDefault),
   "pageSize": zod.coerce.number().default(listBudSyncJobItemsQueryPageSizeDefault)
 })
@@ -5458,7 +5458,7 @@ export const ListBudSyncJobItemsResponse = zod.object({
   "syncJobId": zod.number(),
   "sourceIdentifier": zod.string(),
   "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped', 'status_change']),
-  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']),
+  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_end_date', 'change_status', 'none']),
   "internalLearnerId": zod.number().nullable(),
   "proposedValues": zod.record(zod.string(), zod.unknown()),
   "previousValues": zod.record(zod.string(), zod.unknown()),
@@ -5521,7 +5521,7 @@ export const UpdateBudSyncJobItemResponse = zod.object({
   "syncJobId": zod.number(),
   "sourceIdentifier": zod.string(),
   "matchStatus": zod.enum(['new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped', 'status_change']),
-  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_status', 'none']),
+  "actionType": zod.enum(['create_learner', 'update_learner', 'create_cohort', 'create_allocation', 'transfer_tutor', 'change_start_date', 'change_end_date', 'change_status', 'none']),
   "internalLearnerId": zod.number().nullable(),
   "proposedValues": zod.record(zod.string(), zod.unknown()),
   "previousValues": zod.record(zod.string(), zod.unknown()),

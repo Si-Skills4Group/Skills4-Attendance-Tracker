@@ -252,6 +252,68 @@ class TestStartDateChange:
         db.execute("DELETE FROM attendance_records WHERE session_id = %s", (session["id"],))
 
 
+class TestEndDateChange:
+    """expected_end_date (Bud) -> learners.planned_end_date -- its own
+    dedicated diff, mirroring TestStartDateChange exactly and for the same
+    reason: accepted_values stores dates as plain strings (round-tripped
+    through jsonb), so comparing a fresh date object straight against that
+    would never match even when nothing changed; _SIMPLE_FIELD_MAP's plain
+    equality check isn't safe for a date field."""
+
+    def test_end_date_change_is_detected(
+        self, db, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = learner_factory(uln="ULN-ED-1", start_date="2026-02-01", planned_end_date="2026-06-01")
+        baseline_factory()
+        row = bud_row_factory(
+            unique_learner_number="ULN-ED-1", start_date="2026-02-01",
+            expected_end_date="2027-03-01", synced_at="2099-01-01T00:00:00Z",
+        )
+
+        item = classify_row(db, row, _active_baseline(db))
+        assert item["action_type"] == "change_end_date"
+        assert item["proposed_values"]["endDateChange"] == {
+            "oldPlannedEndDate": "2026-06-01", "newPlannedEndDate": "2027-03-01",
+        }
+
+    def test_no_end_date_on_file_is_still_detected_as_a_change(
+        self, db, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = learner_factory(uln="ULN-ED-2", planned_end_date=None)
+        baseline_factory()
+        row = bud_row_factory(unique_learner_number="ULN-ED-2", expected_end_date="2027-03-01", synced_at="2099-01-01T00:00:00Z")
+
+        item = classify_row(db, row, _active_baseline(db))
+        assert item["proposed_values"]["endDateChange"]["oldPlannedEndDate"] is None
+
+    def test_approved_end_date_change_is_applied_and_then_settles_as_unchanged(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner = learner_factory(uln="ULN-ED-3", planned_end_date="2026-06-01")
+        baseline_factory()
+        bud_row_factory(unique_learner_number="ULN-ED-3", expected_end_date="2027-03-01", synced_at="2099-01-01T00:00:00Z")
+
+        job = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            "SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s", (job["id"], learner["id"]),
+        )
+        item_id = db.fetchone()["id"]
+        update_item(db, job["id"], item_id, None, True)
+        run_commit(db, job["id"], [item_id], "end date change approved", None, request_factory(admin_user), admin_user)
+
+        db.execute("SELECT planned_end_date FROM learners WHERE id = %s", (learner["id"],))
+        assert str(db.fetchone()["planned_end_date"]) == "2027-03-01"
+
+        # The accepted snapshot must remember this value -- otherwise the
+        # exact same change would be proposed again forever.
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            "SELECT match_status FROM bud_sync_item WHERE sync_job_id = %s AND internal_learner_id = %s",
+            (job2["id"], learner["id"]),
+        )
+        assert db.fetchone()["match_status"] == "unchanged"
+
+
 class TestStatusChangeApplication:
     """The core fix this refinement makes: a matched learner's Bud status
     change is actually detected and (where safe) applied -- not just a

@@ -251,7 +251,8 @@ def _fetch_bud_rows(cur) -> list[dict]:
                learner_forename AS "learnerForename", learner_surname AS "learnerSurname",
                learner_email AS "learnerEmail", learner_mobile AS "learnerMobile",
                learner_reference AS "learnerReference", unique_learner_number AS "uln",
-               start_date AS "startDate", tutor_name AS "tutorName", tutor_id AS "budTutorId",
+               start_date AS "startDate", expected_end_date AS "expectedEndDate",
+               tutor_name AS "tutorName", tutor_id AS "budTutorId",
                programme_name AS "programmeName", status_desc AS "statusDesc",
                learning_plan_url AS "learningPlanUrl", synced_at AS "syncedAt"
         FROM public.learner_progress
@@ -303,7 +304,7 @@ def build_bulk_lookups(cur) -> dict:
     cur.execute(
         'SELECT id, first_name AS "firstName", last_name AS "lastName", email, mobile, programme, uln, '
         'learner_ref AS "learnerRef", tutor_id AS "tutorId", cohort_id AS "cohortId", '
-        'start_date AS "startDate", updated_at AS "updatedAt", status '
+        'start_date AS "startDate", planned_end_date AS "plannedEndDate", updated_at AS "updatedAt", status '
         "FROM learners WHERE deleted_at IS NULL"
     )
     learners = cur.fetchall()
@@ -691,7 +692,8 @@ def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link:
     else:
         cur.execute(
             'SELECT id, first_name AS "firstName", last_name AS "lastName", email, mobile, programme, uln, '
-            'tutor_id AS "tutorId", cohort_id AS "cohortId", start_date AS "startDate", updated_at AS "updatedAt", '
+            'tutor_id AS "tutorId", cohort_id AS "cohortId", start_date AS "startDate", '
+            'planned_end_date AS "plannedEndDate", updated_at AS "updatedAt", '
             'status FROM learners WHERE id = %s AND deleted_at IS NULL',
             (base_item["internal_learner_id"],),
         )
@@ -733,6 +735,22 @@ def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link:
         )
     if start_date_change:
         proposed["startDateChange"] = start_date_change
+
+    # Dates come back from accepted_values (jsonb) as plain strings, never
+    # as date objects -- str(...) on both sides of every comparison here
+    # mirrors start_date_change's own handling immediately above, for
+    # exactly the same reason: comparing a fresh date object straight
+    # against a JSON-deserialised string would never be equal even when
+    # nothing actually changed, permanently false-flagging this field.
+    end_date_change = None
+    new_end = bud_row.get("expectedEndDate")
+    if new_end and str(new_end) != str(learner["plannedEndDate"]) and str(new_end) != str(accepted.get("plannedEndDate")):
+        end_date_change = {
+            "oldPlannedEndDate": str(learner["plannedEndDate"]) if learner["plannedEndDate"] else None,
+            "newPlannedEndDate": str(new_end),
+        }
+    if end_date_change:
+        proposed["endDateChange"] = end_date_change
 
     status_change = None
     bud_status_desc = bud_row.get("statusDesc")
@@ -781,6 +799,8 @@ def _classify_existing_learner_update(cur, bud_row: dict, base_item: dict, link:
         action_type = "transfer_tutor"
     elif start_date_change:
         action_type = "change_start_date"
+    elif end_date_change:
+        action_type = "change_end_date"
     elif fields_diff:
         action_type = "update_learner"
     else:
@@ -1372,14 +1392,27 @@ def relink_to_new_enrollment(cur, job_id: int, item_id: int, request: Request, s
             (json.dumps({"_acknowledgedSiblingPlanIds": sorted(sibling_plan_ids)}), target_learner_id),
         )
 
+        # match_status must move off 'conflict' here, not just applied/
+        # outcome -- list_items (and the Conflicts tab) filter purely on
+        # match_status, with no applied/outcome exclusion (the same is true
+        # of every other match_status, e.g. an applied status_change item
+        # keeps showing under the Status Changes tab of its own, now-
+        # historical job too -- normally harmless, since committing a job
+        # moves on to a fresh preview; a relink deliberately doesn't commit
+        # the whole job, so this item's *own* job stays 'ready' and visibly
+        # re-queried, so leaving its match_status at 'conflict' would keep
+        # it in the Conflicts tab indefinitely despite being resolved).
+        resolved_match_status = "existing_update" if classified["proposed_values"] else "unchanged"
         cur.execute(
             "UPDATE bud_sync_item SET approved = true, applied = true, outcome = 'relinked_new_enrollment', "
-            "internal_learner_id = %s, processed_at = now() WHERE id = %s",
-            (target_learner_id, item_id),
+            "match_status = %s, reason = 'relinked_new_enrollment', internal_learner_id = %s, processed_at = now() "
+            "WHERE id = %s",
+            (resolved_match_status, target_learner_id, item_id),
         )
         if old_link is not None:
             cur.execute(
-                "UPDATE bud_sync_item SET outcome = 'superseded_by_relink', processed_at = now() "
+                "UPDATE bud_sync_item SET outcome = 'superseded_by_relink', match_status = 'unchanged', "
+                "reason = 'superseded_by_relink', processed_at = now() "
                 "WHERE sync_job_id = %s AND source_identifier = %s AND outcome IS NULL",
                 (job_id, old_link["budLearningPlanId"]),
             )
@@ -1474,7 +1507,7 @@ def _count_batch_actions(items: list[dict]) -> dict:
             counts["learnerCreations"] += 1
             if item["proposedValues"].get("cohort", {}).get("action") == "create":
                 counts["cohortCreations"] += 1
-        elif item["actionType"] in ("update_learner", "change_start_date", "change_status"):
+        elif item["actionType"] in ("update_learner", "change_start_date", "change_end_date", "change_status"):
             counts["learnerUpdates"] += 1
         elif item["actionType"] == "transfer_tutor":
             counts["tutorTransfers"] += 1
@@ -1487,6 +1520,7 @@ def _build_accepted_values(bud_row: dict) -> dict:
     values["budTutorId"] = bud_row.get("budTutorId")
     values["statusDesc"] = bud_row.get("statusDesc")
     values["startDate"] = str(bud_row["startDate"]) if bud_row.get("startDate") else None
+    values["plannedEndDate"] = str(bud_row["expectedEndDate"]) if bud_row.get("expectedEndDate") else None
     return values
 
 
@@ -1550,6 +1584,8 @@ def _apply_existing_learner_update(cur, item: dict, request: Request, session: d
     update_kwargs = {k: v["after"] for k, v in update_kwargs.items()}
     if "startDateChange" in proposed:
         update_kwargs["startDate"] = proposed["startDateChange"]["newStartDate"]
+    if "endDateChange" in proposed:
+        update_kwargs["plannedEndDate"] = proposed["endDateChange"]["newPlannedEndDate"]
     if update_kwargs:
         _update_learner(cur, learner_id, LearnerUpdate(**update_kwargs), request, session)
 

@@ -47,6 +47,7 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   create_allocation: "Create allocation",
   transfer_tutor: "Transfer tutor",
   change_start_date: "Change start date",
+  change_end_date: "Change end date",
   change_status: "Change status",
   none: "No action",
 };
