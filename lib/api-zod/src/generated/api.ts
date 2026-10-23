@@ -5574,6 +5574,37 @@ export const LinkBudSyncJobItemToExistingLearnerResponse = zod.object({
 })
 
 
+export const RelinkBudSyncJobItemParams = zod.object({
+  "jobId": zod.coerce.number(),
+  "itemId": zod.coerce.number()
+})
+
+export const RelinkBudSyncJobItemResponse = zod.object({
+  "id": zod.number(),
+  "baselineId": zod.number(),
+  "status": zod.enum(['ready', 'committing', 'completed', 'failed']),
+  "startedAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable(),
+  "startedBy": zod.number(),
+  "sourceMaxSyncedAt": zod.coerce.date().nullable(),
+  "totalSourceRowsExamined": zod.number(),
+  "newLearnersDetected": zod.number(),
+  "learnerUpdatesDetected": zod.number(),
+  "cohortsProposed": zod.number(),
+  "allocationsProposed": zod.number(),
+  "transfersProposed": zod.number(),
+  "approvedCount": zod.number(),
+  "appliedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "conflictCount": zod.number(),
+  "errorCount": zod.number(),
+  "approvalReason": zod.string().nullable(),
+  "correlationId": zod.string().nullable(),
+  "errorSummary": zod.string().nullable(),
+  "statusChangesDetected": zod.number()
+})
+
+
 export const CommitBudSyncJobParams = zod.object({
   "jobId": zod.coerce.number()
 })

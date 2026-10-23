@@ -45,6 +45,25 @@ const conflictItem = {
   sourceLearnerReference: 'BUD-REF-1', sourceFirstName: 'Ada', sourceLastName: 'Lovelace', createdAt: '2026-07-01T09:00:00Z',
 };
 
+// A "learner re-enrolled on a new Bud standard" sibling pair -- the old,
+// now-stale linked enrolment (no action available) and the new, unlinked
+// one (offers a Resolve action). See classify_row/relink_to_new_enrollment.
+const oldEnrollmentConflict = {
+  id: 20, syncJobId: 9, sourceIdentifier: 'PLAN-OLD', matchStatus: 'conflict', actionType: 'none',
+  internalLearnerId: 55, proposedValues: { programmeName: 'Pharmacy Services Assistant v3.1', statusDesc: 'Withdrawn' },
+  previousValues: {}, warnings: [], reason: 'linked_bud_record_has_sibling_enrollment', approved: false,
+  applied: false, outcome: null, errorCode: null, processedAt: null, createdAt: '2026-07-01T09:00:00Z',
+  sourceLearnerReference: 'BUD000516454', sourceFirstName: 'Alicia', sourceLastName: 'Dawes',
+};
+
+const newEnrollmentConflict = {
+  id: 21, syncJobId: 9, sourceIdentifier: 'PLAN-NEW', matchStatus: 'conflict', actionType: 'none',
+  internalLearnerId: null, proposedValues: { programmeName: 'Pharmacy Technician (Integrated)', statusDesc: 'In Progress' },
+  previousValues: {}, warnings: [], reason: 'learner_reference_matches_multiple_bud_rows', approved: false,
+  applied: false, outcome: null, errorCode: null, processedAt: null, createdAt: '2026-07-01T09:00:00Z',
+  sourceLearnerReference: 'BUD000516454', sourceFirstName: 'Alicia', sourceLastName: 'Dawes',
+};
+
 const newItem = {
   id: 2, syncJobId: 9, sourceIdentifier: 'PLAN-2', matchStatus: 'new', actionType: 'create_learner',
   internalLearnerId: null,
@@ -105,6 +124,7 @@ const mutateSpies = {
   bulkApprove: vi.fn(),
   commit: vi.fn(),
   linkExisting: vi.fn(),
+  relink: vi.fn(),
 };
 
 vi.mock('@workspace/api-client-react', () => ({
@@ -117,6 +137,7 @@ vi.mock('@workspace/api-client-react', () => ({
   useBulkApproveBudSyncJobItems: () => ({ mutate: mutateSpies.bulkApprove, isPending: false }),
   useCommitBudSyncJob: () => ({ mutate: mutateSpies.commit, isPending: false }),
   useLinkBudSyncJobItemToExistingLearner: () => ({ mutate: mutateSpies.linkExisting, isPending: false }),
+  useRelinkBudSyncJobItem: () => ({ mutate: mutateSpies.relink, isPending: false }),
   useGetBudSyncJob: () => ({ data: currentJob }),
   useGetBudSyncJobSummary: () => ({ data: currentSummary }),
   useListLearners: () => ({ data: { items: [], total: 0, page: 1, pageSize: 10 } }),
@@ -395,5 +416,55 @@ describe('BudSyncTrialPage', () => {
     await user.click(screen.getByRole('tab', { name: /new learners/i }));
     await user.click(screen.getByRole('button', { name: /already represented/i }));
     expect(await screen.findByText(/mark grace hopper as already represented/i)).toBeInTheDocument();
+  });
+
+  describe('re-enrolment resolution (a learner re-enrolled on a new Bud standard)', () => {
+    it('offers a Resolve action only for the "multiple Bud rows" conflict reason', async () => {
+      activateJob();
+      conflictItems = [oldEnrollmentConflict, newEnrollmentConflict, conflictItem];
+      const user = userEvent.setup();
+      renderWithQueryClient(<BudSyncTrialPage />);
+      await user.click(screen.getByRole('tab', { name: /conflicts/i }));
+
+      const rows = screen.getAllByRole('row');
+      const newEnrollmentRow = rows.find((r) => r.textContent?.includes('BUD000516454') && r.textContent?.includes('matches multiple'));
+      const oldEnrollmentRow = rows.find((r) => r.textContent?.includes('BUD000516454') && r.textContent?.includes('sibling enrollment'));
+      const unrelatedRow = rows.find((r) => r.textContent?.includes('BUD-REF-1'));
+
+      expect(newEnrollmentRow && within(newEnrollmentRow).queryByRole('button', { name: /resolve/i })).toBeTruthy();
+      expect(oldEnrollmentRow && within(oldEnrollmentRow).queryByRole('button', { name: /resolve/i })).toBeFalsy();
+      expect(unrelatedRow && within(unrelatedRow).queryByRole('button', { name: /resolve/i })).toBeFalsy();
+    });
+
+    it('shows the old and new enrolment side by side before confirming', async () => {
+      activateJob();
+      conflictItems = [oldEnrollmentConflict, newEnrollmentConflict];
+      const user = userEvent.setup();
+      renderWithQueryClient(<BudSyncTrialPage />);
+      await user.click(screen.getByRole('tab', { name: /conflicts/i }));
+
+      await user.click(screen.getByRole('button', { name: /resolve/i }));
+
+      expect(screen.getByText('Pharmacy Services Assistant v3.1')).toBeInTheDocument();
+      expect(screen.getByText('Withdrawn')).toBeInTheDocument();
+      expect(screen.getByText('Pharmacy Technician (Integrated)')).toBeInTheDocument();
+      expect(screen.getByText('In Progress')).toBeInTheDocument();
+    });
+
+    it('confirming calls the relink mutation for the new enrolment item', async () => {
+      activateJob();
+      conflictItems = [oldEnrollmentConflict, newEnrollmentConflict];
+      const user = userEvent.setup();
+      renderWithQueryClient(<BudSyncTrialPage />);
+      await user.click(screen.getByRole('tab', { name: /conflicts/i }));
+
+      await user.click(screen.getByRole('button', { name: /resolve/i }));
+      await user.click(screen.getByRole('button', { name: /switch to this enrolment/i }));
+
+      expect(mutateSpies.relink).toHaveBeenCalledWith(
+        { jobId: 9, itemId: 21 },
+        expect.anything(),
+      );
+    });
   });
 });

@@ -8,6 +8,7 @@ JWKS endpoint), and assert the exact rejection reason for each class of
 bad token the production code is supposed to catch."""
 from __future__ import annotations
 
+import base64
 import time
 
 import jwt
@@ -130,15 +131,22 @@ class TestRejectedEntraTokens:
 
     def test_tampered_signature_is_rejected(self, rsa_private_key):
         token = _make_token(rsa_private_key)
-        # Flip the signature segment's last character to something guaranteed
-        # to differ from the original -- the previous version picked the
-        # replacement based on signature[-1] but spliced it in at position 0
-        # (signature[1:]), so on the ~1-in-64 run where the signature's own
-        # first character already happened to be "A", the "tampered" token
-        # was byte-for-byte identical to the valid one and this test flaked.
+        # Flip every bit of the signature's first decoded byte and
+        # re-encode -- guaranteed to change the actual bytes jwt.decode
+        # verifies, unlike mutating a base64 *character* directly. An
+        # RSA-2048 signature is 256 bytes, which isn't a multiple of 3, so
+        # base64's final character only carries 2 of its 6 bits as real
+        # data; swapping it for a different character sharing the same top
+        # 2 bits (e.g. any of "A" through "P", which all decode to 00 in
+        # those bits) decodes to byte-identical data despite being a
+        # different string -- confirmed empirically to happen ~25% of the
+        # time with the previous last-character approach, silently making
+        # the "tampered" token byte-for-byte valid and flaking this test.
         header, payload, signature = token.split(".")
-        replacement = "A" if signature[-1] != "A" else "B"
-        tampered_signature = signature[:-1] + replacement
+        padding = "=" * (-len(signature) % 4)
+        signature_bytes = bytearray(base64.urlsafe_b64decode(signature + padding))
+        signature_bytes[0] ^= 0xFF
+        tampered_signature = base64.urlsafe_b64encode(bytes(signature_bytes)).decode().rstrip("=")
         tampered = f"{header}.{payload}.{tampered_signature}"
         with pytest.raises(TokenValidationError):
             validate_entra_access_token(tampered)

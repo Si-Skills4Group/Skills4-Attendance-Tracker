@@ -420,6 +420,25 @@ def _get_ambiguous_learner_references(cur) -> set[str]:
     return {row["learner_reference"] for row in cur.fetchall()}
 
 
+def _other_bud_plan_ids_sharing_reference(cur, learner_reference: str, exclude_plan_id: str) -> set[str]:
+    """Every distinct learning_plan_id currently in the source sharing this
+    learner_reference, other than `exclude_plan_id` itself -- used only by
+    classify_row's already-linked branch, to tell a genuinely new sibling
+    enrolment apart from one an Administrator already acknowledged via
+    relink_to_new_enrollment (see bud_learner_link.accepted_values'
+    _acknowledgedSiblingPlanIds). Deliberately a separate, narrower helper
+    from _get_ambiguous_learner_references (a precomputed, reference-only
+    set covering every row) rather than a change to its shape -- that
+    function has other callers (allocation_reconciliation_lib.py) that only
+    ever need the boolean "is this reference ambiguous at all" answer."""
+    cur.execute(
+        "SELECT DISTINCT learning_plan_id FROM public.learner_progress "
+        "WHERE learner_reference = %s AND learning_plan_id IS NOT NULL AND learning_plan_id <> %s",
+        (learner_reference, exclude_plan_id),
+    )
+    return {row["learning_plan_id"] for row in cur.fetchall()}
+
+
 def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None, lookups: dict | None = None) -> dict | None:
     """Bud's tutor_id has no dedicated internal column -- tutors.external_system_id
     (an existing, generic, admin-editable reference field) is the agreed home
@@ -444,6 +463,15 @@ def _find_tutor_by_bud_id(cur, bud_tutor_id: str | None, lookups: dict | None = 
 # ---------------------------------------------------------------------------
 # Classification (preview)
 # ---------------------------------------------------------------------------
+
+
+def _sibling_display_values(bud_row: dict) -> dict:
+    """This row's own programme/status, for display only on a
+    'multiple Bud rows share this reference' conflict item -- lets an
+    Administrator see what each sibling row actually is before deciding
+    whether to resolve it via relink_to_new_enrollment. Never read by any
+    apply/commit path (conflicts are never committable)."""
+    return {"programmeName": bud_row.get("programmeName"), "statusDesc": bud_row.get("statusDesc")}
 
 
 def _diff_simple_fields(bud_row: dict, accepted_or_current: dict, current_uln: str | None) -> dict:
@@ -515,8 +543,13 @@ def classify_row(
         reference_matches: list[dict] = []
         if learner_reference:
             if learner_reference in ambiguous_learner_references:
+                # proposed_values is purely for display here (this item is
+                # never applicable via run_commit) -- lets an Administrator
+                # see this row's own programme/status when deciding whether
+                # to resolve it via relink_to_new_enrollment.
                 return {**base_item, "match_status": "conflict", "action_type": "none",
-                        "reason": "learner_reference_matches_multiple_bud_rows"}
+                        "reason": "learner_reference_matches_multiple_bud_rows",
+                        "proposed_values": _sibling_display_values(bud_row)}
             reference_matches = _find_learners_by_reference(cur, learner_reference, lookups)
             if len(reference_matches) > 1:
                 return {**base_item, "match_status": "conflict", "action_type": "none",
@@ -562,6 +595,32 @@ def classify_row(
 
     if link is not None:
         base_item["internal_learner_id"] = link["internalLearnerId"]
+        # The same "never guess which Bud row is authoritative" rule the
+        # link-is-None branch above already applies must also apply here --
+        # otherwise a learner re-enrolling on a new standard (Bud keeps the
+        # old, now-withdrawn plan around under the same learner_reference)
+        # would have their *already-linked, stale* plan diffed and proposed
+        # as a plain status change (e.g. "In Progress -> Withdrawn"), which
+        # is wrong: they haven't withdrawn, they've moved to a different
+        # plan this learner_reference also matches. See
+        # relink_to_new_enrollment for the reviewed way to resolve this.
+        learner_reference = bud_row.get("learnerReference")
+        if learner_reference and learner_reference in ambiguous_learner_references:
+            # The bulk set above only says "ambiguous at all" -- once
+            # relink_to_new_enrollment resolves a sibling pair, Bud's old,
+            # withdrawn row is still sitting there forever (confirmed: Bud
+            # never deletes a superseded enrolment), so a reference stays in
+            # that set permanently. Re-flagging the *same already-reviewed*
+            # sibling every single sync would be pure noise with nothing new
+            # for an Administrator to decide -- only a plan id they haven't
+            # already acknowledged (via relink) is a genuinely fresh
+            # ambiguity worth surfacing again.
+            acknowledged = set((link.get("acceptedValues") or {}).get("_acknowledgedSiblingPlanIds", []))
+            other_plan_ids = _other_bud_plan_ids_sharing_reference(cur, learner_reference, plan_id)
+            if other_plan_ids - acknowledged:
+                return {**base_item, "match_status": "conflict", "action_type": "none",
+                        "reason": "linked_bud_record_has_sibling_enrollment",
+                        "proposed_values": _sibling_display_values(bud_row)}
         return _classify_existing_learner_update(cur, bud_row, base_item, link, lookups)
 
     # No match at all -- proposed as new regardless of whether this Bud
@@ -1218,6 +1277,118 @@ def link_existing_learner(cur, job_id: int, item_id: int, target_learner_id: int
         write_audit_log(
             request, action="bud_sync_manual_link_established", entity_type="learner", entity_id=target_learner_id,
             new_value={"sourceIdentifier": item["sourceIdentifier"], "syncItemId": item_id}, cur=cur,
+        )
+
+    return get_job(cur, job_id)
+
+
+def relink_to_new_enrollment(cur, job_id: int, item_id: int, request: Request, session: dict) -> dict:
+    """Resolves a 'linked_bud_record_has_sibling_enrollment'-class conflict
+    pair: a learner re-enrolled on a new Bud standard while their old,
+    now-withdrawn enrolment is still the one bud_learner_link points at.
+    Operates on the *new*, still-unlinked row's own conflict item (reason
+    'learner_reference_matches_multiple_bud_rows') -- that's the row that
+    actually represents where the learner is now.
+
+    Classifies the fresh new-plan row against an *empty* accepted baseline,
+    exactly the way classify_row already treats a learner's first-ever
+    observation (see its own comment there) -- this naturally proposes
+    bringing programme/name/email/mobile in line with the new plan via the
+    normal field diff, and -- because nothing has been accepted yet to diff
+    a status against -- never proposes a status change itself. The
+    Administrator decides whether the learner's own status needs attention
+    separately (through the normal review flow, after this resolves).
+
+    Applies that diff through the same _apply_existing_learner_update path
+    a normal 'existing_update' commit uses, then _upsert_learner_link's own
+    ON CONFLICT re-points the single link at this new plan and re-baselines
+    accepted_values to what was just applied -- so the next sync diffs
+    against the new enrolment, not the old one. The sibling old-plan item is
+    marked resolved as a side effect, not a second click."""
+    cur.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job_id,))
+    job = cur.fetchone()
+    if not job:
+        raise HTTPException(status_code=404, detail="Sync job not found")
+    if job["status"] != "ready":
+        raise HTTPException(status_code=409, detail=f"Job is not in a reviewable state (status={job['status']})")
+
+    cur.execute(
+        'SELECT id, source_identifier AS "sourceIdentifier", match_status AS "matchStatus", reason, '
+        'source_learner_reference AS "sourceLearnerReference" '
+        "FROM bud_sync_item WHERE id = %s AND sync_job_id = %s",
+        (item_id, job_id),
+    )
+    item = cur.fetchone()
+    if not item:
+        raise HTTPException(status_code=404, detail="Sync item not found")
+    if item["matchStatus"] != "conflict" or item["reason"] != "learner_reference_matches_multiple_bud_rows":
+        raise HTTPException(
+            status_code=400,
+            detail="Only a 'multiple Bud rows for this reference' conflict item can be resolved this way",
+        )
+
+    learner_reference = item["sourceLearnerReference"]
+    matches = _find_learners_by_reference(cur, learner_reference) if learner_reference else []
+    if len(matches) != 1:
+        raise HTTPException(status_code=409, detail="This Bud reference no longer resolves to exactly one learner -- generate a new preview")
+    target_learner_id = matches[0]["id"]
+
+    fresh_rows = {r["learningPlanId"]: r for r in _fetch_bud_rows(cur)}
+    fresh_row = fresh_rows.get(item["sourceIdentifier"])
+    if fresh_row is None:
+        raise HTTPException(status_code=409, detail="This Bud row is no longer present in the source -- generate a new preview")
+
+    old_link = _find_link_by_learner_id(cur, target_learner_id)
+    cur.execute('SELECT programme FROM learners WHERE id = %s', (target_learner_id,))
+    old_programme = cur.fetchone()["programme"]
+
+    # Everything else this learner_reference currently matches, captured
+    # before the upsert below -- recorded onto the new link afterwards so
+    # classify_row's sibling check never re-flags these same, already-
+    # reviewed rows on a future sync (only a plan id that appears *later*,
+    # which this snapshot can't have seen, would be a genuinely new
+    # ambiguity worth surfacing again).
+    sibling_plan_ids = (
+        _other_bud_plan_ids_sharing_reference(cur, learner_reference, fresh_row["learningPlanId"])
+        if learner_reference else set()
+    )
+
+    base_item = {
+        "source_identifier": fresh_row["learningPlanId"], "internal_learner_id": target_learner_id,
+        "proposed_values": {}, "previous_values": {}, "warnings": [], "reason": None,
+    }
+    classified = _classify_existing_learner_update(
+        cur, fresh_row, base_item, {"acceptedValues": {}, "acceptedSyncedAt": None},
+    )
+
+    with cur.connection.transaction():
+        if classified["proposed_values"]:
+            apply_item = {"internalLearnerId": target_learner_id, "proposedValues": classified["proposed_values"]}
+            _apply_existing_learner_update(cur, apply_item, request, session)
+
+        _upsert_learner_link(cur, target_learner_id, fresh_row, job_id)
+        cur.execute(
+            "UPDATE bud_learner_link SET accepted_values = accepted_values || %s::jsonb WHERE internal_learner_id = %s",
+            (json.dumps({"_acknowledgedSiblingPlanIds": sorted(sibling_plan_ids)}), target_learner_id),
+        )
+
+        cur.execute(
+            "UPDATE bud_sync_item SET approved = true, applied = true, outcome = 'relinked_new_enrollment', "
+            "internal_learner_id = %s, processed_at = now() WHERE id = %s",
+            (target_learner_id, item_id),
+        )
+        if old_link is not None:
+            cur.execute(
+                "UPDATE bud_sync_item SET outcome = 'superseded_by_relink', processed_at = now() "
+                "WHERE sync_job_id = %s AND source_identifier = %s AND outcome IS NULL",
+                (job_id, old_link["budLearningPlanId"]),
+            )
+
+        write_audit_log(
+            request, action="bud_sync_relink_new_enrollment", entity_type="learner", entity_id=target_learner_id,
+            previous_value={"budLearningPlanId": old_link["budLearningPlanId"] if old_link else None, "programme": old_programme},
+            new_value={"budLearningPlanId": fresh_row["learningPlanId"], "programme": fresh_row.get("programmeName")},
+            cur=cur,
         )
 
     return get_job(cur, job_id)
