@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useDeleteCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, useEndLearnerSecondaryEnrollment, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
+import { useGetCohort, useCreateCohort, useUpdateCohort, useActivateCohort, useDeactivateCohort, useFlagCohortInactive, useUnflagCohortInactive, useConfirmCohortInactiveFlag, useRejectCohortInactiveFlag, useDeleteCohort, useGetCohortLearners, useListTutors, useGetCurrentUser, useEndLearnerSecondaryEnrollment, getGetCohortQueryKey, getGetCohortLearnersQueryKey, getListTutorsQueryKey } from "@workspace/api-client-react";
 import { useLocation, useParams, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,6 +69,10 @@ export default function CohortDetailPage() {
   const queryClient = useQueryClient();
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [deleteReason, setDeleteReason] = React.useState("");
+  const [flagDialogOpen, setFlagDialogOpen] = React.useState(false);
+  const [flagReason, setFlagReason] = React.useState("");
+  const [rejectFlagDialogOpen, setRejectFlagDialogOpen] = React.useState(false);
+  const [rejectFlagReason, setRejectFlagReason] = React.useState("");
   const [completeTarget, setCompleteTarget] = React.useState<{ enrollmentId: number; learnerName: string } | null>(null);
   const [completeDate, setCompleteDate] = React.useState(format(new Date(), "yyyy-MM-dd"));
   const [completeNote, setCompleteNote] = React.useState("");
@@ -89,6 +93,10 @@ export default function CohortDetailPage() {
   const updateMutation = useUpdateCohort();
   const activateMutation = useActivateCohort();
   const deactivateMutation = useDeactivateCohort();
+  const flagInactiveMutation = useFlagCohortInactive();
+  const unflagInactiveMutation = useUnflagCohortInactive();
+  const confirmFlagMutation = useConfirmCohortInactiveFlag();
+  const rejectFlagMutation = useRejectCohortInactiveFlag();
   const deleteMutation = useDeleteCohort();
   const completeEnrollmentMutation = useEndLearnerSecondaryEnrollment();
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -98,6 +106,50 @@ export default function CohortDetailPage() {
     mutation.mutate({ id: cohortId }, {
       onSuccess: () => toast({ title: newActive ? "Cohort activated" : "Cohort deactivated" }),
       onError: (err) => toast({ title: "Update failed", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const onFlagInactive = () => {
+    flagInactiveMutation.mutate({ id: cohortId, data: { reason: flagReason.trim() } }, {
+      onSuccess: () => {
+        toast({ title: "Flagged as inactive", description: "An Administrator will review and confirm this." });
+        setFlagDialogOpen(false);
+        setFlagReason("");
+        queryClient.invalidateQueries({ queryKey: getGetCohortQueryKey(cohortId) });
+      },
+      onError: (err) => toast({ title: "Could not flag cohort", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const onUnflagInactive = () => {
+    unflagInactiveMutation.mutate({ id: cohortId }, {
+      onSuccess: () => {
+        toast({ title: "Flag withdrawn" });
+        queryClient.invalidateQueries({ queryKey: getGetCohortQueryKey(cohortId) });
+      },
+      onError: (err) => toast({ title: "Could not withdraw flag", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const onConfirmInactiveFlag = () => {
+    confirmFlagMutation.mutate({ id: cohortId }, {
+      onSuccess: () => {
+        toast({ title: "Cohort confirmed inactive" });
+        queryClient.invalidateQueries({ queryKey: getGetCohortQueryKey(cohortId) });
+      },
+      onError: (err) => toast({ title: "Could not confirm", description: getErrorMessage(err), variant: "destructive" }),
+    });
+  };
+
+  const onRejectInactiveFlag = () => {
+    rejectFlagMutation.mutate({ id: cohortId, data: { reason: rejectFlagReason.trim() } }, {
+      onSuccess: () => {
+        toast({ title: "Flag rejected", description: "The cohort remains active." });
+        setRejectFlagDialogOpen(false);
+        setRejectFlagReason("");
+        queryClient.invalidateQueries({ queryKey: getGetCohortQueryKey(cohortId) });
+      },
+      onError: (err) => toast({ title: "Could not reject flag", description: getErrorMessage(err), variant: "destructive" }),
     });
   };
 
@@ -427,13 +479,64 @@ export default function CohortDetailPage() {
                             <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} disabled={readOnly} /></FormControl>
                           </FormItem>
                         )} />
+                      ) : cohort?.inactiveFlaggedAt ? (
+                        <div className="rounded-lg border p-4 bg-card mt-6 space-y-3">
+                          <div className="space-y-0.5">
+                            <p className="text-base font-medium">Flagged Inactive</p>
+                            <p className="text-sm text-muted-foreground">
+                              Flagged by {cohort.inactiveFlaggedByName || "a tutor"} on{" "}
+                              {format(parseISO(cohort.inactiveFlaggedAt), "d MMM yyyy")} -- awaiting Administrator confirmation.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={onUnflagInactive} disabled={unflagInactiveMutation.isPending}>
+                              {unflagInactiveMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                              Undo
+                            </Button>
+                            {isAdmin && (
+                              <>
+                                <Button type="button" size="sm" onClick={onConfirmInactiveFlag} disabled={confirmFlagMutation.isPending}>
+                                  {confirmFlagMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                  Confirm
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setRejectFlagDialogOpen(true)}
+                                >
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ) : isAdmin ? (
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">
+                          <div className="space-y-0.5">
+                            <p className="text-base font-medium">Active Cohort</p>
+                            <p className="text-sm text-muted-foreground">Inactive cohorts won't appear in attendance creation.</p>
+                          </div>
+                          <Switch checked={cohort?.active ?? false} onCheckedChange={handleToggleActive} aria-label="Toggle active status" />
+                        </div>
+                      ) : cohort?.active ? (
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">
+                          <div className="space-y-0.5">
+                            <p className="text-base font-medium">Active Cohort</p>
+                            <p className="text-sm text-muted-foreground">Raise this if the cohort has actually finished running -- an Administrator will confirm before it goes offline.</p>
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => setFlagDialogOpen(true)}>
+                            Mark as Inactive
+                          </Button>
+                        </div>
                       ) : (
                         <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card mt-6">
                           <div className="space-y-0.5">
                             <p className="text-base font-medium">Active Cohort</p>
                             <p className="text-sm text-muted-foreground">Inactive cohorts won't appear in attendance creation.</p>
                           </div>
-                          <Switch checked={cohort?.active ?? false} onCheckedChange={handleToggleActive} disabled={readOnly} aria-label="Toggle active status" />
+                          <Switch checked={false} disabled aria-label="Toggle active status" />
                         </div>
                       )}
                     </CardContent>
@@ -589,6 +692,62 @@ export default function CohortDetailPage() {
             <Button onClick={onMarkCompleted} disabled={completeEnrollmentMutation.isPending}>
               {completeEnrollmentMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Mark Completed
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={flagDialogOpen} onOpenChange={(o) => { setFlagDialogOpen(o); if (!o) setFlagReason(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Cohort as Inactive</DialogTitle>
+            <DialogDescription>
+              This cohort won't go offline immediately -- it's flagged for an Administrator to review and confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="flag-inactive-reason">Reason</Label>
+            <Textarea
+              id="flag-inactive-reason"
+              value={flagReason}
+              onChange={(e) => setFlagReason(e.target.value)}
+              rows={3}
+              placeholder="Why has this cohort finished running?"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFlagDialogOpen(false)}>Go Back</Button>
+            <Button onClick={onFlagInactive} disabled={flagInactiveMutation.isPending || !flagReason.trim()}>
+              {flagInactiveMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Flag as Inactive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectFlagDialogOpen} onOpenChange={(o) => { setRejectFlagDialogOpen(o); if (!o) setRejectFlagReason(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Inactive Flag</DialogTitle>
+            <DialogDescription>
+              The cohort will remain active. The tutor will see this flag cleared.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="reject-flag-reason">Reason</Label>
+            <Textarea
+              id="reject-flag-reason"
+              value={rejectFlagReason}
+              onChange={(e) => setRejectFlagReason(e.target.value)}
+              rows={3}
+              placeholder="Why isn't this cohort actually inactive?"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectFlagDialogOpen(false)}>Go Back</Button>
+            <Button variant="destructive" onClick={onRejectInactiveFlag} disabled={rejectFlagMutation.isPending || !rejectFlagReason.trim()}>
+              {rejectFlagMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Reject Flag
             </Button>
           </DialogFooter>
         </DialogContent>

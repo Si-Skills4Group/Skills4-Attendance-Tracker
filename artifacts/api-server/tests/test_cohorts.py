@@ -3,15 +3,22 @@ from fastapi import HTTPException
 
 from pyapp.routers.cohorts import (
     CohortDeleteInput,
+    CohortFlagInactiveInput,
     CohortInput,
+    CohortRejectInactiveFlagInput,
     CohortUpdate,
+    activate_cohort,
+    confirm_cohort_inactive_flag,
     create_cohort,
     deactivate_cohort,
     delete_cohort,
+    flag_cohort_inactive,
     get_cohort,
     get_cohort_learners,
     list_cohort_summary,
     list_cohorts,
+    reject_cohort_inactive_flag,
+    unflag_cohort_inactive,
     update_cohort,
 )
 
@@ -239,6 +246,183 @@ def test_deactivated_cohort_is_not_deleted(db, request_factory, admin_user, coho
     row = db.fetchone()
     assert row is not None
     assert row["active"] is False
+
+
+class TestCohortInactiveFlag:
+    def test_tutor_can_flag_their_own_cohort(self, db, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+
+        result = flag_cohort_inactive(
+            cohort["id"], CohortFlagInactiveInput(reason="Course finished"), request_factory(), tutor["session"],
+        )
+        assert result["inactiveFlaggedAt"] is not None
+        assert result["active"] is True  # never taken offline by the flag itself
+
+        db.execute("SELECT inactive_flagged_at, inactive_flagged_by FROM cohorts WHERE id = %s", (cohort["id"],))
+        row = db.fetchone()
+        assert row["inactive_flagged_at"] is not None
+        assert row["inactive_flagged_by"] == tutor["userId"]
+
+    def test_tutor_cannot_flag_another_tutors_cohort(self, request_factory, tutor_factory, cohort_factory):
+        owner = tutor_factory()
+        other = tutor_factory()
+        cohort = cohort_factory(tutor_id=owner["tutorId"], active=True)
+
+        with pytest.raises(HTTPException) as exc:
+            flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="x"), request_factory(), other["session"])
+        assert exc.value.status_code == 403
+
+    def test_cannot_flag_an_already_flagged_cohort(self, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="x"), request_factory(), tutor["session"])
+
+        with pytest.raises(HTTPException) as exc:
+            flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="x"), request_factory(), tutor["session"])
+        assert exc.value.status_code == 409
+
+    def test_cannot_flag_an_already_inactive_cohort(self, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=False)
+
+        with pytest.raises(HTTPException) as exc:
+            flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="x"), request_factory(), tutor["session"])
+        assert exc.value.status_code == 400
+
+    def test_reason_is_required(self):
+        with pytest.raises(Exception):
+            CohortFlagInactiveInput(reason="")
+
+    def test_flag_unflag_confirm_reject_are_each_audited(
+        self, db, request_factory, admin_user, tutor_factory, cohort_factory,
+    ):
+        tutor = tutor_factory()
+
+        flagged = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(flagged["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+        db.execute(
+            "SELECT action FROM audit_logs WHERE entity_type = 'cohort' AND entity_id = %s ORDER BY id DESC LIMIT 1",
+            (flagged["id"],),
+        )
+        assert db.fetchone()["action"] == "cohort_flagged_inactive"
+        unflag_cohort_inactive(flagged["id"], request_factory(), tutor["session"])
+        db.execute(
+            "SELECT action FROM audit_logs WHERE entity_type = 'cohort' AND entity_id = %s ORDER BY id DESC LIMIT 1",
+            (flagged["id"],),
+        )
+        assert db.fetchone()["action"] == "cohort_inactive_flag_retracted"
+
+        confirmed = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(confirmed["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+        confirm_cohort_inactive_flag(confirmed["id"], request_factory(), admin_user)
+        db.execute(
+            "SELECT action FROM audit_logs WHERE entity_type = 'cohort' AND entity_id = %s ORDER BY id DESC LIMIT 1",
+            (confirmed["id"],),
+        )
+        assert db.fetchone()["action"] == "cohort_inactive_confirmed"
+
+        rejected = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(rejected["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+        reject_cohort_inactive_flag(
+            rejected["id"], CohortRejectInactiveFlagInput(reason="Still running"), request_factory(), admin_user,
+        )
+        db.execute(
+            "SELECT action FROM audit_logs WHERE entity_type = 'cohort' AND entity_id = %s ORDER BY id DESC LIMIT 1",
+            (rejected["id"],),
+        )
+        assert db.fetchone()["action"] == "cohort_inactive_flag_rejected"
+
+    def test_confirm_sets_inactive_and_clears_the_flag(self, db, request_factory, admin_user, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+
+        result = confirm_cohort_inactive_flag(cohort["id"], request_factory(), admin_user)
+        assert result["active"] is False
+        assert result["inactiveFlaggedAt"] is None
+
+    def test_reject_clears_the_flag_but_leaves_the_cohort_active(
+        self, request_factory, admin_user, tutor_factory, cohort_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+
+        result = reject_cohort_inactive_flag(
+            cohort["id"], CohortRejectInactiveFlagInput(reason="Still running"), request_factory(), admin_user,
+        )
+        assert result["active"] is True
+        assert result["inactiveFlaggedAt"] is None
+
+    def test_confirm_and_reject_are_admin_only(self, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+
+        # confirm_cohort_inactive_flag/reject_cohort_inactive_flag are both
+        # declared with Depends(require_admin), enforced at the FastAPI
+        # dependency layer rather than inside the function body -- calling
+        # them directly (as every other test here does) bypasses that
+        # dependency entirely, so role enforcement is asserted the same way
+        # TestTutorCanRenameOwnCohort does elsewhere in this file: by reading
+        # the route's own declared dependency rather than re-invoking it as
+        # if it were an unprotected function.
+        import inspect
+
+        confirm_sig = inspect.signature(confirm_cohort_inactive_flag)
+        assert confirm_sig.parameters["_session"].default.dependency.__name__ == "require_admin"
+        reject_sig = inspect.signature(reject_cohort_inactive_flag)
+        assert reject_sig.parameters["_session"].default.dependency.__name__ == "require_admin"
+
+    def test_confirming_or_rejecting_with_no_active_flag_is_409(self, request_factory, admin_user, cohort_factory):
+        cohort = cohort_factory(active=True)
+
+        with pytest.raises(HTTPException) as exc:
+            confirm_cohort_inactive_flag(cohort["id"], request_factory(), admin_user)
+        assert exc.value.status_code == 409
+
+        with pytest.raises(HTTPException) as exc:
+            reject_cohort_inactive_flag(cohort["id"], CohortRejectInactiveFlagInput(reason="x"), request_factory(), admin_user)
+        assert exc.value.status_code == 409
+
+    def test_unflagging_with_no_active_flag_is_409(self, request_factory, tutor_factory, cohort_factory):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+
+        with pytest.raises(HTTPException) as exc:
+            unflag_cohort_inactive(cohort["id"], request_factory(), tutor["session"])
+        assert exc.value.status_code == 409
+
+    def test_direct_deactivate_clears_a_stale_flag(
+        self, db, request_factory, admin_user, tutor_factory, cohort_factory,
+    ):
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+
+        deactivate_cohort(cohort["id"], request_factory(), admin_user)
+        db.execute("SELECT active, inactive_flagged_at FROM cohorts WHERE id = %s", (cohort["id"],))
+        row = db.fetchone()
+        assert row["active"] is False
+        assert row["inactive_flagged_at"] is None
+
+    def test_direct_activate_clears_a_stale_flag(
+        self, db, request_factory, admin_user, tutor_factory, cohort_factory,
+    ):
+        # A still-active cohort can carry a pending flag (that's the whole
+        # point -- flagging never takes it offline by itself), so calling
+        # activate_cohort on it directly (already active, bypassing the
+        # flag/confirm flow entirely) must still defensively clear that flag.
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+
+        activate_cohort(cohort["id"], request_factory(), admin_user)
+        db.execute("SELECT active, inactive_flagged_at FROM cohorts WHERE id = %s", (cohort["id"],))
+        row = db.fetchone()
+        assert row["active"] is True
+        assert row["inactive_flagged_at"] is None
 
 
 def test_delivery_day_must_be_a_known_value():

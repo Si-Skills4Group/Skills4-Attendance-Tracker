@@ -185,7 +185,9 @@ export default function CohortsPage() {
                   <Link href={`/cohorts/${cohort.id}`}>
                     <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors leading-tight cursor-pointer">{cohort.name}</h3>
                   </Link>
-                  {isAdmin ? (
+                  {cohort.inactiveFlaggedAt ? (
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-2 py-1 rounded">Flagged Inactive</span>
+                  ) : isAdmin ? (
                     <Switch
                       checked={cohort.active}
                       onCheckedChange={(v) => handleToggleActive(cohort.id, cohort.name, v)}

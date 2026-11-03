@@ -5,6 +5,7 @@
  * Skills4Attendance API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CohortFlaggedInactive } from './cohortFlaggedInactive';
 import type { LearnerAttendanceSummaryRow } from './learnerAttendanceSummaryRow';
 import type { RecentEdit } from './recentEdit';
 import type { SessionSummary } from './sessionSummary';
@@ -22,4 +23,5 @@ export interface AdminDashboard {
   sessionsAwaitingCompletion: SessionSummary[];
   recentlyEditedAttendance: RecentEdit[];
   lowAttendanceLearners: LearnerAttendanceSummaryRow[];
+  cohortsFlaggedInactive: CohortFlaggedInactive[];
 }

@@ -850,6 +850,13 @@ export interface Cohort {
   subject: FunctionalSkillsSubject | null;
   createdAt: string;
   updatedAt: string;
+  /**
+     * Set when a Tutor has flagged this cohort as inactive, pending an Administrator's confirmation or rejection -- null the rest of the time.
+     * @nullable
+     */
+  inactiveFlaggedAt: string | null;
+  /** @nullable */
+  inactiveFlaggedByName: string | null;
 }
 
 export type CohortCardSummary = Cohort & {
@@ -2217,6 +2224,16 @@ export interface CohortSummary {
   attendancePercentage: number;
 }
 
+export interface CohortFlaggedInactive {
+  id: number;
+  name: string;
+  /** @nullable */
+  tutorName: string | null;
+  inactiveFlaggedAt: string;
+  /** @nullable */
+  inactiveFlaggedByName: string | null;
+}
+
 export interface AdminDashboard {
   activeLearners: number;
   activeTutors: number;
@@ -2230,6 +2247,7 @@ export interface AdminDashboard {
   sessionsAwaitingCompletion: SessionSummary[];
   recentlyEditedAttendance: RecentEdit[];
   lowAttendanceLearners: LearnerAttendanceSummaryRow[];
+  cohortsFlaggedInactive: CohortFlaggedInactive[];
 }
 
 export interface TutorDashboard {

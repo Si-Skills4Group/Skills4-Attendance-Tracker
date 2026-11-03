@@ -224,7 +224,7 @@ describe('DashboardPage', () => {
           attendancePercentageWeek: 91.2, attendancePercentageMonth: 88.4,
           participationPercentageWeek: 95.0, participationPercentageMonth: 93.7,
           sessionsAwaitingCompletion: [], recentlyEditedAttendance: [],
-          lowAttendanceLearners: [],
+          lowAttendanceLearners: [], cohortsFlaggedInactive: [],
         },
         isLoading: false,
       };
@@ -301,6 +301,29 @@ describe('DashboardPage', () => {
       };
       renderDashboard();
       expect(screen.getByText('Register Completion by Tutor')).toBeInTheDocument();
+    });
+
+    it('hides the Cohorts Flagged Inactive card when nothing is flagged', () => {
+      renderDashboard();
+      expect(screen.queryByText('Cohorts Flagged Inactive')).not.toBeInTheDocument();
+    });
+
+    it('shows a flagged cohort on its own card, linking to the cohort page', () => {
+      mockAdminDashboard = {
+        data: {
+          ...mockAdminDashboard.data,
+          cohortsFlaggedInactive: [
+            { id: 7, name: 'Cohort B', tutorName: 'Tam Tutor', inactiveFlaggedAt: '2026-03-01T00:00:00Z', inactiveFlaggedByName: 'Tam Tutor' },
+          ],
+        },
+        isLoading: false,
+      };
+      renderDashboard();
+
+      expect(screen.getByText('Cohorts Flagged Inactive')).toBeInTheDocument();
+      expect(screen.getByText('Cohort B')).toBeInTheDocument();
+      const link = screen.getAllByRole('link').find((a) => a.getAttribute('href') === '/cohorts/7');
+      expect(link).toBeTruthy();
     });
   });
 });

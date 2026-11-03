@@ -121,6 +121,13 @@ export const GetAdminDashboardResponse = zod.object({
   "learningPlanUrl": zod.union([zod.string(),zod.null()]).optional(),
   "syncedAt": zod.union([zod.coerce.date(),zod.null()]).optional()
 }).describe('Supporting context from the separately-synced Bud LMS integration. Always shown apart from attendance figures, never combined into a single score.'),zod.null()]).optional().describe('Null when no Bud sync match exists yet -- never breaks the row.')
+})),
+  "cohortsFlaggedInactive": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "tutorName": zod.string().nullable(),
+  "inactiveFlaggedAt": zod.coerce.date(),
+  "inactiveFlaggedByName": zod.string().nullable()
 }))
 })
 
@@ -144,7 +151,9 @@ export const GetTutorDashboardResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "learnerCount": zod.number(),
   "attendancePercentage": zod.number()
@@ -232,7 +241,9 @@ export const GetTutorDashboardCohortsResponseItem = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "activeLearnerCount": zod.number(),
   "nextSession": zod.union([zod.object({
@@ -403,7 +414,9 @@ export const GetAdminDashboardCohortsResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "activeLearnerCount": zod.number(),
   "attendancePercentage": zod.union([zod.number(),zod.null()]),
@@ -1832,7 +1845,9 @@ export const ListCohortsResponseItem = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 })
 export const ListCohortsResponse = zod.array(ListCohortsResponseItem)
 
@@ -1878,7 +1893,9 @@ export const CreateCohortResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 })
 
 
@@ -1909,7 +1926,9 @@ export const ListCohortSummaryResponseItem = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }).and(zod.object({
   "activeLearnerCount": zod.number(),
   "upcomingSessionCount": zod.number(),
@@ -1939,7 +1958,9 @@ export const GetCohortResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }).and(zod.object({
   "learnerCount": zod.number()
 }))
@@ -1989,7 +2010,9 @@ export const UpdateCohortResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 })
 
 
@@ -2014,7 +2037,9 @@ export const ActivateCohortResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 })
 
 
@@ -2039,7 +2064,131 @@ export const DeactivateCohortResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
+})
+
+
+export const FlagCohortInactiveParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const FlagCohortInactiveBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const FlagCohortInactiveResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
+})
+
+
+export const UnflagCohortInactiveParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UnflagCohortInactiveResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
+})
+
+
+export const ConfirmCohortInactiveFlagParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ConfirmCohortInactiveFlagResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
+})
+
+
+export const RejectCohortInactiveFlagParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const RejectCohortInactiveFlagBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
+export const RejectCohortInactiveFlagResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "programme": zod.string(),
+  "level": zod.string(),
+  "tutorId": zod.number().nullable(),
+  "tutorName": zod.string().nullable(),
+  "deliveryDay": zod.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
+  "sessionStartTime": zod.string(),
+  "sessionEndTime": zod.string(),
+  "startDate": zod.coerce.date(),
+  "endDate": zod.coerce.date().nullable(),
+  "active": zod.boolean(),
+  "externalSystemId": zod.string().nullable(),
+  "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
+  "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 })
 
 
@@ -3639,7 +3788,9 @@ export const GetCohortReportV2Response = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "activeLearnerCount": zod.number(),
   "metrics": zod.object({
@@ -3793,7 +3944,9 @@ export const GetTutorReportV2Response = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "metrics": zod.object({
   "periodStart": zod.coerce.date(),
@@ -3951,7 +4104,9 @@ export const GetOrganisationReportV2Response = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "metrics": zod.object({
   "periodStart": zod.coerce.date(),
@@ -4160,7 +4315,9 @@ export const GetFunctionalSkillsReportResponse = zod.object({
   "membershipType": zod.enum(['primary', 'secondary']).describe('\'primary\' is a learner\'s normal home cohort, enrolled\/transferred via the Allocation screen. \'secondary\' is a Functional Skills cohort -- learners are added to it via a dedicated secondary-enrollment action (see \/learners\/{learnerId}\/secondary-enrollments) alongside, never instead of, their home cohort.'),
   "subject": zod.union([zod.enum(['math', 'english', 'both']),zod.null()]).describe('Only meaningful (and required) on a \'secondary\' cohort -- always null on a \'primary\' one.'),
   "createdAt": zod.coerce.date(),
-  "updatedAt": zod.coerce.date()
+  "updatedAt": zod.coerce.date(),
+  "inactiveFlaggedAt": zod.coerce.date().nullable().describe('Set when a Tutor has flagged this cohort as inactive, pending an Administrator\'s confirmation or rejection -- null the rest of the time.'),
+  "inactiveFlaggedByName": zod.string().nullable()
 }),
   "activeLearnerCount": zod.number(),
   "metrics": zod.object({

@@ -481,3 +481,33 @@ class TestSessionsAwaitingCompletion:
 
         result = get_admin_dashboard(admin_user)
         assert session["id"] not in {s["id"] for s in result["sessionsAwaitingCompletion"]}
+
+
+class TestCohortsFlaggedInactiveOnDashboard:
+    def test_a_flagged_cohort_appears_on_the_admin_dashboard(
+        self, admin_user, request_factory, tutor_factory, cohort_factory,
+    ):
+        from pyapp.routers.cohorts import CohortFlagInactiveInput, flag_cohort_inactive
+        from pyapp.routers.dashboard import get_admin_dashboard
+
+        tutor = tutor_factory()
+        cohort = cohort_factory(tutor_id=tutor["tutorId"], active=True)
+        flag_cohort_inactive(cohort["id"], CohortFlagInactiveInput(reason="Finished"), request_factory(), tutor["session"])
+
+        result = get_admin_dashboard(admin_user)
+        assert cohort["id"] in {c["id"] for c in result["cohortsFlaggedInactive"]}
+
+    def test_an_unflagged_cohort_does_not_appear(self, admin_user, cohort_factory):
+        from pyapp.routers.dashboard import get_admin_dashboard
+
+        cohort = cohort_factory(active=True)
+
+        result = get_admin_dashboard(admin_user)
+        assert cohort["id"] not in {c["id"] for c in result["cohortsFlaggedInactive"]}
+
+    def test_the_tutor_dashboard_has_no_such_field(self, tutor_factory):
+        from pyapp.routers.dashboard import get_tutor_dashboard
+
+        tutor = tutor_factory()
+        result = get_tutor_dashboard(tutor["session"])
+        assert "cohortsFlaggedInactive" not in result

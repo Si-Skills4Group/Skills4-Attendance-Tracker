@@ -4883,6 +4883,268 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getDeactivateCohortMutationOptions(options));
     }
 
+export const getFlagCohortInactiveUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/flag-inactive`
+}
+
+export const flagCohortInactive = async (id: number,
+    cohortDeleteInput: CohortDeleteInput, options?: RequestInit): Promise<Cohort> => {
+
+  return customFetch<Cohort>(getFlagCohortInactiveUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cohortDeleteInput)
+  }
+);}
+
+
+
+
+
+export const getFlagCohortInactiveMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagCohortInactive>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof flagCohortInactive>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext> => {
+
+const mutationKey = ['flagCohortInactive'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof flagCohortInactive>>, {id: number;data: BodyType<CohortDeleteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  flagCohortInactive(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FlagCohortInactiveMutationResult = NonNullable<Awaited<ReturnType<typeof flagCohortInactive>>>
+    export type FlagCohortInactiveMutationBody = BodyType<CohortDeleteInput>
+    export type FlagCohortInactiveMutationError = ErrorType<ErrorResponse>
+
+    export const useFlagCohortInactive = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagCohortInactive>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof flagCohortInactive>>,
+        TError,
+        {id: number;data: BodyType<CohortDeleteInput>},
+        TContext
+      > => {
+      return useMutation(getFlagCohortInactiveMutationOptions(options));
+    }
+
+export const getUnflagCohortInactiveUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/unflag-inactive`
+}
+
+export const unflagCohortInactive = async (id: number, options?: RequestInit): Promise<Cohort> => {
+
+  return customFetch<Cohort>(getUnflagCohortInactiveUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getUnflagCohortInactiveMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unflagCohortInactive>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unflagCohortInactive>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['unflagCohortInactive'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unflagCohortInactive>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  unflagCohortInactive(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnflagCohortInactiveMutationResult = NonNullable<Awaited<ReturnType<typeof unflagCohortInactive>>>
+
+    export type UnflagCohortInactiveMutationError = ErrorType<ErrorResponse>
+
+    export const useUnflagCohortInactive = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unflagCohortInactive>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unflagCohortInactive>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getUnflagCohortInactiveMutationOptions(options));
+    }
+
+export const getConfirmCohortInactiveFlagUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/confirm-inactive-flag`
+}
+
+export const confirmCohortInactiveFlag = async (id: number, options?: RequestInit): Promise<Cohort> => {
+
+  return customFetch<Cohort>(getConfirmCohortInactiveFlagUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getConfirmCohortInactiveFlagMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmCohortInactiveFlag>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmCohortInactiveFlag>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['confirmCohortInactiveFlag'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmCohortInactiveFlag>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  confirmCohortInactiveFlag(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmCohortInactiveFlagMutationResult = NonNullable<Awaited<ReturnType<typeof confirmCohortInactiveFlag>>>
+
+    export type ConfirmCohortInactiveFlagMutationError = ErrorType<ErrorResponse>
+
+    export const useConfirmCohortInactiveFlag = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmCohortInactiveFlag>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmCohortInactiveFlag>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getConfirmCohortInactiveFlagMutationOptions(options));
+    }
+
+export const getRejectCohortInactiveFlagUrl = (id: number,) => {
+
+
+
+
+  return `/api/cohorts/${id}/reject-inactive-flag`
+}
+
+export const rejectCohortInactiveFlag = async (id: number,
+    cohortDeleteInput: CohortDeleteInput, options?: RequestInit): Promise<Cohort> => {
+
+  return customFetch<Cohort>(getRejectCohortInactiveFlagUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cohortDeleteInput)
+  }
+);}
+
+
+
+
+
+export const getRejectCohortInactiveFlagMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCohortInactiveFlag>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectCohortInactiveFlag>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext> => {
+
+const mutationKey = ['rejectCohortInactiveFlag'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectCohortInactiveFlag>>, {id: number;data: BodyType<CohortDeleteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rejectCohortInactiveFlag(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectCohortInactiveFlagMutationResult = NonNullable<Awaited<ReturnType<typeof rejectCohortInactiveFlag>>>
+    export type RejectCohortInactiveFlagMutationBody = BodyType<CohortDeleteInput>
+    export type RejectCohortInactiveFlagMutationError = ErrorType<ErrorResponse>
+
+    export const useRejectCohortInactiveFlag = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCohortInactiveFlag>>, TError,{id: number;data: BodyType<CohortDeleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectCohortInactiveFlag>>,
+        TError,
+        {id: number;data: BodyType<CohortDeleteInput>},
+        TContext
+      > => {
+      return useMutation(getRejectCohortInactiveFlagMutationOptions(options));
+    }
+
 export const getDeleteCohortUrl = (id: number,) => {
 
 

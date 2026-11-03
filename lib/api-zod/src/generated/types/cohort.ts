@@ -32,4 +32,11 @@ export interface Cohort {
   subject: FunctionalSkillsSubject | null;
   createdAt: Date;
   updatedAt: Date;
+  /**
+     * Set when a Tutor has flagged this cohort as inactive, pending an Administrator's confirmation or rejection -- null the rest of the time.
+     * @nullable
+     */
+  inactiveFlaggedAt: Date | null;
+  /** @nullable */
+  inactiveFlaggedByName: string | null;
 }

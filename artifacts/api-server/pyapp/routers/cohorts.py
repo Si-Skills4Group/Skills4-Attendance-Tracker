@@ -76,9 +76,12 @@ COHORT_SELECT = """
            c.end_date AS "endDate", c.active, c.external_system_id AS "externalSystemId",
            c.membership_type AS "membershipType", c.subject,
            c.created_at AS "createdAt", c.updated_at AS "updatedAt",
-           CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName"
+           CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName",
+           c.inactive_flagged_at AS "inactiveFlaggedAt",
+           CASE WHEN fu.id IS NULL THEN NULL ELSE concat(fu.first_name, ' ', fu.last_name) END AS "inactiveFlaggedByName"
     FROM cohorts c
     LEFT JOIN tutors t ON c.tutor_id = t.id
+    LEFT JOIN users fu ON c.inactive_flagged_by = fu.id
 """
 
 
@@ -442,7 +445,14 @@ def activate_cohort(cohort_id: int, request: Request, _session: dict = Depends(r
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Cohort not found")
-        cur.execute("UPDATE cohorts SET active = true, updated_at = now() WHERE id = %s", (cohort_id,))
+        # Clears any pending inactive-flag unconditionally -- an admin acting
+        # directly, bypassing the flag/confirm flow entirely, should never
+        # leave a stale flag behind for a later confirm/reject to trip over.
+        cur.execute(
+            "UPDATE cohorts SET active = true, inactive_flagged_at = NULL, inactive_flagged_by = NULL, "
+            "updated_at = now() WHERE id = %s",
+            (cohort_id,),
+        )
         cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
         full = cur.fetchone()
 
@@ -459,13 +469,130 @@ def deactivate_cohort(cohort_id: int, request: Request, _session: dict = Depends
         existing = cur.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Cohort not found")
-        cur.execute("UPDATE cohorts SET active = false, updated_at = now() WHERE id = %s", (cohort_id,))
+        cur.execute(
+            "UPDATE cohorts SET active = false, inactive_flagged_at = NULL, inactive_flagged_by = NULL, "
+            "updated_at = now() WHERE id = %s",
+            (cohort_id,),
+        )
         cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
         full = cur.fetchone()
 
     write_audit_log(
         request, action="deactivate", entity_type="cohort", entity_id=cohort_id, previous_value=existing, new_value=full
     )
+    return full
+
+
+class CohortFlagInactiveInput(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+@router.post("/cohorts/{cohort_id}/flag-inactive")
+def flag_cohort_inactive(
+    cohort_id: int, payload: CohortFlagInactiveInput, request: Request, session: dict = Depends(require_auth)
+):
+    with get_cursor() as cur:
+        require_cohort_access(cur, cohort_id, session)
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        if not existing["active"]:
+            raise HTTPException(status_code=400, detail="Cohort is already inactive")
+        if existing["inactive_flagged_at"] is not None:
+            raise HTTPException(status_code=409, detail="Cohort is already flagged as inactive")
+
+        cur.execute(
+            "UPDATE cohorts SET inactive_flagged_at = now(), inactive_flagged_by = %s, updated_at = now() WHERE id = %s",
+            (session["userId"], cohort_id),
+        )
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        full = cur.fetchone()
+
+        write_audit_log(
+            request, action="cohort_flagged_inactive", entity_type="cohort", entity_id=cohort_id,
+            previous_value=existing, new_value={"reason": payload.reason}, cur=cur,
+        )
+    return full
+
+
+@router.post("/cohorts/{cohort_id}/unflag-inactive")
+def unflag_cohort_inactive(cohort_id: int, request: Request, session: dict = Depends(require_auth)):
+    with get_cursor() as cur:
+        require_cohort_access(cur, cohort_id, session)
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        if existing["inactive_flagged_at"] is None:
+            raise HTTPException(status_code=409, detail="Cohort is not currently flagged as inactive")
+
+        cur.execute(
+            "UPDATE cohorts SET inactive_flagged_at = NULL, inactive_flagged_by = NULL, updated_at = now() WHERE id = %s",
+            (cohort_id,),
+        )
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        full = cur.fetchone()
+
+        write_audit_log(
+            request, action="cohort_inactive_flag_retracted", entity_type="cohort", entity_id=cohort_id,
+            previous_value=existing, new_value=full, cur=cur,
+        )
+    return full
+
+
+@router.post("/cohorts/{cohort_id}/confirm-inactive-flag")
+def confirm_cohort_inactive_flag(cohort_id: int, request: Request, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        if existing["inactive_flagged_at"] is None:
+            raise HTTPException(status_code=409, detail="Cohort is not currently flagged as inactive")
+
+        cur.execute(
+            "UPDATE cohorts SET active = false, inactive_flagged_at = NULL, inactive_flagged_by = NULL, "
+            "updated_at = now() WHERE id = %s",
+            (cohort_id,),
+        )
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        full = cur.fetchone()
+
+        write_audit_log(
+            request, action="cohort_inactive_confirmed", entity_type="cohort", entity_id=cohort_id,
+            previous_value=existing, new_value=full, cur=cur,
+        )
+    return full
+
+
+class CohortRejectInactiveFlagInput(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+@router.post("/cohorts/{cohort_id}/reject-inactive-flag")
+def reject_cohort_inactive_flag(
+    cohort_id: int, payload: CohortRejectInactiveFlagInput, request: Request, _session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM cohorts WHERE id = %s AND deleted_at IS NULL", (cohort_id,))
+        existing = cur.fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Cohort not found")
+        if existing["inactive_flagged_at"] is None:
+            raise HTTPException(status_code=409, detail="Cohort is not currently flagged as inactive")
+
+        cur.execute(
+            "UPDATE cohorts SET inactive_flagged_at = NULL, inactive_flagged_by = NULL, updated_at = now() WHERE id = %s",
+            (cohort_id,),
+        )
+        cur.execute(f"{COHORT_SELECT} WHERE c.id = %s", (cohort_id,))
+        full = cur.fetchone()
+
+        write_audit_log(
+            request, action="cohort_inactive_flag_rejected", entity_type="cohort", entity_id=cohort_id,
+            previous_value=existing, new_value={"reason": payload.reason}, cur=cur,
+        )
     return full
 
 

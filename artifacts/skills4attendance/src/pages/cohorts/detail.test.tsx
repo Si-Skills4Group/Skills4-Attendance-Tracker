@@ -36,6 +36,10 @@ let mockCohortLearners: { data: any[] };
 const mockDeleteMutate = vi.fn();
 const mockUpdateMutate = vi.fn();
 const mockEndSecondaryEnrollmentMutate = vi.fn();
+const mockFlagInactiveMutate = vi.fn();
+const mockUnflagInactiveMutate = vi.fn();
+const mockConfirmFlagMutate = vi.fn();
+const mockRejectFlagMutate = vi.fn();
 
 vi.mock('@workspace/api-client-react', () => ({
   useGetCurrentUser: () => mockCurrentUser,
@@ -46,6 +50,10 @@ vi.mock('@workspace/api-client-react', () => ({
   useUpdateCohort: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useActivateCohort: () => ({ mutate: vi.fn() }),
   useDeactivateCohort: () => ({ mutate: vi.fn() }),
+  useFlagCohortInactive: () => ({ mutate: mockFlagInactiveMutate, isPending: false }),
+  useUnflagCohortInactive: () => ({ mutate: mockUnflagInactiveMutate, isPending: false }),
+  useConfirmCohortInactiveFlag: () => ({ mutate: mockConfirmFlagMutate, isPending: false }),
+  useRejectCohortInactiveFlag: () => ({ mutate: mockRejectFlagMutate, isPending: false }),
   useDeleteCohort: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useEndLearnerSecondaryEnrollment: () => ({ mutate: mockEndSecondaryEnrollmentMutate, isPending: false }),
   getGetCohortQueryKey: (id: number) => ['getCohort', id],
@@ -312,5 +320,121 @@ describe('CohortDetailPage cohort type field', () => {
     mockCohort = { data: { ...cohort, membershipType: 'secondary', subject: 'math' }, isLoading: false };
     renderWithQueryClient(<CohortDetailPage />);
     expect(screen.getByRole('combobox', { name: /subject/i })).toHaveTextContent('Math');
+  });
+});
+
+describe('CohortDetailPage tutor-flagged inactivity', () => {
+  const flaggedCohort = {
+    ...cohort,
+    inactiveFlaggedAt: '2026-03-01T00:00:00Z',
+    inactiveFlaggedByName: 'Terry Tutor',
+  };
+
+  beforeEach(() => {
+    mockParams = { id: '5' };
+    mockCohortLearners = { data: [] };
+    mockFlagInactiveMutate.mockReset();
+    mockUnflagInactiveMutate.mockReset();
+    mockConfirmFlagMutate.mockReset();
+    mockRejectFlagMutate.mockReset();
+  });
+
+  it('offers a tutor "Mark as Inactive" instead of the raw switch on their own active cohort', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
+    mockCohort = { data: cohort, isLoading: false };
+    renderWithQueryClient(<CohortDetailPage />);
+
+    expect(screen.getByRole('button', { name: /mark as inactive/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Toggle active status')).not.toBeInTheDocument();
+  });
+
+  it('requires a reason before a tutor can flag their cohort inactive', async () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
+    mockCohort = { data: cohort, isLoading: false };
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('button', { name: /mark as inactive/i }));
+    const confirmButton = screen.getByRole('button', { name: /^flag as inactive$/i });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Reason'), 'Course finished early');
+    expect(confirmButton).toBeEnabled();
+
+    await user.click(confirmButton);
+    expect(mockFlagInactiveMutate).toHaveBeenCalledWith(
+      { id: 5, data: { reason: 'Course finished early' } },
+      expect.anything(),
+    );
+  });
+
+  it('shows the pending-flag status row (not the switch) to both roles once flagged', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
+    mockCohort = { data: flaggedCohort, isLoading: false };
+    renderWithQueryClient(<CohortDetailPage />);
+
+    expect(screen.getByText(/flagged inactive/i)).toBeInTheDocument();
+    expect(screen.getByText(/terry tutor/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Toggle active status')).not.toBeInTheDocument();
+  });
+
+  it('offers a tutor only Undo on a flagged cohort', () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
+    mockCohort = { data: flaggedCohort, isLoading: false };
+    renderWithQueryClient(<CohortDetailPage />);
+
+    expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^confirm$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /reject/i })).not.toBeInTheDocument();
+  });
+
+  it('calls unflag when a tutor undoes their own flag', async () => {
+    mockCurrentUser = { data: { role: 'tutor', tutorId: 1 } };
+    mockCohort = { data: flaggedCohort, isLoading: false };
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('button', { name: /undo/i }));
+    expect(mockUnflagInactiveMutate).toHaveBeenCalledWith({ id: 5 }, expect.anything());
+  });
+
+  it('offers an admin Undo, Confirm, and Reject on a flagged cohort', () => {
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCohort = { data: flaggedCohort, isLoading: false };
+    renderWithQueryClient(<CohortDetailPage />);
+
+    expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^confirm$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument();
+  });
+
+  it('calls confirm when an admin confirms the flag', async () => {
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCohort = { data: flaggedCohort, isLoading: false };
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('button', { name: /^confirm$/i }));
+    expect(mockConfirmFlagMutate).toHaveBeenCalledWith({ id: 5 }, expect.anything());
+  });
+
+  it('requires a reason before an admin can reject the flag', async () => {
+    mockCurrentUser = { data: { role: 'admin' } };
+    mockCohort = { data: flaggedCohort, isLoading: false };
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('button', { name: /reject/i }));
+    const confirmButton = screen.getByRole('button', { name: /^reject flag$/i });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Reason'), 'Still running');
+    expect(confirmButton).toBeEnabled();
+
+    await user.click(confirmButton);
+    expect(mockRejectFlagMutate).toHaveBeenCalledWith(
+      { id: 5, data: { reason: 'Still running' } },
+      expect.anything(),
+    );
   });
 });

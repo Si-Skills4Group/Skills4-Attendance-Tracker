@@ -970,6 +970,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_fs_requirement_import_rows_job_row
   ON fs_requirement_import_rows (job_id, row_number);
 CREATE INDEX IF NOT EXISTS idx_fs_requirement_import_rows_job_outcome
   ON fs_requirement_import_rows (job_id, outcome);
+
+-- A Tutor can flag their own cohort as inactive, but cannot take it offline
+-- unilaterally -- these two columns hold that one pending flag (a cohort can
+-- only ever have one at a time, so this isn't a separate table) until an
+-- Administrator confirms or rejects it. write_audit_log already covers the
+-- history of flag/confirm/reject/retract actions; these columns are just
+-- current pending-state.
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS inactive_flagged_at timestamptz;
+ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS inactive_flagged_by integer;
 """
 
 

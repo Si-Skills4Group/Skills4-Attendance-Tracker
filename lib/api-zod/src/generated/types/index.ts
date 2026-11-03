@@ -95,6 +95,7 @@ export * from './cohort';
 export * from './cohortCardSummary';
 export * from './cohortDeleteInput';
 export * from './cohortDetail';
+export * from './cohortFlaggedInactive';
 export * from './cohortIdQueryParamParameter';
 export * from './cohortInput';
 export * from './cohortLearner';
