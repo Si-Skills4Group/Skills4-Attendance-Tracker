@@ -1527,6 +1527,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/flag-inactive:
+    post:
+      operationId: flagCohortInactive
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CohortDeleteInput"
+      responses:
+        "200":
+          description: Cohort flagged as inactive, pending Administrator confirmation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "400":
+          description: Cohort is already inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Cohort is already flagged as inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/unflag-inactive:
+    post:
+      operationId: unflagCohortInactive
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pending inactive flag retracted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Cohort is not currently flagged as inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/confirm-inactive-flag:
+    post:
+      operationId: confirmCohortInactiveFlag
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Flag confirmed -- cohort is now inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Cohort is not currently flagged as inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /cohorts/{id}/reject-inactive-flag:
+    post:
+      operationId: rejectCohortInactiveFlag
+      tags: [cohorts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CohortDeleteInput"
+      responses:
+        "200":
+          description: Flag rejected -- cohort remains active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cohort"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Cohort is not currently flagged as inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /cohorts/{id}/delete:
     post:
       operationId: deleteCohort
@@ -5059,6 +5189,8 @@ components:
           subject,
           createdAt,
           updatedAt,
+          inactiveFlaggedAt,
+          inactiveFlaggedByName,
         ]
       properties:
         id: { type: integer }
@@ -5085,6 +5217,14 @@ components:
             null on a 'primary' one.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        inactiveFlaggedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: >-
+            Set when a Tutor has flagged this cohort as inactive, pending an
+            Administrator's confirmation or rejection -- null the rest of the
+            time.
+        inactiveFlaggedByName: { type: ["string", "null"] }
 
     CohortMembershipType:
       type: string
@@ -6862,6 +7002,16 @@ components:
         learnerCount: { type: integer }
         attendancePercentage: { type: number }
 
+    CohortFlaggedInactive:
+      type: object
+      required: [id, name, tutorName, inactiveFlaggedAt, inactiveFlaggedByName]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        tutorName: { type: ["string", "null"] }
+        inactiveFlaggedAt: { type: string, format: date-time }
+        inactiveFlaggedByName: { type: ["string", "null"] }
+
     AdminDashboard:
       type: object
       required:
@@ -6876,6 +7026,7 @@ components:
           sessionsAwaitingCompletion,
           recentlyEditedAttendance,
           lowAttendanceLearners,
+          cohortsFlaggedInactive,
         ]
       properties:
         activeLearners: { type: integer }
@@ -6898,6 +7049,9 @@ components:
         lowAttendanceLearners:
           type: array
           items: { $ref: "#/components/schemas/LearnerAttendanceSummaryRow" }
+        cohortsFlaggedInactive:
+          type: array
+          items: { $ref: "#/components/schemas/CohortFlaggedInactive" }
 
     TutorDashboard:
       type: object

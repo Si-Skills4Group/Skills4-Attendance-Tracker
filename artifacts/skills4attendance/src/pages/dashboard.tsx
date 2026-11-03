@@ -138,6 +138,36 @@ function AdminDashboardView({ data, threshold, filter, onFilterChange }: {
         </Card>
       </div>
 
+      {data.cohortsFlaggedInactive.length > 0 && (
+        <Card className="shadow-sm flex flex-col page-transition-enter stagger-5">
+          <CardHeader className="border-b bg-muted/20 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              Cohorts Flagged Inactive
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 flex-1 overflow-auto max-h-[400px]">
+            <div className="divide-y">
+              {data.cohortsFlaggedInactive.map(cohort => (
+                <div key={cohort.id} className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                  <div>
+                    <p className="font-semibold text-sm">{cohort.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                      <span>{cohort.tutorName ?? "Unassigned"}</span>
+                      <span>•</span>
+                      <span>Flagged {format(parseISO(cohort.inactiveFlaggedAt), "MMM d, yyyy")}</span>
+                    </p>
+                  </div>
+                  <Link href={`/cohorts/${cohort.id}`} className="text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 p-2 rounded-md transition-colors">
+                    <ArrowUpRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Detailed, date-filterable breakdown -- progressive disclosure below the always-visible summary. */}
       <div className="page-transition-enter">
         <h2 className="text-lg font-semibold mb-3">Detailed Breakdown</h2>

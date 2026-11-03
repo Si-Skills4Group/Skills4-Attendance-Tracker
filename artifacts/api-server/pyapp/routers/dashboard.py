@@ -136,6 +136,23 @@ def _sessions_awaiting_completion(
     return cur.fetchall()
 
 
+def _cohorts_flagged_inactive(cur) -> list[dict]:
+    cur.execute(
+        """
+        SELECT c.id, c.name,
+               CASE WHEN t.id IS NULL THEN NULL ELSE concat(t.first_name, ' ', t.last_name) END AS "tutorName",
+               c.inactive_flagged_at AS "inactiveFlaggedAt",
+               CASE WHEN fu.id IS NULL THEN NULL ELSE concat(fu.first_name, ' ', fu.last_name) END AS "inactiveFlaggedByName"
+        FROM cohorts c
+        LEFT JOIN tutors t ON c.tutor_id = t.id
+        LEFT JOIN users fu ON c.inactive_flagged_by = fu.id
+        WHERE c.inactive_flagged_at IS NOT NULL AND c.deleted_at IS NULL
+        ORDER BY c.inactive_flagged_at ASC
+        """
+    )
+    return cur.fetchall()
+
+
 def _recently_edited(cur, cohort_ids: list[int] | None, limit: int = 10) -> list[dict]:
     clauses = ["s.deleted_at IS NULL", "c.deleted_at IS NULL", "l.deleted_at IS NULL"]
     params: list = []
@@ -210,6 +227,7 @@ def get_admin_dashboard(_session: dict = Depends(require_admin)):
 
         sessions_awaiting = _sessions_awaiting_completion(cur, None)
         recent_edits = _recently_edited(cur, None)
+        cohorts_flagged = _cohorts_flagged_inactive(cur)
 
         threshold = _get_threshold(cur)
 
@@ -233,6 +251,7 @@ def get_admin_dashboard(_session: dict = Depends(require_admin)):
         "sessionsAwaitingCompletion": sessions_awaiting,
         "recentlyEditedAttendance": recent_edits,
         "lowAttendanceLearners": low_attendance,
+        "cohortsFlaggedInactive": cohorts_flagged,
     }
 
 
