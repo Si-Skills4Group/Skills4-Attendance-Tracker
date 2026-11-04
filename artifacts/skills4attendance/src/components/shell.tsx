@@ -57,10 +57,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return <PageLoadingSpinner />;
   }
 
-  // Allow rendering just the content for unauthenticated users on login
+  // Allow rendering just the content for unauthenticated users on login.
+  // Anywhere else, a spinner instead of a blank screen while the effect
+  // above redirects to /login -- if that redirect is itself stuck (e.g. a
+  // failed sign-in left auth state unresolved), the user at least sees
+  // something is happening rather than a blank page with no sign it needs
+  // a refresh.
   if (!isAuthenticated) {
     if (location !== '/login') {
-      return null;
+      return <PageLoadingSpinner />;
     }
     return <>{children}</>;
   }
@@ -103,7 +108,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return null;
+    return <PageLoadingSpinner />;
   }
 
   const handleLogout = () => {

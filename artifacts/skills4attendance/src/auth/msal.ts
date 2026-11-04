@@ -46,12 +46,34 @@ function chooseAccount(accounts: AccountInfo[]): AccountInfo | null {
   return accounts[0] ?? null;
 }
 
+// MSAL refuses to start a new loginRedirect/acquireTokenRedirect while it
+// thinks one is already in progress, tracked via a sessionStorage flag it
+// sets before navigating away and clears when handleRedirectPromise
+// resolves. If that promise instead *fails* -- a closed tab, back button,
+// slow network, a browser extension interfering with the redirect back --
+// msal-react's MsalProvider swallows the error (it only unblocks
+// `inProgress`) and never clears this flag, so every subsequent sign-in
+// attempt in that tab throws BrowserAuthError("interaction_in_progress")
+// with no way to recover short of closing the tab. sessionStorage holds
+// nothing but MSAL's own cache here, so clearing just this flag (rather
+// than the whole cache) is a safe, surgical way to unstick it.
+export function clearStuckInteractionState() {
+  for (const key of Object.keys(window.sessionStorage)) {
+    if (key.endsWith(".interaction.status")) {
+      window.sessionStorage.removeItem(key);
+    }
+  }
+}
+
 msalInstance.addEventCallback((event) => {
   if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
     const result = event.payload as AuthenticationResult;
     if (result.account) {
       msalInstance.setActiveAccount(result.account);
     }
+  }
+  if (event.eventType === EventType.LOGIN_FAILURE || event.eventType === EventType.ACQUIRE_TOKEN_FAILURE) {
+    clearStuckInteractionState();
   }
 });
 
