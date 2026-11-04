@@ -1,10 +1,10 @@
 import * as React from "react";
 import { useMsal } from "@azure/msal-react";
-import { InteractionStatus } from "@azure/msal-browser";
+import { BrowserAuthError, InteractionStatus } from "@azure/msal-browser";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, Loader2, LogIn } from "lucide-react";
-import { loginRequest } from "@/auth/msal";
+import { clearStuckInteractionState, loginRequest } from "@/auth/msal";
 import { useAuthState } from "@/auth/use-auth-state";
 import { useToast } from "@/hooks/use-toast";
 
@@ -23,7 +23,21 @@ export default function LoginPage() {
   const handleSignIn = async () => {
     try {
       await instance.loginRedirect(loginRequest);
-    } catch {
+    } catch (error) {
+      // A previous sign-in attempt that didn't finish cleanly (closed tab,
+      // back button, a dropped redirect) can leave MSAL thinking an
+      // interaction is still in progress, so every retry fails before it
+      // even starts. Clear that stuck flag and try once more before giving
+      // up and showing the user an error.
+      if (error instanceof BrowserAuthError && error.errorCode === "interaction_in_progress") {
+        clearStuckInteractionState();
+        try {
+          await instance.loginRedirect(loginRequest);
+          return;
+        } catch {
+          // fall through to the error toast below
+        }
+      }
       toast({
         variant: "destructive",
         title: "Sign-in could not start",
