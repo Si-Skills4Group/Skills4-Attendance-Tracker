@@ -38,6 +38,10 @@ class LinkExistingInput(BaseModel):
     learnerId: int
 
 
+class RelinkInput(BaseModel):
+    confirmStatusMismatch: bool = False
+
+
 class BulkApproveItem(BaseModel):
     itemId: int
     learnerRef: str = Field(min_length=1)
@@ -124,9 +128,13 @@ def link_existing(
 
 
 @router.post("/bud-sync/jobs/{job_id}/items/{item_id}/relink")
-def relink_item(job_id: int, item_id: int, request: Request, session: dict = Depends(require_admin)):
+def relink_item(
+    job_id: int, item_id: int, payload: RelinkInput, request: Request, session: dict = Depends(require_admin),
+):
     with get_cursor() as cur:
-        return bud_sync_lib.relink_to_new_enrollment(cur, job_id, item_id, request, session)
+        return bud_sync_lib.relink_to_new_enrollment(
+            cur, job_id, item_id, request, session, confirm_status_mismatch=payload.confirmStatusMismatch,
+        )
 
 
 @router.patch("/bud-sync/jobs/{job_id}/items/{item_id}")

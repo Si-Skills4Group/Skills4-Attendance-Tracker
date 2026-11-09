@@ -248,3 +248,94 @@ class TestRelinkToNewEnrollment:
         with pytest.raises(HTTPException) as exc:
             relink_to_new_enrollment(db, job["id"], new_item_id, request_factory(admin_user), admin_user)
         assert exc.value.status_code == 409
+
+
+class TestRelinkTerminalStatusGuard:
+    """Confirmed in production: two learners got silently re-baselined onto
+    an already-Withdrawn sibling plan because relink_to_new_enrollment never
+    checked status at all -- the accepted snapshot caught up to "Withdrawn"
+    with zero prompt, and neither learner was ever flagged again. These
+    guard the fix: relinking onto a terminal-status (Withdrawn/Completed)
+    row that disagrees with the learner's own current status must be
+    refused unless explicitly confirmed."""
+
+    def _setup_terminal_sibling_scenario(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+        new_row_status_desc: str, learner_status: str = "active",
+    ):
+        learner = learner_factory(status=learner_status)
+        baseline_factory()
+        old_row = bud_row_factory(
+            learner_reference=learner["learner_ref"], programme_name="Pharmacy Services Assistant v3.1",
+            status_desc="In Progress",
+        )
+        _link_learner_via_full_cycle(db, request_factory, admin_user, learner, old_row)
+
+        db.execute(
+            "UPDATE public.learner_progress SET status_desc = 'Withdrawn' WHERE learning_plan_id = %s",
+            (old_row["learningPlanId"],),
+        )
+        new_row = bud_row_factory(
+            learner_reference=learner["learner_ref"], programme_name="Pharmacy Technician (Integrated)",
+            status_desc=new_row_status_desc, synced_at="2099-01-01T00:00:00Z",
+        )
+        job2 = run_preview(db, request_factory(admin_user), admin_user)
+        db.execute(
+            'SELECT id FROM bud_sync_item WHERE sync_job_id = %s AND source_identifier = %s',
+            (job2["id"], new_row["learningPlanId"]),
+        )
+        new_item_id = db.fetchone()["id"]
+        return learner, job2, new_item_id
+
+    def test_refuses_to_relink_onto_a_withdrawn_row_when_learner_is_still_active(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner, job, new_item_id = self._setup_terminal_sibling_scenario(
+            db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+            new_row_status_desc="Withdrawn", learner_status="active",
+        )
+        with pytest.raises(HTTPException) as exc:
+            relink_to_new_enrollment(db, job["id"], new_item_id, request_factory(admin_user), admin_user)
+        assert exc.value.status_code == 409
+        assert exc.value.detail["reason"] == "relink_target_status_mismatch"
+
+        db.execute("SELECT status FROM learners WHERE id = %s", (learner["id"],))
+        assert db.fetchone()["status"] == "active"  # refused -- nothing applied
+
+    def test_confirm_status_mismatch_allows_it_through(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner, job, new_item_id = self._setup_terminal_sibling_scenario(
+            db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+            new_row_status_desc="Withdrawn", learner_status="active",
+        )
+        relink_to_new_enrollment(
+            db, job["id"], new_item_id, request_factory(admin_user), admin_user, confirm_status_mismatch=True,
+        )
+        link = _find_link_by_learner_id(db, learner["id"])
+        assert (link["acceptedValues"] or {}).get("statusDesc") == "Withdrawn"
+
+    def test_no_guard_needed_when_the_target_status_already_matches_the_learner(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        """A learner already marked withdrawn, relinking onto a plan that's
+        also Withdrawn, is not the dangerous case this guards against --
+        must not require confirmation."""
+        learner, job, new_item_id = self._setup_terminal_sibling_scenario(
+            db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+            new_row_status_desc="Withdrawn", learner_status="withdrawn",
+        )
+        relink_to_new_enrollment(db, job["id"], new_item_id, request_factory(admin_user), admin_user)
+        link = _find_link_by_learner_id(db, learner["id"])
+        assert (link["acceptedValues"] or {}).get("statusDesc") == "Withdrawn"
+
+    def test_no_guard_needed_for_a_non_terminal_target_status(
+        self, db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+    ):
+        learner, job, new_item_id = self._setup_terminal_sibling_scenario(
+            db, admin_user, request_factory, bud_row_factory, baseline_factory, learner_factory,
+            new_row_status_desc="In Progress", learner_status="active",
+        )
+        relink_to_new_enrollment(db, job["id"], new_item_id, request_factory(admin_user), admin_user)
+        link = _find_link_by_learner_id(db, learner["id"])
+        assert (link["acceptedValues"] or {}).get("statusDesc") == "In Progress"

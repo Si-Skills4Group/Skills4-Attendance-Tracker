@@ -5736,6 +5736,12 @@ export const RelinkBudSyncJobItemParams = zod.object({
   "itemId": zod.coerce.number()
 })
 
+export const relinkBudSyncJobItemBodyConfirmStatusMismatchDefault = false;
+
+export const RelinkBudSyncJobItemBody = zod.object({
+  "confirmStatusMismatch": zod.boolean().default(relinkBudSyncJobItemBodyConfirmStatusMismatchDefault).describe('Required when the enrolment being switched to already reports a terminal Bud status (Withdrawn\/Completed) that disagrees with the learner\'s current Attendance status -- otherwise the request is rejected with 409 so a withdrawn\/completed sibling can never be adopted as the accepted enrolment by accident.')
+})
+
 export const RelinkBudSyncJobItemResponse = zod.object({
   "id": zod.number(),
   "baselineId": zod.number(),

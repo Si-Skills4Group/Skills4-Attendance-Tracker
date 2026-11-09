@@ -75,6 +75,7 @@ export * from './budSyncJobStatus';
 export * from './budSyncJobSummary';
 export * from './budSyncLinkExistingInput';
 export * from './budSyncMatchStatus';
+export * from './budSyncRelinkInput';
 export * from './budSyncStatus';
 export * from './budSyncUnmatchedPreBaselineItem';
 export * from './budSyncUnmatchedPreBaselineResponse';

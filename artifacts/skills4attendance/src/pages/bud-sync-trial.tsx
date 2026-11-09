@@ -118,6 +118,7 @@ export default function BudSyncTrialPage() {
   const [linkItem, setLinkItem] = React.useState<BudSyncItem | null>(null);
   const [linkSearch, setLinkSearch] = React.useState("");
   const [relinkItem, setRelinkItem] = React.useState<BudSyncItem | null>(null);
+  const [relinkStatusMismatchConfirmed, setRelinkStatusMismatchConfirmed] = React.useState(false);
 
   // New Learners bulk-ingest: per-row learnerRef/level drafts (Bud has no
   // equivalent for either, so they always need typing) and which rows are
@@ -367,10 +368,20 @@ export default function BudSyncTrialPage() {
         other.reason === "linked_bud_record_has_sibling_enrollment",
     );
 
+  // Mirrors the backend's own relink guard (bud_sync_lib.relink_to_new_enrollment):
+  // a sibling plan already reporting Withdrawn/Completed is almost never the one
+  // to switch to -- it's usually the old, already-withdrawn enrolment picked by
+  // mistake. Shown client-side so the Administrator sees the risk before
+  // submitting, not just after a 409 bounces back.
+  const isRelinkTargetTerminalStatus = (item: BudSyncItem): boolean => {
+    const statusDesc = item.proposedValues?.statusDesc as string | undefined;
+    return statusDesc === "Withdrawn" || statusDesc === "Completed";
+  };
+
   const submitRelink = () => {
     if (!relinkItem) return;
     relinkMutation.mutate(
-      { jobId: relinkItem.syncJobId, itemId: relinkItem.id },
+      { jobId: relinkItem.syncJobId, itemId: relinkItem.id, data: { confirmStatusMismatch: relinkStatusMismatchConfirmed } },
       {
         onSuccess: () => {
           invalidateJob();
@@ -922,7 +933,7 @@ export default function BudSyncTrialPage() {
           Bud standard and enrolled on another; the old enrolment is shown
           alongside the new one so the Administrator can see exactly what
           they're switching before confirming. */}
-      <Dialog open={!!relinkItem} onOpenChange={(o) => { if (!o) setRelinkItem(null); }}>
+      <Dialog open={!!relinkItem} onOpenChange={(o) => { if (!o) { setRelinkItem(null); setRelinkStatusMismatchConfirmed(false); } }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Switch {itemDisplayName(relinkItem)} to their new enrolment</DialogTitle>
@@ -945,9 +956,31 @@ export default function BudSyncTrialPage() {
               </div>
             </div>
           )}
+          {relinkItem && isRelinkTargetTerminalStatus(relinkItem) && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm space-y-2">
+              <div className="flex items-start gap-2 text-destructive font-medium">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  This enrolment already shows "{relinkItem.proposedValues?.statusDesc as string}" in Bud. Switching to
+                  it will be treated as the learner's accepted status going forward -- if this is actually the old,
+                  already-withdrawn enrolment, pick the other one instead.
+                </span>
+              </div>
+              <label className="flex items-center gap-2 text-sm font-normal">
+                <Checkbox
+                  checked={relinkStatusMismatchConfirmed}
+                  onCheckedChange={(c) => setRelinkStatusMismatchConfirmed(c === true)}
+                />
+                This is genuinely the correct enrolment for this learner
+              </label>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRelinkItem(null)}>Cancel</Button>
-            <Button onClick={submitRelink} disabled={relinkMutation.isPending}>
+            <Button
+              onClick={submitRelink}
+              disabled={relinkMutation.isPending || (!!relinkItem && isRelinkTargetTerminalStatus(relinkItem) && !relinkStatusMismatchConfirmed)}
+            >
               {relinkMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Switch to this enrolment
             </Button>
