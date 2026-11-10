@@ -46,7 +46,7 @@ from fastapi import HTTPException, Request
 
 from .allocation_lib import apply_transfer
 from .audit import write_audit_log
-from .bud_status_mapping import classify_status_transition
+from .bud_status_mapping import BUD_STATUS_TO_LEARNER_STATUS, classify_status_transition
 from .correlation import get_correlation_id
 
 # Bud-owned learner fields this trial will propose synchronising, and their
@@ -1282,7 +1282,9 @@ def link_existing_learner(cur, job_id: int, item_id: int, target_learner_id: int
     return get_job(cur, job_id)
 
 
-def relink_to_new_enrollment(cur, job_id: int, item_id: int, request: Request, session: dict) -> dict:
+def relink_to_new_enrollment(
+    cur, job_id: int, item_id: int, request: Request, session: dict, confirm_status_mismatch: bool = False,
+) -> dict:
     """Resolves a 'linked_bud_record_has_sibling_enrollment'-class conflict
     pair: a learner re-enrolled on a new Bud standard while their old,
     now-withdrawn enrolment is still the one bud_learner_link points at.
@@ -1304,7 +1306,18 @@ def relink_to_new_enrollment(cur, job_id: int, item_id: int, request: Request, s
     ON CONFLICT re-points the single link at this new plan and re-baselines
     accepted_values to what was just applied -- so the next sync diffs
     against the new enrolment, not the old one. The sibling old-plan item is
-    marked resolved as a side effect, not a second click."""
+    marked resolved as a side effect, not a second click.
+
+    One guard on top of "the Administrator decides separately": if the row
+    being relinked to is itself one Bud reports as Withdrawn/Completed, and
+    the learner's own current status disagrees, this is almost never a
+    genuine re-enrolment -- it's the *old*, already-withdrawn sibling picked
+    by mistake (confirmed in production: this silently re-baselined two
+    learners onto a withdrawn plan with no further prompt, ever, because
+    status is deliberately never diffed on relink). Rather than relax that
+    deliberate no-status-diff rule, this just refuses to relink onto a
+    terminal-status row silently -- confirm_status_mismatch=True is required
+    to proceed anyway, for the rare case where that really is correct."""
     cur.execute("SELECT status FROM bud_sync_job WHERE id = %s", (job_id,))
     job = cur.fetchone()
     if not job:
@@ -1339,8 +1352,29 @@ def relink_to_new_enrollment(cur, job_id: int, item_id: int, request: Request, s
         raise HTTPException(status_code=409, detail="This Bud row is no longer present in the source -- generate a new preview")
 
     old_link = _find_link_by_learner_id(cur, target_learner_id)
-    cur.execute('SELECT programme FROM learners WHERE id = %s', (target_learner_id,))
-    old_programme = cur.fetchone()["programme"]
+    cur.execute('SELECT programme, status FROM learners WHERE id = %s', (target_learner_id,))
+    target_learner = cur.fetchone()
+    old_programme = target_learner["programme"]
+
+    target_status = BUD_STATUS_TO_LEARNER_STATUS.get(fresh_row.get("statusDesc"))
+    if (
+        target_status in ("withdrawn", "completed")
+        and target_status != target_learner["status"]
+        and not confirm_status_mismatch
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason": "relink_target_status_mismatch",
+                "budStatusDesc": fresh_row.get("statusDesc"),
+                "currentLearnerStatus": target_learner["status"],
+                "message": (
+                    f"This enrolment is already reported as '{fresh_row.get('statusDesc')}' in Bud, which "
+                    f"disagrees with the learner's current Attendance status ('{target_learner['status']}'). "
+                    "Confirm this is genuinely the correct enrolment before switching to it."
+                ),
+            },
+        )
 
     # Everything else this learner_reference currently matches, captured
     # before the upsert below -- recorded onto the new link afterwards so

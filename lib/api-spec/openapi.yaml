@@ -4201,6 +4201,12 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudSyncRelinkInput"
       responses:
         "200":
           description: >-
@@ -4227,7 +4233,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: The Bud reference no longer resolves to exactly one learner, or the source row has disappeared since preview
+          description: >-
+            The Bud reference no longer resolves to exactly one learner, the
+            source row has disappeared since preview, or this enrolment
+            already reports a terminal status (Withdrawn/Completed)
+            disagreeing with the learner's current Attendance status and
+            confirmStatusMismatch was not set.
           content:
             application/json:
               schema:
@@ -7771,6 +7782,19 @@ components:
       required: [learnerId]
       properties:
         learnerId: { type: integer }
+
+    BudSyncRelinkInput:
+      type: object
+      properties:
+        confirmStatusMismatch:
+          type: boolean
+          default: false
+          description: >-
+            Required when the enrolment being switched to already reports a
+            terminal Bud status (Withdrawn/Completed) that disagrees with
+            the learner's current Attendance status -- otherwise the request
+            is rejected with 409 so a withdrawn/completed sibling can never
+            be adopted as the accepted enrolment by accident.
 
     BudSyncBulkApproveItem:
       type: object

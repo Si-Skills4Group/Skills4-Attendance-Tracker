@@ -2666,6 +2666,11 @@ export interface BudSyncLinkExistingInput {
   learnerId: number;
 }
 
+export interface BudSyncRelinkInput {
+  /** Required when the enrolment being switched to already reports a terminal Bud status (Withdrawn/Completed) that disagrees with the learner's current Attendance status -- otherwise the request is rejected with 409 so a withdrawn/completed sibling can never be adopted as the accepted enrolment by accident. */
+  confirmStatusMismatch?: boolean;
+}
+
 export interface BudSyncBulkApproveItem {
   itemId: number;
   /** @minLength 1 */

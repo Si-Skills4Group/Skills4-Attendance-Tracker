@@ -462,7 +462,33 @@ describe('BudSyncTrialPage', () => {
       await user.click(screen.getByRole('button', { name: /switch to this enrolment/i }));
 
       expect(mutateSpies.relink).toHaveBeenCalledWith(
-        { jobId: 9, itemId: 21 },
+        { jobId: 9, itemId: 21, data: { confirmStatusMismatch: false } },
+        expect.anything(),
+      );
+    });
+
+    it('warns and blocks confirming when the new enrolment itself is already Withdrawn/Completed, until acknowledged', async () => {
+      activateJob();
+      const terminalNewEnrollment = {
+        ...newEnrollmentConflict,
+        proposedValues: { programmeName: 'Pharmacy Technician (Integrated)', statusDesc: 'Withdrawn' },
+      };
+      conflictItems = [oldEnrollmentConflict, terminalNewEnrollment];
+      const user = userEvent.setup();
+      renderWithQueryClient(<BudSyncTrialPage />);
+      await user.click(screen.getByRole('tab', { name: /conflicts/i }));
+
+      await user.click(screen.getByRole('button', { name: /resolve/i }));
+
+      expect(screen.getByText(/already shows "Withdrawn" in Bud/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /switch to this enrolment/i })).toBeDisabled();
+
+      await user.click(screen.getByRole('checkbox', { name: /genuinely the correct enrolment/i }));
+      expect(screen.getByRole('button', { name: /switch to this enrolment/i })).toBeEnabled();
+
+      await user.click(screen.getByRole('button', { name: /switch to this enrolment/i }));
+      expect(mutateSpies.relink).toHaveBeenCalledWith(
+        { jobId: 9, itemId: 21, data: { confirmStatusMismatch: true } },
         expect.anything(),
       );
     });

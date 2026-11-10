@@ -57,6 +57,7 @@ import type {
   BudSyncJobListResponse,
   BudSyncJobSummary,
   BudSyncLinkExistingInput,
+  BudSyncRelinkInput,
   BudSyncStatus,
   BudSyncUnmatchedPreBaselineResponse,
   CancelScheduledAllocationResult,
@@ -11702,14 +11703,15 @@ export const getRelinkBudSyncJobItemUrl = (jobId: number,
 }
 
 export const relinkBudSyncJobItem = async (jobId: number,
-    itemId: number, options?: RequestInit): Promise<BudSyncJob> => {
+    itemId: number,
+    budSyncRelinkInput: BudSyncRelinkInput, options?: RequestInit): Promise<BudSyncJob> => {
 
   return customFetch<BudSyncJob>(getRelinkBudSyncJobItemUrl(jobId,itemId),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(budSyncRelinkInput)
   }
 );}
 
@@ -11718,8 +11720,8 @@ export const relinkBudSyncJobItem = async (jobId: number,
 
 
 export const getRelinkBudSyncJobItemMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, TError,{jobId: number;itemId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, TError,{jobId: number;itemId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, TError,{jobId: number;itemId: number;data: BodyType<BudSyncRelinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, TError,{jobId: number;itemId: number;data: BodyType<BudSyncRelinkInput>}, TContext> => {
 
 const mutationKey = ['relinkBudSyncJobItem'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -11731,10 +11733,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, {jobId: number;itemId: number}> = (props) => {
-          const {jobId,itemId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, {jobId: number;itemId: number;data: BodyType<BudSyncRelinkInput>}> = (props) => {
+          const {jobId,itemId,data} = props ?? {};
 
-          return  relinkBudSyncJobItem(jobId,itemId,requestOptions)
+          return  relinkBudSyncJobItem(jobId,itemId,data,requestOptions)
         }
 
 
@@ -11745,15 +11747,15 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RelinkBudSyncJobItemMutationResult = NonNullable<Awaited<ReturnType<typeof relinkBudSyncJobItem>>>
-
+    export type RelinkBudSyncJobItemMutationBody = BodyType<BudSyncRelinkInput>
     export type RelinkBudSyncJobItemMutationError = ErrorType<ErrorResponse>
 
     export const useRelinkBudSyncJobItem = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, TError,{jobId: number;itemId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof relinkBudSyncJobItem>>, TError,{jobId: number;itemId: number;data: BodyType<BudSyncRelinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof relinkBudSyncJobItem>>,
         TError,
-        {jobId: number;itemId: number},
+        {jobId: number;itemId: number;data: BodyType<BudSyncRelinkInput>},
         TContext
       > => {
       return useMutation(getRelinkBudSyncJobItemMutationOptions(options));
