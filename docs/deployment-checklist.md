@@ -10,8 +10,8 @@ For deploying `main` to the live Container App (`s4-attendance-app-gzn5bh`, reso
 
 ## 2. Test status
 
-- [ ] Backend: `pytest` full suite green (672+ tests as of the cover-tutor phase; run from `artifacts/api-server` with `TEST_DATABASE_URL` set — see README.md).
-- [ ] Frontend: `tsc --noEmit`, `vitest run` (197+ tests), `vite build` all green (via the win32 workaround cycle in `pnpm-workspace.yaml` if building on Windows — see README.md's Gotchas section; revert the workaround afterwards).
+- [ ] Backend: `pytest` full suite green (1100+ tests and growing — check the current count with `pytest --collect-only -q`; run from `artifacts/api-server` with `TEST_DATABASE_URL` set — see README.md).
+- [ ] Frontend: `tsc --noEmit`, `vitest run` (350+ tests and growing), `vite build` all green (via the win32 workaround cycle in `pnpm-workspace.yaml` if building on Windows — see README.md's Gotchas section; revert the workaround afterwards).
 - [ ] No test was skipped or marked `xfail` to make this pass.
 - [ ] Since the CI/CD pipeline (`.github/workflows/ci-cd.yml`) now runs both suites automatically on every push/PR to `main`, this item is normally already satisfied by a green run on the commit you're about to deploy — check the Actions tab rather than re-running everything locally, unless you have local changes CI hasn't seen yet.
 
@@ -56,7 +56,7 @@ Compare the Container App's current env/secrets against `docs/entra-phase2.md`'s
 
 ## 9. Infrastructure what-if
 
-There is no infrastructure-as-code in this repo (Container App, ACR, and Postgres Flexible Server were all provisioned by hand via `az` CLI/Portal — see `docs/azure-configuration.md`). There is nothing to run `az deployment group what-if` against. If IaC is introduced later, this step becomes mandatory before every apply.
+There is no infrastructure-as-code in this repo (Container App, ACR, and Postgres Flexible Server were all provisioned by hand via `az` CLI/Portal — the verified, `az`-queried configuration that exists is recorded in `docs/backup-and-recovery.md` §1-2, not a separate file). There is nothing to run `az deployment group what-if` against. If IaC is introduced later, this step becomes mandatory before every apply.
 
 ## 10. Migration execution
 
