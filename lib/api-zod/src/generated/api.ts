@@ -697,6 +697,7 @@ export const ListTutorsResponseItem = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -710,6 +711,7 @@ export const createTutorBodyPasswordMin = 8;
 
 
 export const createTutorBodyActiveDefault = true;
+export const createTutorBodyIsTeachingTutorDefault = true;
 
 export const CreateTutorBody = zod.object({
   "firstName": zod.string().min(1),
@@ -719,7 +721,8 @@ export const CreateTutorBody = zod.object({
   "employeeRef": zod.string().min(1).optional(),
   "phone": zod.string().optional(),
   "active": zod.boolean().default(createTutorBodyActiveDefault),
-  "externalSystemId": zod.string().optional()
+  "externalSystemId": zod.string().optional(),
+  "isTeachingTutor": zod.boolean().default(createTutorBodyIsTeachingTutorDefault)
 })
 
 export const CreateTutorResponse = zod.object({
@@ -732,6 +735,7 @@ export const CreateTutorResponse = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -935,6 +939,7 @@ export const GetTutorResponse = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -960,7 +965,8 @@ export const UpdateTutorBody = zod.object({
   "employeeRef": zod.string().min(1).optional(),
   "phone": zod.string().optional(),
   "active": zod.boolean().optional(),
-  "externalSystemId": zod.string().optional()
+  "externalSystemId": zod.string().optional(),
+  "isTeachingTutor": zod.boolean().optional()
 })
 
 export const UpdateTutorResponse = zod.object({
@@ -973,6 +979,7 @@ export const UpdateTutorResponse = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -992,6 +999,7 @@ export const ActivateTutorResponse = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -1017,6 +1025,7 @@ export const DeactivateTutorResponse = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -3892,6 +3901,7 @@ export const GetTutorReportV2Response = zod.object({
   "phone": zod.string().nullable(),
   "active": zod.boolean(),
   "externalSystemId": zod.string().nullable(),
+  "isTeachingTutor": zod.boolean(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }),

@@ -3,6 +3,9 @@ in an earlier phase, not new in this one) can answer the questions the
 next allocation phase will need, and that learners.tutor_id/cohort_id
 stay in sync with the latest allocation event."""
 
+import pytest
+from fastapi import HTTPException
+
 from pyapp.routers.allocation_routes import AllocationInput, allocate_learners
 
 
@@ -50,6 +53,17 @@ def test_allocate_records_previous_and_new_tutor_and_cohort(db, request_factory,
     assert row["new_cohort_id"] == new_cohort["id"]
     assert row["transfer_reason"] == "Capacity rebalance"
     assert row["changed_by"] == admin_user["userId"]
+
+
+def test_allocate_rejects_a_non_teaching_tutor(db, request_factory, admin_user, tutor_factory, learner_factory):
+    non_teaching = tutor_factory(is_teaching_tutor=False)
+    learner = learner_factory()
+
+    payload = AllocationInput(learnerIds=[learner["id"]], tutorId=non_teaching["tutorId"], effectiveDate="2026-01-15")
+    with pytest.raises(HTTPException) as exc:
+        allocate_learners(payload, request_factory(), admin_user)
+    assert exc.value.status_code == 400
+    assert "non-teaching tutor" in str(exc.value.detail).lower()
 
 
 def test_current_learner_fields_stay_consistent_with_latest_allocation(db, request_factory, admin_user, tutor_factory, learner_factory):

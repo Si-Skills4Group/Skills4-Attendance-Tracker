@@ -159,6 +159,7 @@ export interface Tutor {
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;
+  isTeachingTutor: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -177,6 +178,7 @@ export interface TutorInput {
   phone?: string;
   active?: boolean;
   externalSystemId?: string;
+  isTeachingTutor?: boolean;
 }
 
 export interface TutorUpdate {
@@ -193,6 +195,7 @@ export interface TutorUpdate {
   phone?: string;
   active?: boolean;
   externalSystemId?: string;
+  isTeachingTutor?: boolean;
 }
 
 export type FunctionalSkillsSubject = typeof FunctionalSkillsSubject[keyof typeof FunctionalSkillsSubject];

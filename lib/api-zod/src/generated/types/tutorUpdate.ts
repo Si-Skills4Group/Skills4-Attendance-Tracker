@@ -20,4 +20,5 @@ export interface TutorUpdate {
   phone?: string;
   active?: boolean;
   externalSystemId?: string;
+  isTeachingTutor?: boolean;
 }

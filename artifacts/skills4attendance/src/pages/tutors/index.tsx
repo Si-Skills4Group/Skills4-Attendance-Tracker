@@ -5,6 +5,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -158,11 +159,16 @@ export default function TutorsPage() {
                       {tutor.firstName[0]}{tutor.lastName[0]}
                     </div>
                     <div>
-                      <Link href={`/tutors/${tutor.id}`}>
-                        <h3 className="font-semibold text-base hover:text-primary hover:underline cursor-pointer">
-                          {tutor.firstName} {tutor.lastName}
-                        </h3>
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/tutors/${tutor.id}`}>
+                          <h3 className="font-semibold text-base hover:text-primary hover:underline cursor-pointer">
+                            {tutor.firstName} {tutor.lastName}
+                          </h3>
+                        </Link>
+                        {!tutor.isTeachingTutor && (
+                          <Badge variant="outline" className="text-xs font-normal">Non-teaching</Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                         <BookOpen className="w-3 h-3" /> {cohortCountByTutor.get(tutor.id) ?? 0} cohort{(cohortCountByTutor.get(tutor.id) ?? 0) === 1 ? "" : "s"}
                       </p>

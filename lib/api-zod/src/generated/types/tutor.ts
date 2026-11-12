@@ -19,6 +19,7 @@ export interface Tutor {
   active: boolean;
   /** @nullable */
   externalSystemId: string | null;
+  isTeachingTutor: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

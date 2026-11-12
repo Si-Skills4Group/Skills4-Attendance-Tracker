@@ -33,6 +33,7 @@ const baseTutorSchema = z.object({
   phone: z.string().optional(),
   active: z.boolean().default(true),
   externalSystemId: z.string().optional(),
+  isTeachingTutor: z.boolean().default(true),
 });
 
 export default function TutorDetailPage() {
@@ -69,6 +70,7 @@ export default function TutorDetailPage() {
       phone: "",
       active: true,
       externalSystemId: "",
+      isTeachingTutor: true,
     }
   });
 
@@ -85,6 +87,7 @@ export default function TutorDetailPage() {
         phone: tutor.phone || "",
         active: tutor.active,
         externalSystemId: tutor.externalSystemId || "",
+        isTeachingTutor: tutor.isTeachingTutor,
       });
     }
   }, [tutor, tutorId, form]);
@@ -231,6 +234,22 @@ export default function TutorDetailPage() {
                     </FormItem>
                   )} />
                 </div>
+
+                <FormField control={form.control} name="isTeachingTutor" render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-card">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Teaching Tutor</FormLabel>
+                      <FormDescription>
+                        Off for a non-teaching placeholder (e.g. an admissions/recruitment holding record). Non-teaching
+                        tutors are excluded from cohort, cover-tutor, and transfer assignment, and from attendance
+                        breakdown reports.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )} />
 
                 {isNew ? (
                   <FormField control={form.control} name="active" render={({ field }) => (

@@ -316,6 +316,21 @@ class TestOrganisationReport:
         tutor_ids = {tutor_a["tutorId"], tutor_b["tutorId"]}
         assert tutor_ids <= {t["tutorId"] for t in body["tutorBreakdown"]}
 
+    def test_non_teaching_tutor_excluded_from_breakdown_and_active_count(
+        self, client, monkeypatch, admin_user, tutor_factory
+    ):
+        _as_admin(client, monkeypatch)
+        before = client.get(f"/api/reports/organisation?{PERIOD_QS}").json()["activeTutors"]
+
+        non_teaching = tutor_factory(is_teaching_tutor=False)
+
+        response = client.get(f"/api/reports/organisation?{PERIOD_QS}")
+        assert response.status_code == 200
+        body = response.json()
+
+        assert non_teaching["tutorId"] not in {t["tutorId"] for t in body["tutorBreakdown"]}
+        assert body["activeTutors"] == before
+
     def test_subject_breakdown_separates_math_from_english(
         self, client, monkeypatch, db, admin_user, cohort_factory, learner_factory, attendance_session_factory,
     ):

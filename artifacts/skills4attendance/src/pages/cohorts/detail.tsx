@@ -405,7 +405,7 @@ export default function CohortDetailPage() {
                             <Combobox
                               options={[
                                 { value: "", label: "Unassigned" },
-                                ...tutors.map(t => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+                                ...tutors.filter(t => t.isTeachingTutor).map(t => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
                               ]}
                               value={field.value ? String(field.value) : ""}
                               onValueChange={field.onChange}

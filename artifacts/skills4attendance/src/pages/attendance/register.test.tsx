@@ -88,7 +88,7 @@ function renderAtLocation(searchPath = '') {
 describe('RegisterPage', () => {
   beforeEach(() => {
     mockCurrentUser = { data: { role: 'admin' } };
-    mockTutors = { data: [{ id: 10, firstName: 'Tam', lastName: 'Tutor' }, { id: 20, firstName: 'Cara', lastName: 'Cover' }] };
+    mockTutors = { data: [{ id: 10, firstName: 'Tam', lastName: 'Tutor', isTeachingTutor: true }, { id: 20, firstName: 'Cara', lastName: 'Cover', isTeachingTutor: true }] };
     mockSavePending = false;
     mockCompletePending = false;
     mockUpdateMutate.mockReset();
@@ -960,12 +960,31 @@ describe('RegisterPage', () => {
       );
     });
 
+    it('excludes a non-teaching tutor from the replacement tutor dropdown', async () => {
+      mockRegister = { data: { session: makeSession(), entries }, isLoading: false };
+      mockTutors = {
+        data: [
+          { id: 10, firstName: 'Tam', lastName: 'Tutor', isTeachingTutor: true },
+          { id: 20, firstName: 'Cara', lastName: 'Cover', isTeachingTutor: true },
+          { id: 40, firstName: 'Admissions', lastName: 'Team', isTeachingTutor: false },
+        ],
+      };
+      const user = userEvent.setup();
+      renderAtLocation();
+
+      await user.click(screen.getByRole('button', { name: /assign cover tutor/i }));
+      await user.click(screen.getByRole('combobox', { name: /replacement tutor/i }));
+
+      expect(await screen.findByText('Cara Cover')).toBeInTheDocument();
+      expect(screen.queryByText('Admissions Team')).not.toBeInTheDocument();
+    });
+
     it('changes an existing cover tutor to a different one', async () => {
       mockRegister = {
         data: { session: makeSession({ coverTutorId: 20, coverTutorName: 'Cara Cover', registerVersion: 2 }), entries },
         isLoading: false,
       };
-      mockTutors = { data: [{ id: 10, firstName: 'Tam', lastName: 'Tutor' }, { id: 20, firstName: 'Cara', lastName: 'Cover' }, { id: 30, firstName: 'Dev', lastName: 'Deputy' }] };
+      mockTutors = { data: [{ id: 10, firstName: 'Tam', lastName: 'Tutor', isTeachingTutor: true }, { id: 20, firstName: 'Cara', lastName: 'Cover', isTeachingTutor: true }, { id: 30, firstName: 'Dev', lastName: 'Deputy', isTeachingTutor: true }] };
       const user = userEvent.setup();
       renderAtLocation();
 

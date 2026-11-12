@@ -5,8 +5,9 @@ import { renderWithQueryClient } from '@/test/test-utils';
 import AllocationPage from './allocation';
 
 const tutors = [
-  { id: 10, firstName: 'Tam', lastName: 'Tutor' },
-  { id: 20, firstName: 'Cara', lastName: 'Cover' },
+  { id: 10, firstName: 'Tam', lastName: 'Tutor', isTeachingTutor: true },
+  { id: 20, firstName: 'Cara', lastName: 'Cover', isTeachingTutor: true },
+  { id: 30, firstName: 'Admissions', lastName: 'Team', isTeachingTutor: false },
 ];
 
 const cohorts = [
@@ -171,6 +172,15 @@ describe('AllocationPage', () => {
     await user.click(await screen.findByText('Cara Cover'));
 
     expect(screen.getByRole('combobox', { name: /target cohort/i })).toHaveTextContent('Leave unchanged');
+  });
+
+  it('excludes a non-teaching tutor from the target tutor dropdown', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('combobox', { name: /target tutor/i }));
+    expect(await screen.findByText('Cara Cover')).toBeInTheDocument();
+    expect(screen.queryByText('Admissions Team')).not.toBeInTheDocument();
   });
 
   it('executes a transfer with the selected learner ids and chosen target', async () => {

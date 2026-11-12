@@ -96,3 +96,36 @@ def test_update_tutor_deactivation_goes_through_the_same_guard(db, request_facto
     with pytest.raises(HTTPException) as exc:
         update_tutor(tutor["tutorId"], TutorUpdate(active=False), request_factory(), confirm=False, _session=admin_user)
     assert exc.value.status_code == 409
+
+
+def test_tutor_defaults_to_teaching_when_not_specified(db, request_factory, admin_user):
+    payload = TutorInput(firstName="Default", lastName="Teaching", email="default-teaching@example.com")
+    created = create_tutor(payload, request_factory(), admin_user)
+    try:
+        assert created["isTeachingTutor"] is True
+    finally:
+        _cleanup_tutor(db, created["id"])
+
+
+def test_tutor_can_be_created_as_non_teaching(db, request_factory, admin_user):
+    payload = TutorInput(
+        firstName="Admissions", lastName="Team", email="admissions-team@example.com", isTeachingTutor=False
+    )
+    created = create_tutor(payload, request_factory(), admin_user)
+    try:
+        assert created["isTeachingTutor"] is False
+    finally:
+        _cleanup_tutor(db, created["id"])
+
+
+def test_is_teaching_tutor_round_trips_on_update(db, request_factory, tutor_factory, admin_user):
+    tutor = tutor_factory()
+    updated = update_tutor(
+        tutor["tutorId"], TutorUpdate(isTeachingTutor=False), request_factory(), confirm=False, _session=admin_user
+    )
+    assert updated["isTeachingTutor"] is False
+
+    updated_back = update_tutor(
+        tutor["tutorId"], TutorUpdate(isTeachingTutor=True), request_factory(), confirm=False, _session=admin_user
+    )
+    assert updated_back["isTeachingTutor"] is True
