@@ -198,7 +198,7 @@ def get_admin_dashboard(_session: dict = Depends(require_admin)):
     with get_cursor() as cur:
         cur.execute("SELECT count(*)::int AS count FROM learners WHERE status = 'active' AND deleted_at IS NULL")
         active_learners = cur.fetchone()["count"]
-        cur.execute("SELECT count(*)::int AS count FROM tutors WHERE active = true")
+        cur.execute("SELECT count(*)::int AS count FROM tutors WHERE active = true AND is_teaching_tutor = true")
         active_tutors = cur.fetchone()["count"]
         cur.execute("SELECT count(*)::int AS count FROM cohorts WHERE active = true AND deleted_at IS NULL")
         active_cohorts = cur.fetchone()["count"]
@@ -489,7 +489,7 @@ def get_admin_dashboard_tutors(
 ):
     period_start, period_end = _resolve_period_or_400(period, dateFrom, dateTo)
     with get_cursor() as cur:
-        cur.execute(f"{TUTOR_SELECT} WHERE active = true")
+        cur.execute(f"{TUTOR_SELECT} WHERE active = true AND is_teaching_tutor = true")
         tutors = cur.fetchall()
         tutor_ids = [t["id"] for t in tutors]
         threshold = _get_threshold(cur)

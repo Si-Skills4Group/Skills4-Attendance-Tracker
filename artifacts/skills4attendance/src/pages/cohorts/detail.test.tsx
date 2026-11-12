@@ -18,10 +18,12 @@ const tutors = Array.from({ length: 30 }, (_, i) => ({
   id: i + 1,
   firstName: `Tutor${i}`,
   lastName: `Surname${i}`,
+  isTeachingTutor: true,
 }));
 // A tutor that would be well past whatever a non-scrolling, non-searchable
 // list could show -- the regression this test guards against.
-tutors.push({ id: 999, firstName: "Zack", lastName: "Ziegler" });
+tutors.push({ id: 999, firstName: "Zack", lastName: "Ziegler", isTeachingTutor: true });
+tutors.push({ id: 1000, firstName: "Admissions", lastName: "Team", isTeachingTutor: false });
 
 const cohort = {
   id: 5, name: 'Cohort A', programme: 'Data Analyst', level: '4', tutorId: null,
@@ -88,6 +90,14 @@ describe('CohortDetailPage primary tutor field', () => {
   it('defaults to Unassigned and offers it as an explicit option', async () => {
     renderWithQueryClient(<CohortDetailPage />);
     expect(screen.getByRole('combobox', { name: /primary tutor/i })).toHaveTextContent('Unassigned');
+  });
+
+  it('excludes a non-teaching tutor from the assignment dropdown', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<CohortDetailPage />);
+
+    await user.click(screen.getByRole('combobox', { name: /primary tutor/i }));
+    expect(screen.queryByText('Admissions Team')).not.toBeInTheDocument();
   });
 });
 

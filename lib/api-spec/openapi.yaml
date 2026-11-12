@@ -4482,6 +4482,7 @@ components:
           phone,
           active,
           externalSystemId,
+          isTeachingTutor,
           createdAt,
           updatedAt,
         ]
@@ -4495,6 +4496,7 @@ components:
         phone: { type: ["string", "null"] }
         active: { type: boolean }
         externalSystemId: { type: ["string", "null"] }
+        isTeachingTutor: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -4510,6 +4512,7 @@ components:
         phone: { type: string }
         active: { type: boolean, default: true }
         externalSystemId: { type: string }
+        isTeachingTutor: { type: boolean, default: true }
 
     TutorUpdate:
       type: object
@@ -4522,6 +4525,7 @@ components:
         phone: { type: string }
         active: { type: boolean }
         externalSystemId: { type: string }
+        isTeachingTutor: { type: boolean }
 
     Learner:
       type: object

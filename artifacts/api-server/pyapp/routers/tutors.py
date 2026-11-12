@@ -10,6 +10,7 @@ router = APIRouter(tags=["tutors"])
 TUTOR_SELECT = (
     'SELECT id, user_id AS "userId", first_name AS "firstName", last_name AS "lastName", '
     'email, employee_ref AS "employeeRef", phone, active, external_system_id AS "externalSystemId", '
+    'is_teaching_tutor AS "isTeachingTutor", '
     'created_at AS "createdAt", updated_at AS "updatedAt" FROM tutors'
 )
 
@@ -30,6 +31,7 @@ class TutorInput(BaseModel):
     phone: str | None = None
     active: bool = True
     externalSystemId: str | None = None
+    isTeachingTutor: bool = True
 
 
 class TutorUpdate(BaseModel):
@@ -41,6 +43,7 @@ class TutorUpdate(BaseModel):
     phone: str | None = None
     active: bool | None = None
     externalSystemId: str | None = None
+    isTeachingTutor: bool | None = None
 
 
 @router.get("/tutors")
@@ -80,8 +83,8 @@ def _create_tutor(cur, payload: TutorInput, request: Request, session: dict) -> 
 
     cur.execute(
         """
-        INSERT INTO tutors (user_id, first_name, last_name, email, employee_ref, phone, active, external_system_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        INSERT INTO tutors (user_id, first_name, last_name, email, employee_ref, phone, active, external_system_id, is_teaching_tutor)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """,
         (
             user_id,
@@ -92,6 +95,7 @@ def _create_tutor(cur, payload: TutorInput, request: Request, session: dict) -> 
             payload.phone,
             payload.active,
             payload.externalSystemId,
+            payload.isTeachingTutor,
         ),
     )
     tutor_id = cur.fetchone()["id"]
@@ -151,6 +155,7 @@ def _update_tutor(cur, tutor_id: int, payload: TutorUpdate, request: Request, se
         "phone": "phone",
         "active": "active",
         "externalSystemId": "external_system_id",
+        "isTeachingTutor": "is_teaching_tutor",
     }
     set_clauses = []
     params: list = []

@@ -770,7 +770,7 @@ export default function RegisterPage() {
   const canUnlock = isAdmin && isLocked;
   const canManageCover = isAdmin && !isCancelled && !isLocked;
   const coverTutorOptions = tutors
-    .filter(t => t.id !== session.tutorId)
+    .filter(t => t.id !== session.tutorId && t.isTeachingTutor)
     .map(t => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` }));
   const isSaving = saveMutation.isPending || completeMutation.isPending;
 

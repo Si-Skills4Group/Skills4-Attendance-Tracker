@@ -97,6 +97,16 @@ def test_active_tutor_can_be_assigned_on_create(db, request_factory, admin_user,
         _cleanup(db, created["id"])
 
 
+def test_non_teaching_tutor_cannot_be_assigned_on_create(db, request_factory, admin_user, tutor_factory):
+    non_teaching_tutor = tutor_factory(is_teaching_tutor=False)
+    payload = CohortInput(**_base_cohort_kwargs(tutorId=non_teaching_tutor["tutorId"]))
+
+    with pytest.raises(HTTPException) as exc:
+        create_cohort(payload, request_factory(), admin_user)
+    assert exc.value.status_code == 400
+    assert "non-teaching tutor" in str(exc.value.detail).lower()
+
+
 def test_inactive_tutor_cannot_be_assigned_on_update(db, request_factory, admin_user, tutor_factory, cohort_factory):
     inactive_tutor = tutor_factory(active=False)
     cohort = cohort_factory()

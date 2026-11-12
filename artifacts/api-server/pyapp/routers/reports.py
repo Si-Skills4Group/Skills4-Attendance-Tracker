@@ -476,7 +476,7 @@ def export_tutor_report(
 
 
 def _organisation_breakdowns(cur, period_start: date, period_end: date) -> dict:
-    cur.execute(f"{TUTOR_SELECT} WHERE active = true")
+    cur.execute(f"{TUTOR_SELECT} WHERE active = true AND is_teaching_tutor = true")
     tutors = cur.fetchall()
     metrics_by_tutor = fetch_attendance_metrics_grouped(
         cur, group_by="tutor", group_ids=[t["id"] for t in tutors], period_start=period_start, period_end=period_end
@@ -523,7 +523,7 @@ def get_organisation_report(
     with get_cursor() as cur:
         cur.execute("SELECT count(*)::int AS count FROM learners WHERE status = 'active' AND deleted_at IS NULL")
         active_learners = cur.fetchone()["count"]
-        cur.execute("SELECT count(*)::int AS count FROM tutors WHERE active = true")
+        cur.execute("SELECT count(*)::int AS count FROM tutors WHERE active = true AND is_teaching_tutor = true")
         active_tutors = cur.fetchone()["count"]
         cur.execute("SELECT count(*)::int AS count FROM cohorts WHERE active = true AND deleted_at IS NULL")
         active_cohorts = cur.fetchone()["count"]
@@ -1027,7 +1027,7 @@ def _attendance_hours_items(cur, session: dict, *, groupBy: AttendanceHoursGroup
         if groupBy == "employer":
             data = fetch_attendance_metrics_by_employer(cur, period_start=period_start, period_end=period_end)
             return [{"key": k, "label": k, "metrics": v} for k, v in data.items()]
-        cur.execute(f"{TUTOR_SELECT} WHERE active = true")
+        cur.execute(f"{TUTOR_SELECT} WHERE active = true AND is_teaching_tutor = true")
         tutors = cur.fetchall()
         data = fetch_attendance_metrics_grouped(cur, group_by="tutor", group_ids=[t["id"] for t in tutors], period_start=period_start, period_end=period_end)
         return [{"key": str(t["id"]), "label": f"{t['firstName']} {t['lastName']}", "metrics": data[t["id"]]} for t in tutors]

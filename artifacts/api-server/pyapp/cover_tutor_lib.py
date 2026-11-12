@@ -97,7 +97,7 @@ def get_eligible_cover_tutor_or_400(cur, cover_tutor_id: int, original_tutor_id:
                 "message": "The replacement tutor must be different from the session's current tutor.",
             },
         )
-    cur.execute('SELECT id, active FROM tutors WHERE id = %s', (cover_tutor_id,))
+    cur.execute('SELECT id, active, is_teaching_tutor FROM tutors WHERE id = %s', (cover_tutor_id,))
     tutor = cur.fetchone()
     if not tutor:
         raise HTTPException(
@@ -108,6 +108,14 @@ def get_eligible_cover_tutor_or_400(cur, cover_tutor_id: int, original_tutor_id:
         raise HTTPException(
             status_code=422,
             detail={"reason": "cover_tutor_inactive", "message": "The selected replacement tutor is not active."},
+        )
+    if not tutor["is_teaching_tutor"]:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": "cover_tutor_non_teaching",
+                "message": "The selected replacement tutor is not a teaching tutor.",
+            },
         )
     return tutor
 

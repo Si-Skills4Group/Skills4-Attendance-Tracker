@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS tutors (
 
 ALTER TABLE tutors ALTER COLUMN employee_ref DROP NOT NULL;
 ALTER TABLE tutors ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE tutors ADD COLUMN IF NOT EXISTS is_teaching_tutor boolean NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS cohorts (
   id serial PRIMARY KEY,

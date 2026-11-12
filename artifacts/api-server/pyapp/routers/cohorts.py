@@ -62,12 +62,14 @@ def _check_subject_matches_membership_type(membership_type: str, subject: str | 
 def _ensure_tutor_active(cur, tutor_id: int | None) -> None:
     if tutor_id is None:
         return
-    cur.execute("SELECT active FROM tutors WHERE id = %s", (tutor_id,))
+    cur.execute("SELECT active, is_teaching_tutor FROM tutors WHERE id = %s", (tutor_id,))
     tutor = cur.fetchone()
     if not tutor:
         raise HTTPException(status_code=400, detail="Tutor not found")
     if not tutor["active"]:
         raise HTTPException(status_code=400, detail="Cannot assign an inactive tutor to a cohort")
+    if not tutor["is_teaching_tutor"]:
+        raise HTTPException(status_code=400, detail="Cannot assign a non-teaching tutor to a cohort")
 
 COHORT_SELECT = """
     SELECT c.id, c.name, c.programme, c.level, c.tutor_id AS "tutorId",

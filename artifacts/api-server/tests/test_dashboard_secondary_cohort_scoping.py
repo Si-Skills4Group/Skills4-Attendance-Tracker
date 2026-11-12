@@ -6,7 +6,7 @@ unrelated attendance elsewhere. See routers/dashboard.py::_low_attendance_rows
 and its restrict_to_cohort_ids parameter."""
 from datetime import date
 
-from pyapp.routers.dashboard import _low_attendance_rows, get_admin_dashboard_tutors, get_tutor_dashboard
+from pyapp.routers.dashboard import _low_attendance_rows, get_admin_dashboard, get_admin_dashboard_tutors, get_tutor_dashboard
 from pyapp.session_register_lib import ensure_expected_learners_snapshot
 
 PERIOD_START = date(2026, 1, 1)
@@ -116,3 +116,18 @@ class TestTutorDashboardIncludesSecondarilyEnrolledLearners:
         rows = get_admin_dashboard_tutors(period="custom", dateFrom=PERIOD_START, dateTo=PERIOD_END, _session=admin_user)
         fs_row = next(r for r in rows["items"] if r["tutorId"] == fs_tutor["tutorId"])
         assert fs_row["activeLearners"] == 1
+
+
+class TestNonTeachingTutorsExcludedFromReporting:
+    def test_non_teaching_tutor_absent_from_caseload_table(self, db, admin_user, tutor_factory):
+        non_teaching = tutor_factory(is_teaching_tutor=False)
+
+        rows = get_admin_dashboard_tutors(_session=admin_user)
+        assert non_teaching["tutorId"] not in {r["tutorId"] for r in rows["items"]}
+
+    def test_non_teaching_tutor_excluded_from_active_tutors_count(self, db, admin_user, tutor_factory):
+        before = get_admin_dashboard(_session=admin_user)["activeTutors"]
+        tutor_factory(is_teaching_tutor=False)
+
+        after = get_admin_dashboard(_session=admin_user)["activeTutors"]
+        assert after == before

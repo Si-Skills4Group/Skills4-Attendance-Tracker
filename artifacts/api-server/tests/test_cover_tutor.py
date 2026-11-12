@@ -109,6 +109,18 @@ class TestReassignment:
         assert exc.value.status_code == 422
         assert exc.value.detail["reason"] == "cover_tutor_inactive"
 
+    def test_replacement_tutor_must_be_teaching(self, request_factory, admin_user, scenario, tutor_factory):
+        non_teaching = tutor_factory(is_teaching_tutor=False)
+        with pytest.raises(HTTPException) as exc:
+            assign_cover_tutor(
+                scenario["session"]["id"],
+                CoverTutorInput(coverTutorId=non_teaching["tutorId"], reason="tutor_sickness", registerVersion=1),
+                request_factory(),
+                admin_user,
+            )
+        assert exc.value.status_code == 422
+        assert exc.value.detail["reason"] == "cover_tutor_non_teaching"
+
     def test_replacement_tutor_cannot_be_same_as_original(self, request_factory, admin_user, scenario):
         with pytest.raises(HTTPException) as exc:
             assign_cover_tutor(

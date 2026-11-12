@@ -49,6 +49,33 @@ describe('TutorDetailPage create form', () => {
     expect(payload.data.firstName).toBe('Ada');
   });
 
+  it('defaults the teaching tutor toggle to on and includes it in the create payload', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<TutorDetailPage />);
+
+    expect(screen.getByLabelText('Teaching Tutor')).toBeChecked();
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole('button', { name: 'Create Tutor' }));
+
+    await waitFor(() => expect(mockCreateMutate).toHaveBeenCalledTimes(1));
+    const [payload] = mockCreateMutate.mock.calls[0];
+    expect(payload.data.isTeachingTutor).toBe(true);
+  });
+
+  it('submits isTeachingTutor: false when the toggle is switched off', async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<TutorDetailPage />);
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByLabelText('Teaching Tutor'));
+    await user.click(screen.getByRole('button', { name: 'Create Tutor' }));
+
+    await waitFor(() => expect(mockCreateMutate).toHaveBeenCalledTimes(1));
+    const [payload] = mockCreateMutate.mock.calls[0];
+    expect(payload.data.isTeachingTutor).toBe(false);
+  });
+
   it('keeps entered values in the form after a failed save', async () => {
     mockCreateMutate.mockImplementation((_payload, { onError }: any) => {
       onError({ data: { error: 'Email already in use' } });

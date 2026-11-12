@@ -168,7 +168,7 @@ def tutor_factory(db):
     created_user_ids = []
     created_tutor_ids = []
 
-    def make(active: bool = True) -> dict:
+    def make(active: bool = True, is_teaching_tutor: bool = True) -> dict:
         suffix = os.urandom(4).hex()
         db.execute(
             "INSERT INTO users (first_name, last_name, email, role, active) "
@@ -179,9 +179,9 @@ def tutor_factory(db):
         created_user_ids.append(user_id)
 
         db.execute(
-            "INSERT INTO tutors (user_id, first_name, last_name, email, active) "
-            "VALUES (%s, 'Test', 'Tutor', %s, %s) RETURNING id",
-            (user_id, f"test-tutor-{suffix}@example.com", active),
+            "INSERT INTO tutors (user_id, first_name, last_name, email, active, is_teaching_tutor) "
+            "VALUES (%s, 'Test', 'Tutor', %s, %s, %s) RETURNING id",
+            (user_id, f"test-tutor-{suffix}@example.com", active, is_teaching_tutor),
         )
         tutor_id = db.fetchone()["id"]
         created_tutor_ids.append(tutor_id)

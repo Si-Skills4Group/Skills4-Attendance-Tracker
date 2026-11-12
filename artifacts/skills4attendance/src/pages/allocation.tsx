@@ -337,7 +337,7 @@ export default function AllocationPage() {
                   aria-label="Target Tutor"
                   options={[
                     { value: "", label: "Leave unchanged" },
-                    ...tutors.map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
+                    ...tutors.filter((t) => t.isTeachingTutor).map((t) => ({ value: String(t.id), label: `${t.firstName} ${t.lastName}` })),
                   ]}
                   value={targetTutorId}
                   onValueChange={handleTargetTutorChange}
