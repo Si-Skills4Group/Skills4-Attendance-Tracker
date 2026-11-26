@@ -34,4 +34,19 @@ export interface SettingsUpdate {
      * @maximum 1000
      */
   budSyncMaxTutorTransfers?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  aptemSyncMaxLearnerCreations?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  aptemSyncMaxLearnerUpdates?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  aptemSyncMaxCohortCreations?: number;
 }

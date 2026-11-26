@@ -351,20 +351,25 @@ def cancel_import_job(cur, job_id: int) -> dict:
     return get_import_job(cur, job_id)
 
 
-def _upsert_requirement(cur, learner_id: int, maths: bool, english: bool, status: str, batch_id: int | None, updated_by: int) -> dict:
+def _upsert_requirement(
+    cur, learner_id: int, maths: bool, english: bool, status: str, batch_id: int | None, updated_by: int,
+    source: str = "manual_upload", fs_bud_sync_job_id: int | None = None,
+) -> dict:
     cur.execute(
         """
-        INSERT INTO learner_fs_requirements (learner_id, maths, english, status, source, import_batch_id, updated_by, updated_at)
-        VALUES (%s, %s, %s, %s, 'manual_upload', %s, %s, now())
+        INSERT INTO learner_fs_requirements
+            (learner_id, maths, english, status, source, import_batch_id, fs_bud_sync_job_id, updated_by, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
         ON CONFLICT (learner_id) DO UPDATE SET
             maths = EXCLUDED.maths, english = EXCLUDED.english, status = EXCLUDED.status,
-            source = 'manual_upload', import_batch_id = EXCLUDED.import_batch_id,
+            source = EXCLUDED.source, import_batch_id = EXCLUDED.import_batch_id,
+            fs_bud_sync_job_id = EXCLUDED.fs_bud_sync_job_id,
             updated_by = EXCLUDED.updated_by, updated_at = now()
         RETURNING id, learner_id AS "learnerId", maths, english, status, source,
-                  import_batch_id AS "importBatchId", updated_by AS "updatedBy", updated_at AS "updatedAt",
-                  created_at AS "createdAt"
+                  import_batch_id AS "importBatchId", fs_bud_sync_job_id AS "fsBudSyncJobId",
+                  updated_by AS "updatedBy", updated_at AS "updatedAt", created_at AS "createdAt"
         """,
-        (learner_id, maths, english, status, batch_id, updated_by),
+        (learner_id, maths, english, status, source, batch_id, fs_bud_sync_job_id, updated_by),
     )
     return cur.fetchone()
 

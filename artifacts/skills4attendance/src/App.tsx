@@ -43,11 +43,13 @@ const EngagementRecencyReportPage = React.lazy(() => import("@/pages/reports/eng
 const AdminPage = React.lazy(() => import("@/pages/admin"));
 const AuditLogPage = React.lazy(() => import("@/pages/audit-log"));
 const BudSyncTrialPage = React.lazy(() => import("@/pages/bud-sync-trial"));
+const AptemSyncTrialPage = React.lazy(() => import("@/pages/aptem-sync-trial"));
 const AllocationReconciliationPage = React.lazy(() => import("@/pages/allocation-reconciliation"));
 const TutorIdentityPage = React.lazy(() => import("@/pages/tutor-identity"));
 const BudMissingSourcePage = React.lazy(() => import("@/pages/bud-missing-source"));
 const FsRequirementImportPage = React.lazy(() => import("@/pages/functional-skills-requirements/import"));
 const FsRequirementAllocationPage = React.lazy(() => import("@/pages/functional-skills-requirements/allocation"));
+const FsBudSyncTrialPage = React.lazy(() => import("@/pages/fs-bud-sync-trial"));
 const SettingsPage = React.lazy(() => import("@/pages/settings"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
 
@@ -97,11 +99,13 @@ function ProtectedRouter() {
           <Route path="/admin">{() => <RequireAdmin><AdminPage /></RequireAdmin>}</Route>
           <Route path="/audit-log">{() => <RequireAdmin><AuditLogPage /></RequireAdmin>}</Route>
           <Route path="/bud-sync-trial">{() => <RequireAdmin><BudSyncTrialPage /></RequireAdmin>}</Route>
+          <Route path="/aptem-sync-trial">{() => <RequireAdmin><AptemSyncTrialPage /></RequireAdmin>}</Route>
           <Route path="/allocation-reconciliation">{() => <RequireAdmin><AllocationReconciliationPage /></RequireAdmin>}</Route>
           <Route path="/tutor-identity">{() => <RequireAdmin><TutorIdentityPage /></RequireAdmin>}</Route>
           <Route path="/bud-missing-source">{() => <RequireAdmin><BudMissingSourcePage /></RequireAdmin>}</Route>
           <Route path="/functional-skills-requirements/import">{() => <RequireAdmin><FsRequirementImportPage /></RequireAdmin>}</Route>
           <Route path="/functional-skills-requirements/allocation">{() => <RequireAdmin><FsRequirementAllocationPage /></RequireAdmin>}</Route>
+          <Route path="/fs-bud-sync-trial">{() => <RequireAdmin><FsBudSyncTrialPage /></RequireAdmin>}</Route>
           <Route path="/settings">{() => <RequireAdmin><SettingsPage /></RequireAdmin>}</Route>
           <Route path="/" component={() => {
             window.location.href = "/dashboard";

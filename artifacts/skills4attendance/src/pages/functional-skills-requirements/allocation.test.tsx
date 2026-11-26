@@ -29,6 +29,14 @@ const missingTutorRow = {
   activeSecondaryCohorts: [{ cohortId: 11, cohortName: 'Maths PM', subject: 'math', tutorId: null, tutorName: null, tutorActive: null }],
 };
 
+const budSyncedRow = {
+  id: 5, learnerRef: 'REF-5', learnerName: 'Bud Synced', status: 'active',
+  maths: true, english: false, requirementRecorded: true, requirementStatus: 'recorded',
+  source: 'bud_fs_sync', importBatchId: null, updatedBy: 1, updatedAt: '2026-01-04T00:00:00Z',
+  missingSubjects: [], missingTutorSubjects: [],
+  activeSecondaryCohorts: [{ cohortId: 10, cohortName: 'Maths AM', subject: 'math', tutorId: 3, tutorName: 'Alex Tutor', tutorActive: true }],
+};
+
 const noRequirementRow = {
   id: 4, learnerRef: 'REF-4', learnerName: 'No Data', status: 'active',
   maths: false, english: false, requirementRecorded: false, requirementStatus: null,
@@ -80,6 +88,14 @@ describe('FsRequirementAllocationPage', () => {
     renderAtLocation();
 
     expect(screen.getByText('No requirement uploaded')).toBeInTheDocument();
+  });
+
+  it('shows the real requirement source instead of a hardcoded label', () => {
+    mockAllocation = { data: { items: [coveredRow, budSyncedRow], total: 2, page: 1, pageSize: 25 }, isLoading: false, isError: false };
+    renderAtLocation();
+
+    expect(screen.getByText('Manual upload')).toBeInTheDocument();
+    expect(screen.getByText('Bud sync')).toBeInTheDocument();
   });
 
   it('navigates to the upload page from the header action', () => {

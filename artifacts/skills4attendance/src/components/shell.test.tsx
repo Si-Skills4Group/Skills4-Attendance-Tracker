@@ -35,7 +35,7 @@ vi.mock('@workspace/api-client-react', () => ({
 // Reconciliation, Audit Log, Tutor Identity, and Missing Source Records are
 // no longer top-level nav items -- they live under the single "Admin Tools"
 // entry (see pages/admin.tsx).
-const ADMIN_ONLY = ['Tutors', 'Users', 'Allocation', 'Admin Tools', 'Settings'];
+const ADMIN_ONLY = ['Tutors', 'Users', 'Allocation', 'Aptem Sync Trial', 'FS Bud Sync Trial', 'Admin Tools', 'Settings'];
 const SHARED = ['Dashboard', 'Learners', 'Cohorts', 'Attendance', 'Reports'];
 
 function mockCurrentUser(role: 'admin' | 'tutor') {

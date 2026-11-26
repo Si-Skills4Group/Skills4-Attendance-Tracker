@@ -13,4 +13,7 @@ export interface AppSettings {
   budSyncMaxLearnerUpdates: number;
   budSyncMaxCohortCreations: number;
   budSyncMaxTutorTransfers: number;
+  aptemSyncMaxLearnerCreations?: number;
+  aptemSyncMaxLearnerUpdates?: number;
+  aptemSyncMaxCohortCreations?: number;
 }

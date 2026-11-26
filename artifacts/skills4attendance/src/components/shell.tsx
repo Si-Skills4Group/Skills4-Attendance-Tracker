@@ -19,9 +19,11 @@ import {
   Menu,
   X,
   RefreshCw,
+  Database,
   ClipboardCheck,
   FileWarning,
-  ShieldCheck
+  ShieldCheck,
+  ListChecks
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoadingSpinner } from "@/components/page-loading-spinner";
@@ -125,7 +127,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { name: "Absence Follow-up", href: "/catchup/follow-up", icon: ClipboardCheck, roles: ['admin', 'tutor'] },
     { name: "Reports", href: "/reports", icon: FileBarChart, roles: ['admin', 'tutor'] },
     { name: "Bud Sync Trial", href: "/bud-sync-trial", icon: RefreshCw, roles: ['admin'] },
+    { name: "Aptem Sync Trial", href: "/aptem-sync-trial", icon: Database, roles: ['admin'] },
     { name: "Functional Skills Allocation", href: "/functional-skills-requirements/allocation", icon: FileWarning, roles: ['admin'] },
+    { name: "FS Bud Sync Trial", href: "/fs-bud-sync-trial", icon: ListChecks, roles: ['admin'] },
     { name: "Admin Tools", href: "/admin", icon: ShieldCheck, roles: ['admin'] },
     { name: "Settings", href: "/settings", icon: Settings, roles: ['admin'] },
   ];
