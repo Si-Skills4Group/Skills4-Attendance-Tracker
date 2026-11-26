@@ -23,6 +23,13 @@ const PAGE_SIZE = 25;
 
 const SUBJECT_LABELS: Record<GetFsRequirementAllocationSubject, string> = { math: "Maths", english: "English", both: "Both" };
 
+const REQUIREMENT_SOURCE_LABELS: Record<string, string> = { manual_upload: "Manual upload", bud_fs_sync: "Bud sync" };
+
+function requirementSourceLabel(source: string | null | undefined): string {
+  if (!source) return "Manual upload";
+  return REQUIREMENT_SOURCE_LABELS[source] ?? source;
+}
+
 function requiredSubjectsLabel(maths: boolean, english: boolean): string {
   if (maths && english) return "Maths and English";
   if (maths) return "Maths";
@@ -226,7 +233,7 @@ function AllocationRow({ row }: { row: FsRequirementAllocationItem }) {
       <TableCell className="text-xs text-muted-foreground">
         {row.requirementRecorded ? (
           <>
-            Manual upload
+            {requirementSourceLabel(row.source)}
             {row.updatedAt && <div>{format(new Date(row.updatedAt), "d MMM yyyy")}</div>}
           </>
         ) : (

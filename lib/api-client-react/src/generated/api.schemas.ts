@@ -2502,6 +2502,9 @@ export interface AppSettings {
   budSyncMaxLearnerUpdates: number;
   budSyncMaxCohortCreations: number;
   budSyncMaxTutorTransfers: number;
+  aptemSyncMaxLearnerCreations?: number;
+  aptemSyncMaxLearnerUpdates?: number;
+  aptemSyncMaxCohortCreations?: number;
 }
 
 export interface SettingsUpdate {
@@ -2532,6 +2535,21 @@ export interface SettingsUpdate {
      * @maximum 1000
      */
   budSyncMaxTutorTransfers?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  aptemSyncMaxLearnerCreations?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  aptemSyncMaxLearnerUpdates?: number;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  aptemSyncMaxCohortCreations?: number;
 }
 
 export type BudSyncBaselineStatus = typeof BudSyncBaselineStatus[keyof typeof BudSyncBaselineStatus];
@@ -2778,6 +2796,388 @@ export interface BudSyncUnmatchedPreBaselineResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export type AptemSyncBaselineStatus = typeof AptemSyncBaselineStatus[keyof typeof AptemSyncBaselineStatus];
+
+
+export const AptemSyncBaselineStatus = {
+  active: 'active',
+  superseded: 'superseded',
+} as const;
+
+export type AptemSyncJobStatus = typeof AptemSyncJobStatus[keyof typeof AptemSyncJobStatus];
+
+
+export const AptemSyncJobStatus = {
+  ready: 'ready',
+  committing: 'committing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type AptemSyncMatchStatus = typeof AptemSyncMatchStatus[keyof typeof AptemSyncMatchStatus];
+
+
+export const AptemSyncMatchStatus = {
+  new: 'new',
+  existing_update: 'existing_update',
+  unchanged: 'unchanged',
+  conflict: 'conflict',
+  existing_before_trial: 'existing_before_trial',
+  skipped: 'skipped',
+  status_change: 'status_change',
+} as const;
+
+export type AptemSyncActionType = typeof AptemSyncActionType[keyof typeof AptemSyncActionType];
+
+
+export const AptemSyncActionType = {
+  create_learner: 'create_learner',
+  update_learner: 'update_learner',
+  change_start_date: 'change_start_date',
+  change_status: 'change_status',
+  none: 'none',
+} as const;
+
+export interface AptemSyncBaseline {
+  id: number;
+  establishedAt: string;
+  establishedBy: number;
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  sourceRowCount: number;
+  status: AptemSyncBaselineStatus;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  correlationId: string | null;
+  /** @nullable */
+  supersededAt?: string | null;
+  /** @nullable */
+  supersededBy?: number | null;
+  /** @nullable */
+  resetReason?: string | null;
+}
+
+export interface AptemSyncBaselineInput {
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface AptemSyncBaselineResetInput {
+  /** @minLength 1 */
+  reason: string;
+}
+
+export interface AptemSyncStatus {
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  sourceRowCount: number;
+  matchedLearnerCount: number;
+  unmatchedLearnerCount: number;
+  activeBaseline: AptemSyncBaseline | null;
+}
+
+export interface AptemSyncJob {
+  id: number;
+  baselineId: number;
+  status: AptemSyncJobStatus;
+  startedAt: string;
+  /** @nullable */
+  completedAt: string | null;
+  startedBy: number;
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  totalSourceRowsExamined: number;
+  newLearnersDetected: number;
+  learnerUpdatesDetected: number;
+  approvedCount: number;
+  appliedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  errorCount: number;
+  /** @nullable */
+  approvalReason: string | null;
+  /** @nullable */
+  correlationId: string | null;
+  /** @nullable */
+  errorSummary: string | null;
+  statusChangesDetected: number;
+}
+
+export interface AptemSyncJobListResponse {
+  items: AptemSyncJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AptemSyncJobSummary {
+  statusChangesCount: number;
+  newLearnersCount: number;
+  conflictsCount: number;
+  learnersCreatedToday: number;
+  /** @nullable */
+  lastSuccessfulSyncAt: string | null;
+}
+
+export interface AptemSyncLinkExistingInput {
+  learnerId: number;
+}
+
+export interface AptemSyncBulkApproveItem {
+  itemId: number;
+  /** @minLength 1 */
+  learnerRef: string;
+  /** @minLength 1 */
+  level: string;
+}
+
+export interface AptemSyncBulkApproveInput {
+  /** @minItems 1 */
+  items: AptemSyncBulkApproveItem[];
+}
+
+export type AptemSyncBulkApproveResultErrorsItem = {
+  itemId: number;
+  message: string;
+};
+
+export interface AptemSyncBulkApproveResult {
+  approvedCount: number;
+  errors: AptemSyncBulkApproveResultErrorsItem[];
+}
+
+export type AptemSyncItemProposedValues = { [key: string]: unknown };
+
+export type AptemSyncItemPreviousValues = { [key: string]: unknown };
+
+export interface AptemSyncItem {
+  id: number;
+  syncJobId: number;
+  sourceIdentifier: string;
+  matchStatus: AptemSyncMatchStatus;
+  actionType: AptemSyncActionType;
+  /** @nullable */
+  internalLearnerId: number | null;
+  proposedValues: AptemSyncItemProposedValues;
+  previousValues: AptemSyncItemPreviousValues;
+  warnings: string[];
+  /** @nullable */
+  reason: string | null;
+  approved: boolean;
+  applied: boolean;
+  /** @nullable */
+  outcome: string | null;
+  /** @nullable */
+  errorCode: string | null;
+  /** @nullable */
+  processedAt: string | null;
+  /** @nullable */
+  sourceFirstName: string | null;
+  /** @nullable */
+  sourceLastName: string | null;
+  /** @nullable */
+  sourceEmail: string | null;
+  createdAt: string;
+}
+
+export interface AptemSyncItemListResponse {
+  items: AptemSyncItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * @nullable
+ */
+export type AptemSyncItemUpdateInputFieldUpdates = {[key: string]: string} | null;
+
+export interface AptemSyncItemUpdateInput {
+  /** @nullable */
+  fieldUpdates?: AptemSyncItemUpdateInputFieldUpdates;
+  /** @nullable */
+  approved?: boolean | null;
+}
+
+export interface AptemSyncCommitInput {
+  /** @minItems 1 */
+  itemIds: number[];
+  /** @minLength 1 */
+  approvalReason: string;
+  /** @nullable */
+  limitOverrideReason?: string | null;
+}
+
+export type FsBudSyncJobStatus = typeof FsBudSyncJobStatus[keyof typeof FsBudSyncJobStatus];
+
+
+export const FsBudSyncJobStatus = {
+  generating: 'generating',
+  ready: 'ready',
+  committing: 'committing',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export type FsBudSyncMatchStatus = typeof FsBudSyncMatchStatus[keyof typeof FsBudSyncMatchStatus];
+
+
+export const FsBudSyncMatchStatus = {
+  new: 'new',
+  changed: 'changed',
+  unchanged: 'unchanged',
+  unmatched: 'unmatched',
+  blocked_by_clear: 'blocked_by_clear',
+} as const;
+
+export interface FsBudSyncStatus {
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  sourcePlanCount: number;
+  matchedPlanCount: number;
+  unmatchedPlanCount: number;
+  /** @nullable */
+  lastSuccessfulSyncAt: string | null;
+}
+
+export interface FsBudSyncJob {
+  id: number;
+  status: FsBudSyncJobStatus;
+  startedAt: string;
+  /** @nullable */
+  completedAt: string | null;
+  startedBy: number;
+  /** @nullable */
+  sourceMaxSyncedAt: string | null;
+  totalPlansExamined: number;
+  newCount: number;
+  changedCount: number;
+  unchangedCount: number;
+  unmatchedCount: number;
+  blockedByClearCount: number;
+  approvedCount: number;
+  appliedCount: number;
+  skippedCount: number;
+  /** @nullable */
+  approvalReason: string | null;
+  /** @nullable */
+  correlationId: string | null;
+  /** @nullable */
+  errorSummary: string | null;
+}
+
+export interface FsBudSyncJobListResponse {
+  items: FsBudSyncJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface FsBudSyncJobSummary {
+  newCount: number;
+  changedCount: number;
+  unmatchedCount: number;
+  blockedByClearCount: number;
+  /** @nullable */
+  lastSuccessfulSyncAt: string | null;
+}
+
+export type FsBudSyncSubjectRowSubject = typeof FsBudSyncSubjectRowSubject[keyof typeof FsBudSyncSubjectRowSubject];
+
+
+export const FsBudSyncSubjectRowSubject = {
+  math: 'math',
+  english: 'english',
+} as const;
+
+export type FsBudSyncSubjectRowStatusCategory = typeof FsBudSyncSubjectRowStatusCategory[keyof typeof FsBudSyncSubjectRowStatusCategory];
+
+
+export const FsBudSyncSubjectRowStatusCategory = {
+  exempt: 'exempt',
+  percentage: 'percentage',
+  complete: 'complete',
+  unknown: 'unknown',
+} as const;
+
+export interface FsBudSyncSubjectRow {
+  subject: FsBudSyncSubjectRowSubject;
+  level: number;
+  /** @nullable */
+  status: string | null;
+  statusCategory: FsBudSyncSubjectRowStatusCategory;
+}
+
+export interface FsBudSyncItem {
+  id: number;
+  syncJobId: number;
+  budLearningPlanId: string;
+  /** @nullable */
+  internalLearnerId: number | null;
+  matchStatus: FsBudSyncMatchStatus;
+  /** @nullable */
+  proposedMaths: boolean | null;
+  /** @nullable */
+  proposedEnglish: boolean | null;
+  /** @nullable */
+  existingMaths: boolean | null;
+  /** @nullable */
+  existingEnglish: boolean | null;
+  /** @nullable */
+  existingStatus: string | null;
+  /** @nullable */
+  existingSource: string | null;
+  sourceSubjectRows: FsBudSyncSubjectRow[];
+  warnings: string[];
+  approved: boolean;
+  applied: boolean;
+  /** @nullable */
+  outcome: string | null;
+  /** @nullable */
+  processedAt: string | null;
+  createdAt: string;
+  /** @nullable */
+  learnerName: string | null;
+  /** @nullable */
+  learnerRef: string | null;
+  /** @nullable */
+  learnerStatus: string | null;
+}
+
+export interface FsBudSyncItemListResponse {
+  items: FsBudSyncItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface FsBudSyncItemUpdateInput {
+  approved: boolean;
+}
+
+export interface FsBudSyncBulkApproveInput {
+  /** @minItems 1 */
+  itemIds: number[];
+}
+
+export type FsBudSyncBulkApproveResultErrorsItem = {
+  itemId: number;
+  message: string;
+};
+
+export interface FsBudSyncBulkApproveResult {
+  approvedCount: number;
+  errors: FsBudSyncBulkApproveResultErrorsItem[];
+}
+
+export interface FsBudSyncCommitInput {
+  /** @minItems 1 */
+  itemIds: number[];
+  /** @minLength 1 */
+  approvalReason: string;
 }
 
 export type PeriodParamParameter = typeof PeriodParamParameter[keyof typeof PeriodParamParameter];
@@ -3391,6 +3791,29 @@ pageSize?: number;
 };
 
 export type ListBudSyncUnmatchedPreBaselineParams = {
+page?: number;
+pageSize?: number;
+};
+
+export type ListAptemSyncJobsParams = {
+page?: number;
+pageSize?: number;
+};
+
+export type ListAptemSyncJobItemsParams = {
+matchStatus?: AptemSyncMatchStatus;
+actionType?: AptemSyncActionType;
+page?: number;
+pageSize?: number;
+};
+
+export type ListFsBudSyncJobsParams = {
+page?: number;
+pageSize?: number;
+};
+
+export type ListFsBudSyncJobItemsParams = {
+matchStatus?: FsBudSyncMatchStatus;
 page?: number;
 pageSize?: number;
 };

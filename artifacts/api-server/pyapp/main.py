@@ -45,6 +45,8 @@ from .routers import (
     audit_routes,
     settings,
     bud_sync,
+    aptem_sync,
+    fs_bud_sync,
     tutor_identity,
     bud_missing_source,
 )
@@ -173,6 +175,8 @@ for router in (
     audit_routes.router,
     settings.router,
     bud_sync.router,
+    aptem_sync.router,
+    fs_bud_sync.router,
     tutor_identity.router,
     bud_missing_source.router,
 ):

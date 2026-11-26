@@ -13,7 +13,10 @@ SETTINGS_SELECT = (
     'bud_sync_max_learner_creations AS "budSyncMaxLearnerCreations", '
     'bud_sync_max_learner_updates AS "budSyncMaxLearnerUpdates", '
     'bud_sync_max_cohort_creations AS "budSyncMaxCohortCreations", '
-    'bud_sync_max_tutor_transfers AS "budSyncMaxTutorTransfers" FROM app_settings'
+    'bud_sync_max_tutor_transfers AS "budSyncMaxTutorTransfers", '
+    'aptem_sync_max_learner_creations AS "aptemSyncMaxLearnerCreations", '
+    'aptem_sync_max_learner_updates AS "aptemSyncMaxLearnerUpdates", '
+    'aptem_sync_max_cohort_creations AS "aptemSyncMaxCohortCreations" FROM app_settings'
 )
 
 
@@ -24,6 +27,9 @@ class SettingsUpdate(BaseModel):
     budSyncMaxLearnerUpdates: int | None = Field(default=None, ge=0, le=1000)
     budSyncMaxCohortCreations: int | None = Field(default=None, ge=0, le=1000)
     budSyncMaxTutorTransfers: int | None = Field(default=None, ge=0, le=1000)
+    aptemSyncMaxLearnerCreations: int | None = Field(default=None, ge=0, le=1000)
+    aptemSyncMaxLearnerUpdates: int | None = Field(default=None, ge=0, le=1000)
+    aptemSyncMaxCohortCreations: int | None = Field(default=None, ge=0, le=1000)
 
 
 def _get_or_create_settings(cur) -> dict:
@@ -56,6 +62,9 @@ def update_settings(payload: SettingsUpdate, request: Request, _session: dict = 
             "budSyncMaxLearnerUpdates": "bud_sync_max_learner_updates",
             "budSyncMaxCohortCreations": "bud_sync_max_cohort_creations",
             "budSyncMaxTutorTransfers": "bud_sync_max_tutor_transfers",
+            "aptemSyncMaxLearnerCreations": "aptem_sync_max_learner_creations",
+            "aptemSyncMaxLearnerUpdates": "aptem_sync_max_learner_updates",
+            "aptemSyncMaxCohortCreations": "aptem_sync_max_cohort_creations",
         }
         set_clauses = [f"{column_map[k]} = %s" for k in updates]
         params = list(updates.values())

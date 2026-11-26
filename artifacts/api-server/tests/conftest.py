@@ -287,6 +287,9 @@ def learner_factory(db):
         db.execute("DELETE FROM learner_allocation_history WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learner_cohort_enrollments WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM bud_learner_link WHERE internal_learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM aptem_learner_link WHERE internal_learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM fs_bud_sync_item WHERE internal_learner_id = %s", (learner_id,))
+        db.execute("DELETE FROM learner_fs_requirements WHERE learner_id = %s", (learner_id,))
         db.execute("DELETE FROM learners WHERE id = %s", (learner_id,))
 
 
@@ -411,6 +414,156 @@ def baseline_factory(db, admin_user):
     db.execute("DELETE FROM bud_sync_job")
     db.execute("DELETE FROM bud_sync_baseline_snapshot")
     db.execute("DELETE FROM bud_sync_baseline")
+
+
+@pytest.fixture
+def aptem_row_factory(db):
+    """Seeds a row into aptem_learner_progress (a real, bootstrap.py-defined
+    table, unlike public.learner_progress -- no throwaway test-only table
+    needed). Returns the row re-read in the same camelCase shape
+    classify_row/run_preview actually consume, mirroring bud_row_factory's
+    own convention."""
+    created_keys = []
+
+    def make(**overrides) -> dict:
+        suffix = os.urandom(4).hex()
+        defaults = dict(
+            aptem_user_id=int(suffix, 16) % 10_000_000 + 1,
+            aptem_program_id=1,
+            program_name="Test Aptem Programme",
+            program_type="Standard",
+            episode_status="Active",
+            episode_is_active=True,
+            episode_start_date="2026-02-01",
+            episode_end_date=None,
+            email=f"aptem-learner-{suffix}@example.com",
+            uln=f"APTEMULN{suffix}",
+            first_name="Aptem",
+            last_name="Learner",
+            component_count=None,
+            completed_component_count=None,
+            overdue_component_count=None,
+            open_component_count=None,
+            overdue_components_without_due_date=None,
+            review_count=None,
+            completed_review_count=None,
+            next_planned_review_date=None,
+            as_of_date="2026-02-01",
+            synced_at="2026-02-01T10:00:00Z",
+        )
+        defaults.update(overrides)
+        columns = ", ".join(defaults.keys())
+        placeholders = ", ".join(f"%({k})s" for k in defaults)
+        db.execute(f"INSERT INTO aptem_learner_progress ({columns}) VALUES ({placeholders})", defaults)
+        created_keys.append((defaults["aptem_user_id"], defaults["aptem_program_id"]))
+        db.execute(
+            """
+            SELECT aptem_user_id AS "aptemUserId", aptem_program_id AS "aptemProgramId",
+                   program_name AS "programName", program_type AS "programType",
+                   episode_status AS "episodeStatus", episode_is_active AS "episodeIsActive",
+                   episode_start_date AS "episodeStartDate", episode_end_date AS "episodeEndDate",
+                   email, uln, first_name AS "firstName", last_name AS "lastName",
+                   synced_at AS "syncedAt"
+            FROM aptem_learner_progress WHERE aptem_user_id = %s AND aptem_program_id = %s
+            """,
+            (defaults["aptem_user_id"], defaults["aptem_program_id"]),
+        )
+        return db.fetchone()
+
+    yield make
+
+    for user_id, program_id in created_keys:
+        db.execute(
+            "DELETE FROM aptem_learner_progress WHERE aptem_user_id = %s AND aptem_program_id = %s",
+            (user_id, program_id),
+        )
+
+
+@pytest.fixture
+def aptem_baseline_factory(db, admin_user):
+    """Establishes an Aptem sync baseline directly via aptem_sync_lib,
+    mirroring baseline_factory's own style and reset-on-entry/exit
+    discipline (baselines are a global singleton -- at most one active row)."""
+    from pyapp.aptem_sync_lib import establish_baseline
+
+    db.execute("DELETE FROM aptem_sync_item")
+    db.execute("DELETE FROM aptem_sync_job")
+    db.execute("DELETE FROM aptem_sync_baseline_snapshot")
+    db.execute("DELETE FROM aptem_sync_baseline")
+
+    def make(notes: str | None = None) -> dict:
+        request = FakeRequest(admin_user)
+        return establish_baseline(db, request, admin_user, notes=notes)
+
+    yield make
+
+    db.execute("DELETE FROM aptem_sync_item")
+    db.execute("DELETE FROM aptem_sync_job")
+    db.execute("DELETE FROM aptem_sync_baseline_snapshot")
+    db.execute("DELETE FROM aptem_sync_baseline")
+
+
+@pytest.fixture
+def bud_fs_progress_row_factory(db):
+    """Seeds one row into bud_functional_skill_progress (a real,
+    bootstrap.py-defined table -- the Fabric mirror this app's own code
+    never writes to except the standalone staging script). One call = one
+    (bud_learning_plan_id, functional_skill) row; a test builds up a plan's
+    full row set (normally 2 or 4 rows -- see fs_bud_sync_lib.py's module
+    docstring) by calling this multiple times with the same
+    bud_learning_plan_id. Returns the row re-read in the same camelCase
+    shape fs_bud_sync_lib.py actually consumes, mirroring aptem_row_
+    factory's own convention."""
+    created_keys = []
+
+    def make(**overrides) -> dict:
+        suffix = os.urandom(4).hex()
+        defaults = dict(
+            bud_learning_plan_id=f"TEST-PLAN-{suffix}",
+            functional_skill="English - Level 1",
+            subject="english",
+            level=1,
+            functional_skill_status="54%",
+            status_category="percentage",
+            progress_ratio=0.54,
+            synced_at="2026-02-01T10:00:00Z",
+        )
+        defaults.update(overrides)
+        columns = ", ".join(defaults.keys())
+        placeholders = ", ".join(f"%({k})s" for k in defaults)
+        db.execute(
+            f"INSERT INTO bud_functional_skill_progress ({columns}) VALUES ({placeholders})",
+            defaults,
+        )
+        created_keys.append((defaults["bud_learning_plan_id"], defaults["functional_skill"]))
+        db.execute(
+            """
+            SELECT bud_learning_plan_id AS "budLearningPlanId", functional_skill AS "functionalSkill",
+                   subject, level, functional_skill_status AS "functionalSkillStatus",
+                   status_category AS "statusCategory", progress_ratio AS "progressRatio", synced_at AS "syncedAt"
+            FROM bud_functional_skill_progress WHERE bud_learning_plan_id = %s AND functional_skill = %s
+            """,
+            (defaults["bud_learning_plan_id"], defaults["functional_skill"]),
+        )
+        return db.fetchone()
+
+    yield make
+
+    for plan_id, functional_skill in created_keys:
+        db.execute(
+            "DELETE FROM bud_functional_skill_progress WHERE bud_learning_plan_id = %s AND functional_skill = %s",
+            (plan_id, functional_skill),
+        )
+
+
+@pytest.fixture
+def fs_bud_sync_cleanup(db):
+    """Opt-in teardown for tests that generate an fs_bud_sync_job (these
+    aren't a global singleton like the Bud/Aptem baselines, so there's
+    nothing to reset on entry -- only cleaned up afterwards)."""
+    yield
+    db.execute("DELETE FROM fs_bud_sync_item")
+    db.execute("DELETE FROM fs_bud_sync_job")
 
 
 @pytest.fixture

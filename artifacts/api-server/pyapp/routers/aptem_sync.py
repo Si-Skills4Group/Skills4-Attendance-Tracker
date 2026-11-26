@@ -1,0 +1,149 @@
+"""Aptem sync -- Phase 1, core ingestion. Administrator-only. See
+pyapp/aptem_sync_lib.py for the matching/classification/commit logic; this
+router is deliberately thin (get_cursor() + one lib call per route),
+mirroring routers/bud_sync.py's own convention."""
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+
+from .. import aptem_sync_lib
+from ..auth import require_admin
+from ..audit import write_audit_log
+from ..db import get_cursor
+
+router = APIRouter(tags=["aptem-sync"])
+
+
+class BaselineInput(BaseModel):
+    notes: str | None = None
+
+
+class BaselineResetInput(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+class ItemUpdateInput(BaseModel):
+    fieldUpdates: dict[str, str] | None = None
+    approved: bool | None = None
+
+
+class CommitInput(BaseModel):
+    itemIds: list[int] = Field(min_length=1)
+    approvalReason: str = Field(min_length=1)
+    limitOverrideReason: str | None = None
+
+
+class LinkExistingInput(BaseModel):
+    learnerId: int
+
+
+class BulkApproveItem(BaseModel):
+    itemId: int
+    learnerRef: str = Field(min_length=1)
+    level: str = Field(min_length=1)
+
+
+class BulkApproveInput(BaseModel):
+    items: list[BulkApproveItem] = Field(min_length=1)
+
+
+@router.get("/aptem-sync/status")
+def get_status(_session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.get_source_status(cur)
+
+
+@router.post("/aptem-sync/baseline", status_code=201)
+def establish_baseline(payload: BaselineInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.establish_baseline(cur, request, session, notes=payload.notes)
+
+
+@router.post("/aptem-sync/baseline/reset", status_code=201)
+def reset_baseline(payload: BaselineResetInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.reset_baseline(cur, request, session, payload.reason)
+
+
+@router.get("/aptem-sync/baseline/history")
+def baseline_history(_session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.list_baseline_history(cur)
+
+
+@router.post("/aptem-sync/preview", status_code=201)
+def create_preview(request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.run_preview(cur, request, session)
+
+
+@router.get("/aptem-sync/jobs")
+def list_jobs(
+    page: int = 1,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
+    _session: dict = Depends(require_admin),
+):
+    with get_cursor() as cur:
+        return aptem_sync_lib.list_jobs(cur, page, pageSize)
+
+
+@router.get("/aptem-sync/jobs/{job_id}")
+def get_job(job_id: int, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.get_job(cur, job_id)
+
+
+@router.get("/aptem-sync/jobs/{job_id}/summary")
+def get_job_summary(job_id: int, _session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.get_job_summary(cur, job_id)
+
+
+@router.get("/aptem-sync/jobs/{job_id}/items")
+def list_items(
+    job_id: int,
+    matchStatus: Literal["new", "existing_update", "unchanged", "conflict", "existing_before_trial",
+                          "skipped", "status_change"] | None = None,
+    actionType: Literal["create_learner", "update_learner", "change_start_date", "change_status", "none"] | None = None,
+    page: int = 1,
+    pageSize: Annotated[int, Query(ge=1, le=200)] = 25,
+    _session: dict = Depends(require_admin),
+):
+    with get_cursor() as cur:
+        return aptem_sync_lib.list_items(cur, job_id, matchStatus, actionType, page, pageSize)
+
+
+@router.post("/aptem-sync/jobs/{job_id}/items/{item_id}/link-existing")
+def link_existing(
+    job_id: int, item_id: int, payload: LinkExistingInput, request: Request, session: dict = Depends(require_admin)
+):
+    with get_cursor() as cur:
+        return aptem_sync_lib.link_existing_learner(cur, job_id, item_id, payload.learnerId, request, session)
+
+
+@router.patch("/aptem-sync/jobs/{job_id}/items/{item_id}")
+def update_item(job_id: int, item_id: int, payload: ItemUpdateInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        updated = aptem_sync_lib.update_item(cur, job_id, item_id, payload.fieldUpdates, payload.approved)
+        write_audit_log(
+            request, action="aptem_sync_item_resolved", entity_type="aptem_sync_item", entity_id=item_id,
+            new_value={"fieldUpdates": payload.fieldUpdates, "approved": payload.approved}, cur=cur,
+        )
+    return updated
+
+
+@router.post("/aptem-sync/jobs/{job_id}/items/bulk-approve")
+def bulk_approve_items(job_id: int, payload: BulkApproveInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.bulk_approve_new_learners(
+            cur, job_id, [item.model_dump() for item in payload.items], request, session,
+        )
+
+
+@router.post("/aptem-sync/jobs/{job_id}/commit")
+def commit_job(job_id: int, payload: CommitInput, request: Request, session: dict = Depends(require_admin)):
+    with get_cursor() as cur:
+        return aptem_sync_lib.run_commit(
+            cur, job_id, payload.itemIds, payload.approvalReason, payload.limitOverrideReason, request, session
+        )

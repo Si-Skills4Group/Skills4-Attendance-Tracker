@@ -911,6 +911,10 @@ ALTER TABLE learner_fs_requirements ADD CONSTRAINT learner_fs_requirements_statu
 
 CREATE INDEX IF NOT EXISTS idx_learner_fs_requirements_status ON learner_fs_requirements (status);
 
+-- Kept separate from import_batch_id (the CSV-import job id) rather than
+-- overloading one column with two different job tables' ids.
+ALTER TABLE learner_fs_requirements ADD COLUMN IF NOT EXISTS fs_bud_sync_job_id integer;
+
 -- The controlled-upload job/row pair, matching learner_import_jobs/
 -- learner_import_rows' own shape and lazy-expiry convention exactly
 -- (see learner_import_lib.py) -- but with this feature's own outcome
@@ -980,6 +984,258 @@ CREATE INDEX IF NOT EXISTS idx_fs_requirement_import_rows_job_outcome
 -- current pending-state.
 ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS inactive_flagged_at timestamptz;
 ALTER TABLE cohorts ADD COLUMN IF NOT EXISTS inactive_flagged_by integer;
+
+-- Aptem sync (Phase 1, core ingestion) -- a second external LMS being fed
+-- into the same Fabric workspace as Bud. Deliberately a fully parallel,
+-- aptem_-prefixed pipeline mirroring bud_sync_* 1:1 rather than a
+-- generalisation of the existing Bud tables (see the Aptem sync plan for
+-- why). No tutor mapping this phase -- aptem_v1_episodes.OwnerId -> internal
+-- tutor linkage is unconfirmed against real data -- so no tutor-mapping
+-- generation lock and no transfer_tutor/create_cohort/create_allocation
+-- action types.
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS aptem_sync_max_learner_creations integer NOT NULL DEFAULT 10;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS aptem_sync_max_learner_updates integer NOT NULL DEFAULT 25;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS aptem_sync_max_cohort_creations integer NOT NULL DEFAULT 5;
+
+-- Postgres mirror of Fabric's s4g_silver.dbo.aptem_learner_progress, joined
+-- with identity fields from aptem_v1_users -- fed by an external process
+-- this app never writes to, exactly like public.learner_progress is for
+-- Bud. One row per learner+programme: an Aptem learner can have several
+-- concurrent episodes/programmes (confirmed in the Aptem sandbox data --
+-- main apprenticeship standard, onboarding, functional skills, additional
+-- learning support all co-occurring), so aptem_sync_lib.py selects one
+-- primary row per learner itself; this table does not pre-filter.
+CREATE TABLE IF NOT EXISTS aptem_learner_progress (
+  aptem_user_id integer NOT NULL,
+  aptem_program_id integer NOT NULL,
+  program_name text,
+  program_type text,
+  episode_status text,
+  episode_is_active boolean,
+  episode_start_date date,
+  episode_end_date date,
+  email text,
+  uln text,
+  first_name text,
+  last_name text,
+  component_count bigint,
+  completed_component_count bigint,
+  overdue_component_count bigint,
+  open_component_count bigint,
+  overdue_components_without_due_date bigint,
+  review_count bigint,
+  completed_review_count bigint,
+  next_planned_review_date date,
+  as_of_date date,
+  synced_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS idx_aptem_learner_progress_user_id ON aptem_learner_progress (aptem_user_id);
+
+CREATE TABLE IF NOT EXISTS aptem_sync_baseline (
+  id serial PRIMARY KEY,
+  established_at timestamptz NOT NULL DEFAULT now(),
+  established_by integer NOT NULL,
+  source_max_synced_at timestamptz,
+  source_row_count integer NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  notes text,
+  correlation_id text,
+  superseded_at timestamptz,
+  superseded_by integer,
+  reset_reason text
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aptem_sync_baseline_one_active
+  ON aptem_sync_baseline ((1)) WHERE status = 'active';
+
+ALTER TABLE aptem_sync_baseline DROP CONSTRAINT IF EXISTS aptem_sync_baseline_status_check;
+ALTER TABLE aptem_sync_baseline ADD CONSTRAINT aptem_sync_baseline_status_check
+  CHECK (status IN ('active', 'superseded'));
+
+CREATE TABLE IF NOT EXISTS aptem_sync_baseline_snapshot (
+  id serial PRIMARY KEY,
+  baseline_id integer NOT NULL,
+  source_identifier text NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_aptem_sync_baseline_snapshot_baseline_id ON aptem_sync_baseline_snapshot (baseline_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aptem_sync_baseline_snapshot_unique
+  ON aptem_sync_baseline_snapshot (baseline_id, source_identifier);
+
+CREATE TABLE IF NOT EXISTS aptem_sync_job (
+  id serial PRIMARY KEY,
+  baseline_id integer NOT NULL,
+  status text NOT NULL DEFAULT 'ready',
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  started_by integer NOT NULL,
+  source_max_synced_at timestamptz,
+  total_source_rows_examined integer NOT NULL DEFAULT 0,
+  new_learners_detected integer NOT NULL DEFAULT 0,
+  learner_updates_detected integer NOT NULL DEFAULT 0,
+  status_changes_detected integer NOT NULL DEFAULT 0,
+  approved_count integer NOT NULL DEFAULT 0,
+  applied_count integer NOT NULL DEFAULT 0,
+  skipped_count integer NOT NULL DEFAULT 0,
+  conflict_count integer NOT NULL DEFAULT 0,
+  error_count integer NOT NULL DEFAULT 0,
+  approval_reason text,
+  correlation_id text,
+  error_summary text
+);
+
+CREATE INDEX IF NOT EXISTS idx_aptem_sync_job_status ON aptem_sync_job (status);
+CREATE INDEX IF NOT EXISTS idx_aptem_sync_job_baseline_id ON aptem_sync_job (baseline_id);
+
+ALTER TABLE aptem_sync_job DROP CONSTRAINT IF EXISTS aptem_sync_job_status_check;
+ALTER TABLE aptem_sync_job ADD CONSTRAINT aptem_sync_job_status_check
+  CHECK (status IN ('generating', 'ready', 'committing', 'completed', 'failed'));
+
+CREATE TABLE IF NOT EXISTS aptem_sync_item (
+  id serial PRIMARY KEY,
+  sync_job_id integer NOT NULL,
+  source_identifier text NOT NULL,
+  match_status text NOT NULL,
+  action_type text NOT NULL DEFAULT 'none',
+  internal_learner_id integer,
+  proposed_values jsonb NOT NULL DEFAULT '{}'::jsonb,
+  previous_values jsonb NOT NULL DEFAULT '{}'::jsonb,
+  warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
+  reason text,
+  approved boolean NOT NULL DEFAULT false,
+  applied boolean NOT NULL DEFAULT false,
+  outcome text,
+  error_code text,
+  processed_at timestamptz,
+  source_first_name text,
+  source_last_name text,
+  source_email text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_aptem_sync_item_job_id ON aptem_sync_item (sync_job_id);
+CREATE INDEX IF NOT EXISTS idx_aptem_sync_item_match_status ON aptem_sync_item (sync_job_id, match_status);
+
+ALTER TABLE aptem_sync_item DROP CONSTRAINT IF EXISTS aptem_sync_item_match_status_check;
+ALTER TABLE aptem_sync_item ADD CONSTRAINT aptem_sync_item_match_status_check
+  CHECK (match_status IN ('new', 'existing_update', 'unchanged', 'conflict', 'existing_before_trial', 'skipped',
+                           'status_change'));
+
+ALTER TABLE aptem_sync_item DROP CONSTRAINT IF EXISTS aptem_sync_item_action_type_check;
+ALTER TABLE aptem_sync_item ADD CONSTRAINT aptem_sync_item_action_type_check
+  CHECK (action_type IN ('create_learner', 'update_learner', 'change_start_date', 'change_status', 'none'));
+
+-- Dedicated link table (not learners.external_system_id, which has no
+-- source tag and is single-valued) -- mirrors bud_learner_link's pattern for
+-- exactly the same reason: avoids collision if a learner is ever tracked by
+-- more than one external system at once. Keyed on aptem_user_id (person-
+-- level identity, since aptem_sync_lib.py already collapses a learner's
+-- several concurrent programmes down to one primary row before matching),
+-- not aptem_program_id.
+CREATE TABLE IF NOT EXISTS aptem_learner_link (
+  id serial PRIMARY KEY,
+  internal_learner_id integer NOT NULL,
+  aptem_user_id integer NOT NULL,
+  aptem_program_id integer,
+  accepted_synced_at timestamptz,
+  accepted_values jsonb NOT NULL DEFAULT '{}'::jsonb,
+  last_sync_job_id integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aptem_learner_link_learner_id ON aptem_learner_link (internal_learner_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_aptem_learner_link_user_id ON aptem_learner_link (aptem_user_id);
+
+-- Bud Functional Skills requirement sync: a second, real-data-driven source
+-- for learner_fs_requirements (alongside the existing manual CSV upload),
+-- sourced from the Fabric s4g_silver.learning_functional_skill table (Bud
+-- DWH), fed by a standalone developer-run staging script -- this app's own
+-- code never writes to it. Keyed by bud_learning_plan_id + functional_skill;
+-- absence of a plan from this table means "not tracked", never "confirmed
+-- no requirement" -- see fs_bud_sync_lib.py's module docstring.
+CREATE TABLE IF NOT EXISTS bud_functional_skill_progress (
+  id serial PRIMARY KEY,
+  bud_learning_plan_id text NOT NULL,
+  functional_skill text NOT NULL,
+  subject text NOT NULL,
+  level smallint NOT NULL,
+  functional_skill_status text,
+  status_category text NOT NULL,
+  progress_ratio real,
+  synced_at timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bud_fs_progress_plan_skill
+  ON bud_functional_skill_progress (bud_learning_plan_id, functional_skill);
+CREATE INDEX IF NOT EXISTS idx_bud_fs_progress_plan_id ON bud_functional_skill_progress (bud_learning_plan_id);
+
+ALTER TABLE bud_functional_skill_progress DROP CONSTRAINT IF EXISTS bud_functional_skill_progress_subject_check;
+ALTER TABLE bud_functional_skill_progress ADD CONSTRAINT bud_functional_skill_progress_subject_check
+  CHECK (subject IN ('math', 'english'));
+
+ALTER TABLE bud_functional_skill_progress DROP CONSTRAINT IF EXISTS bud_functional_skill_progress_status_category_check;
+ALTER TABLE bud_functional_skill_progress ADD CONSTRAINT bud_functional_skill_progress_status_category_check
+  CHECK (status_category IN ('exempt', 'percentage', 'complete', 'unknown'));
+
+-- No baseline table -- unlike Bud/Aptem sync, this never creates learners/
+-- cohorts/tutors, so there is no identity-matching baseline to establish;
+-- preview runs directly against the mirror table's current contents.
+CREATE TABLE IF NOT EXISTS fs_bud_sync_job (
+  id serial PRIMARY KEY,
+  status text NOT NULL DEFAULT 'generating',
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  started_by integer NOT NULL,
+  source_max_synced_at timestamptz,
+  total_plans_examined integer NOT NULL DEFAULT 0,
+  new_count integer NOT NULL DEFAULT 0,
+  changed_count integer NOT NULL DEFAULT 0,
+  unchanged_count integer NOT NULL DEFAULT 0,
+  unmatched_count integer NOT NULL DEFAULT 0,
+  blocked_by_clear_count integer NOT NULL DEFAULT 0,
+  approved_count integer NOT NULL DEFAULT 0,
+  applied_count integer NOT NULL DEFAULT 0,
+  skipped_count integer NOT NULL DEFAULT 0,
+  approval_reason text,
+  correlation_id text,
+  error_summary text
+);
+
+CREATE INDEX IF NOT EXISTS idx_fs_bud_sync_job_status ON fs_bud_sync_job (status);
+
+ALTER TABLE fs_bud_sync_job DROP CONSTRAINT IF EXISTS fs_bud_sync_job_status_check;
+ALTER TABLE fs_bud_sync_job ADD CONSTRAINT fs_bud_sync_job_status_check
+  CHECK (status IN ('generating', 'ready', 'committing', 'completed', 'failed'));
+
+CREATE TABLE IF NOT EXISTS fs_bud_sync_item (
+  id serial PRIMARY KEY,
+  sync_job_id integer NOT NULL,
+  bud_learning_plan_id text NOT NULL,
+  internal_learner_id integer,
+  match_status text NOT NULL,
+  proposed_maths boolean,
+  proposed_english boolean,
+  existing_maths boolean,
+  existing_english boolean,
+  existing_status text,
+  existing_source text,
+  source_subject_rows jsonb NOT NULL DEFAULT '[]'::jsonb,
+  warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
+  approved boolean NOT NULL DEFAULT false,
+  applied boolean NOT NULL DEFAULT false,
+  outcome text,
+  processed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fs_bud_sync_item_job_plan ON fs_bud_sync_item (sync_job_id, bud_learning_plan_id);
+CREATE INDEX IF NOT EXISTS idx_fs_bud_sync_item_match_status ON fs_bud_sync_item (sync_job_id, match_status);
+
+ALTER TABLE fs_bud_sync_item DROP CONSTRAINT IF EXISTS fs_bud_sync_item_match_status_check;
+ALTER TABLE fs_bud_sync_item ADD CONSTRAINT fs_bud_sync_item_match_status_check
+  CHECK (match_status IN ('new', 'changed', 'unchanged', 'unmatched', 'blocked_by_clear'));
 """
 
 

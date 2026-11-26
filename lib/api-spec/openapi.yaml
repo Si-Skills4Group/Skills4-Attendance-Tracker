@@ -4302,6 +4302,571 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BudSyncUnmatchedPreBaselineResponse"
+  /aptem-sync/status:
+    get:
+      operationId: getAptemSyncStatus
+      tags: [aptem-sync]
+      responses:
+        "200":
+          description: Current Aptem source status and the active trial baseline, if any
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncStatus"
+  /aptem-sync/baseline:
+    post:
+      operationId: establishAptemSyncBaseline
+      tags: [aptem-sync]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptemSyncBaselineInput"
+      responses:
+        "201":
+          description: Trial baseline established -- no learners are created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncBaseline"
+        "409":
+          description: A trial baseline is already active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/baseline/reset:
+    post:
+      operationId: resetAptemSyncBaseline
+      tags: [aptem-sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptemSyncBaselineResetInput"
+      responses:
+        "201":
+          description: Previous baseline superseded (never deleted) and a new one established
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncBaseline"
+        "409":
+          description: No active baseline to reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/baseline/history:
+    get:
+      operationId: getAptemSyncBaselineHistory
+      tags: [aptem-sync]
+      responses:
+        "200":
+          description: Every baseline ever established, newest first -- superseded baselines are kept, never deleted
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AptemSyncBaseline" }
+  /aptem-sync/preview:
+    post:
+      operationId: createAptemSyncPreview
+      tags: [aptem-sync]
+      responses:
+        "201":
+          description: >-
+            Read-only classification of every Aptem source row against the
+            active baseline -- writes only trial bookkeeping (the job and its
+            items), never a learner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncJob"
+        "409":
+          description: No active trial baseline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/jobs:
+    get:
+      operationId: listAptemSyncJobs
+      tags: [aptem-sync]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated sync job history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncJobListResponse"
+  /aptem-sync/jobs/{jobId}:
+    get:
+      operationId: getAptemSyncJob
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Sync job status and summary counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/jobs/{jobId}/summary:
+    get:
+      operationId: getAptemSyncJobSummary
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Backend-computed actionable-queue counts for the dashboard summary cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncJobSummary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/jobs/{jobId}/items:
+    get:
+      operationId: listAptemSyncJobItems
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: matchStatus
+          in: query
+          schema: { $ref: "#/components/schemas/AptemSyncMatchStatus" }
+        - name: actionType
+          in: query
+          schema: { $ref: "#/components/schemas/AptemSyncActionType" }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated proposed items for this sync job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncItemListResponse"
+  /aptem-sync/jobs/{jobId}/items/bulk-approve:
+    post:
+      operationId: bulkApproveAptemSyncJobItems
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptemSyncBulkApproveInput"
+      responses:
+        "200":
+          description: >-
+            New Learners tab's bulk action -- approves many 'new' items at
+            once, each supplying its own learnerRef/level. Partial success:
+            one bad row is reported in errors and skipped, not a whole-batch
+            failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncBulkApproveResult"
+        "404":
+          description: Sync job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Job is not in a reviewable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/jobs/{jobId}/items/{itemId}:
+    patch:
+      operationId: updateAptemSyncJobItem
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptemSyncItemUpdateInput"
+      responses:
+        "200":
+          description: Item updated (Administrator-supplied field, and/or approval toggled)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncItem"
+        "400":
+          description: Conflicted item cannot be approved, or required fields are still missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/jobs/{jobId}/items/{itemId}/link-existing:
+    post:
+      operationId: linkAptemSyncJobItemToExistingLearner
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptemSyncLinkExistingInput"
+      responses:
+        "200":
+          description: >-
+            New Learners tab's "mark as already represented" action -- links
+            this Aptem row to an existing Attendance learner the
+            Administrator picked, instead of creating a new one.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncJob"
+        "400":
+          description: Only a 'new' item can be manually linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The chosen learner is already linked to a different Aptem record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /aptem-sync/jobs/{jobId}/commit:
+    post:
+      operationId: commitAptemSyncJob
+      tags: [aptem-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptemSyncCommitInput"
+      responses:
+        "200":
+          description: >-
+            Approved items applied transactionally (or, if already completed,
+            the same stored result -- committing is idempotent). Stale
+            items (source or internal data changed since preview) are
+            excluded rather than applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptemSyncJob"
+        "400":
+          description: Conflicted or incomplete items were selected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Job not ready to commit, baseline changed since preview, or a trial limit was exceeded without an override reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /fs-bud-sync/status:
+    get:
+      operationId: getFsBudSyncStatus
+      tags: [fs-bud-sync]
+      responses:
+        "200":
+          description: Current Bud Functional Skills mirror-table status and matched/unmatched plan counts -- no baseline concept exists here
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncStatus"
+  /fs-bud-sync/preview:
+    post:
+      operationId: createFsBudSyncPreview
+      tags: [fs-bud-sync]
+      responses:
+        "201":
+          description: >-
+            Read-only classification of every distinct Bud learning plan
+            present in bud_functional_skill_progress against each matched
+            learner's current learner_fs_requirements row -- writes only
+            trial bookkeeping (the job and its items), never a requirement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncJob"
+  /fs-bud-sync/jobs:
+    get:
+      operationId: listFsBudSyncJobs
+      tags: [fs-bud-sync]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated sync job history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncJobListResponse"
+  /fs-bud-sync/jobs/{jobId}:
+    get:
+      operationId: getFsBudSyncJob
+      tags: [fs-bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Sync job status and summary counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /fs-bud-sync/jobs/{jobId}/summary:
+    get:
+      operationId: getFsBudSyncJobSummary
+      tags: [fs-bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Backend-computed open (not-yet-applied) counts by match status, for the dashboard summary cards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncJobSummary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /fs-bud-sync/jobs/{jobId}/items:
+    get:
+      operationId: listFsBudSyncJobItems
+      tags: [fs-bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: matchStatus
+          in: query
+          schema: { $ref: "#/components/schemas/FsBudSyncMatchStatus" }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 25 }
+      responses:
+        "200":
+          description: Paginated proposed items for this sync job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncItemListResponse"
+  /fs-bud-sync/jobs/{jobId}/items/{itemId}:
+    patch:
+      operationId: updateFsBudSyncJobItem
+      tags: [fs-bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FsBudSyncItemUpdateInput"
+      responses:
+        "200":
+          description: Item approval toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncItem"
+        "400":
+          description: An unmatched/blocked-by-clear/unchanged item cannot be approved -- nothing to apply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /fs-bud-sync/jobs/{jobId}/items/bulk-approve:
+    post:
+      operationId: bulkApproveFsBudSyncJobItems
+      tags: [fs-bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FsBudSyncBulkApproveInput"
+      responses:
+        "200":
+          description: >-
+            Approves many 'new'/'changed' items at once. Partial success:
+            one bad row is reported in errors and skipped, not a whole-batch
+            failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncBulkApproveResult"
+        "404":
+          description: Sync job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Job is not in a reviewable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /fs-bud-sync/jobs/{jobId}/commit:
+    post:
+      operationId: commitFsBudSyncJob
+      tags: [fs-bud-sync]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FsBudSyncCommitInput"
+      responses:
+        "200":
+          description: >-
+            Approved items applied transactionally (or, if already completed,
+            the same stored result -- committing is idempotent). Items whose
+            Bud source data or internal learner_fs_requirements state changed
+            since preview are excluded rather than applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FsBudSyncJob"
+        "400":
+          description: Unmatched/blocked-by-clear/unchanged items were selected, or a sync item was not found in this job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Job not ready to commit (status changed concurrently, or already committing)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   parameters:
@@ -7613,6 +8178,9 @@ components:
         budSyncMaxLearnerUpdates: { type: integer }
         budSyncMaxCohortCreations: { type: integer }
         budSyncMaxTutorTransfers: { type: integer }
+        aptemSyncMaxLearnerCreations: { type: integer }
+        aptemSyncMaxLearnerUpdates: { type: integer }
+        aptemSyncMaxCohortCreations: { type: integer }
 
     SettingsUpdate:
       type: object
@@ -7623,6 +8191,9 @@ components:
         budSyncMaxLearnerUpdates: { type: integer, minimum: 0, maximum: 1000 }
         budSyncMaxCohortCreations: { type: integer, minimum: 0, maximum: 1000 }
         budSyncMaxTutorTransfers: { type: integer, minimum: 0, maximum: 1000 }
+        aptemSyncMaxLearnerCreations: { type: integer, minimum: 0, maximum: 1000 }
+        aptemSyncMaxLearnerUpdates: { type: integer, minimum: 0, maximum: 1000 }
+        aptemSyncMaxCohortCreations: { type: integer, minimum: 0, maximum: 1000 }
 
     BudSyncBaselineStatus:
       type: string
@@ -7933,3 +8504,447 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    AptemSyncBaselineStatus:
+      type: string
+      enum: [active, superseded]
+
+    AptemSyncJobStatus:
+      type: string
+      enum: [ready, committing, completed, failed]
+
+    AptemSyncMatchStatus:
+      type: string
+      enum: [new, existing_update, unchanged, conflict, existing_before_trial, skipped, status_change]
+
+    AptemSyncActionType:
+      type: string
+      enum: [create_learner, update_learner, change_start_date, change_status, none]
+
+    AptemSyncBaseline:
+      type: object
+      required:
+        [
+          id,
+          establishedAt,
+          establishedBy,
+          sourceMaxSyncedAt,
+          sourceRowCount,
+          status,
+          notes,
+          correlationId,
+        ]
+      properties:
+        id: { type: integer }
+        establishedAt: { type: string, format: date-time }
+        establishedBy: { type: integer }
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        sourceRowCount: { type: integer }
+        status: { $ref: "#/components/schemas/AptemSyncBaselineStatus" }
+        notes: { type: ["string", "null"] }
+        correlationId: { type: ["string", "null"] }
+        supersededAt: { type: ["string", "null"], format: date-time }
+        supersededBy: { type: ["integer", "null"] }
+        resetReason: { type: ["string", "null"] }
+
+    AptemSyncBaselineInput:
+      type: object
+      properties:
+        notes: { type: ["string", "null"] }
+
+    AptemSyncBaselineResetInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
+    AptemSyncStatus:
+      type: object
+      required: [sourceMaxSyncedAt, sourceRowCount, matchedLearnerCount, unmatchedLearnerCount, activeBaseline]
+      properties:
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        sourceRowCount: { type: integer }
+        matchedLearnerCount: { type: integer }
+        unmatchedLearnerCount: { type: integer }
+        activeBaseline:
+          oneOf:
+            - $ref: "#/components/schemas/AptemSyncBaseline"
+            - type: "null"
+
+    AptemSyncJob:
+      type: object
+      required:
+        [
+          id,
+          baselineId,
+          status,
+          startedAt,
+          completedAt,
+          startedBy,
+          sourceMaxSyncedAt,
+          totalSourceRowsExamined,
+          newLearnersDetected,
+          learnerUpdatesDetected,
+          approvedCount,
+          appliedCount,
+          skippedCount,
+          conflictCount,
+          errorCount,
+          approvalReason,
+          correlationId,
+          errorSummary,
+          statusChangesDetected,
+        ]
+      properties:
+        id: { type: integer }
+        baselineId: { type: integer }
+        status: { $ref: "#/components/schemas/AptemSyncJobStatus" }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        startedBy: { type: integer }
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        totalSourceRowsExamined: { type: integer }
+        newLearnersDetected: { type: integer }
+        learnerUpdatesDetected: { type: integer }
+        approvedCount: { type: integer }
+        appliedCount: { type: integer }
+        skippedCount: { type: integer }
+        conflictCount: { type: integer }
+        errorCount: { type: integer }
+        approvalReason: { type: ["string", "null"] }
+        correlationId: { type: ["string", "null"] }
+        errorSummary: { type: ["string", "null"] }
+        statusChangesDetected: { type: integer }
+
+    AptemSyncJobListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AptemSyncJob" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    AptemSyncJobSummary:
+      type: object
+      required: [statusChangesCount, newLearnersCount, conflictsCount, learnersCreatedToday, lastSuccessfulSyncAt]
+      properties:
+        statusChangesCount: { type: integer }
+        newLearnersCount: { type: integer }
+        conflictsCount: { type: integer }
+        learnersCreatedToday: { type: integer }
+        lastSuccessfulSyncAt: { type: ["string", "null"], format: date-time }
+
+    AptemSyncLinkExistingInput:
+      type: object
+      required: [learnerId]
+      properties:
+        learnerId: { type: integer }
+
+    AptemSyncBulkApproveItem:
+      type: object
+      required: [itemId, learnerRef, level]
+      properties:
+        itemId: { type: integer }
+        learnerRef: { type: string, minLength: 1 }
+        level: { type: string, minLength: 1 }
+
+    AptemSyncBulkApproveInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/AptemSyncBulkApproveItem" }
+
+    AptemSyncBulkApproveResult:
+      type: object
+      required: [approvedCount, errors]
+      properties:
+        approvedCount: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [itemId, message]
+            properties:
+              itemId: { type: integer }
+              message: { type: string }
+
+    AptemSyncItem:
+      type: object
+      required:
+        [
+          id,
+          syncJobId,
+          sourceIdentifier,
+          matchStatus,
+          actionType,
+          internalLearnerId,
+          proposedValues,
+          previousValues,
+          warnings,
+          reason,
+          approved,
+          applied,
+          outcome,
+          errorCode,
+          processedAt,
+          sourceFirstName,
+          sourceLastName,
+          sourceEmail,
+          createdAt,
+        ]
+      properties:
+        id: { type: integer }
+        syncJobId: { type: integer }
+        sourceIdentifier: { type: string }
+        matchStatus: { $ref: "#/components/schemas/AptemSyncMatchStatus" }
+        actionType: { $ref: "#/components/schemas/AptemSyncActionType" }
+        internalLearnerId: { type: ["integer", "null"] }
+        proposedValues:
+          type: object
+          additionalProperties: true
+        previousValues:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items: { type: string }
+        reason: { type: ["string", "null"] }
+        approved: { type: boolean }
+        applied: { type: boolean }
+        outcome: { type: ["string", "null"] }
+        errorCode: { type: ["string", "null"] }
+        processedAt: { type: ["string", "null"], format: date-time }
+        sourceFirstName: { type: ["string", "null"] }
+        sourceLastName: { type: ["string", "null"] }
+        sourceEmail: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    AptemSyncItemListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AptemSyncItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    AptemSyncItemUpdateInput:
+      type: object
+      properties:
+        fieldUpdates:
+          type: ["object", "null"]
+          additionalProperties: { type: string }
+        approved: { type: ["boolean", "null"] }
+
+    AptemSyncCommitInput:
+      type: object
+      required: [itemIds, approvalReason]
+      properties:
+        itemIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+        approvalReason: { type: string, minLength: 1 }
+        limitOverrideReason: { type: ["string", "null"] }
+
+    FsBudSyncJobStatus:
+      type: string
+      enum: [generating, ready, committing, completed, failed]
+
+    FsBudSyncMatchStatus:
+      type: string
+      enum: [new, changed, unchanged, unmatched, blocked_by_clear]
+
+    FsBudSyncStatus:
+      type: object
+      required: [sourceMaxSyncedAt, sourcePlanCount, matchedPlanCount, unmatchedPlanCount, lastSuccessfulSyncAt]
+      properties:
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        sourcePlanCount: { type: integer }
+        matchedPlanCount: { type: integer }
+        unmatchedPlanCount: { type: integer }
+        lastSuccessfulSyncAt: { type: ["string", "null"], format: date-time }
+
+    FsBudSyncJob:
+      type: object
+      required:
+        [
+          id,
+          status,
+          startedAt,
+          completedAt,
+          startedBy,
+          sourceMaxSyncedAt,
+          totalPlansExamined,
+          newCount,
+          changedCount,
+          unchangedCount,
+          unmatchedCount,
+          blockedByClearCount,
+          approvedCount,
+          appliedCount,
+          skippedCount,
+          approvalReason,
+          correlationId,
+          errorSummary,
+        ]
+      properties:
+        id: { type: integer }
+        status: { $ref: "#/components/schemas/FsBudSyncJobStatus" }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        startedBy: { type: integer }
+        sourceMaxSyncedAt: { type: ["string", "null"], format: date-time }
+        totalPlansExamined: { type: integer }
+        newCount: { type: integer }
+        changedCount: { type: integer }
+        unchangedCount: { type: integer }
+        unmatchedCount: { type: integer }
+        blockedByClearCount: { type: integer }
+        approvedCount: { type: integer }
+        appliedCount: { type: integer }
+        skippedCount: { type: integer }
+        approvalReason: { type: ["string", "null"] }
+        correlationId: { type: ["string", "null"] }
+        errorSummary: { type: ["string", "null"] }
+
+    FsBudSyncJobListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FsBudSyncJob" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    FsBudSyncJobSummary:
+      type: object
+      required: [newCount, changedCount, unmatchedCount, blockedByClearCount, lastSuccessfulSyncAt]
+      properties:
+        newCount: { type: integer }
+        changedCount: { type: integer }
+        unmatchedCount: { type: integer }
+        blockedByClearCount: { type: integer }
+        lastSuccessfulSyncAt: { type: ["string", "null"], format: date-time }
+
+    FsBudSyncSubjectRow:
+      type: object
+      required: [subject, level, status, statusCategory]
+      properties:
+        subject: { type: string, enum: [math, english] }
+        level: { type: integer }
+        status: { type: ["string", "null"] }
+        statusCategory: { type: string, enum: [exempt, percentage, complete, unknown] }
+
+    FsBudSyncItem:
+      type: object
+      required:
+        [
+          id,
+          syncJobId,
+          budLearningPlanId,
+          internalLearnerId,
+          matchStatus,
+          proposedMaths,
+          proposedEnglish,
+          existingMaths,
+          existingEnglish,
+          existingStatus,
+          existingSource,
+          sourceSubjectRows,
+          warnings,
+          approved,
+          applied,
+          outcome,
+          processedAt,
+          createdAt,
+          learnerName,
+          learnerRef,
+          learnerStatus,
+        ]
+      properties:
+        id: { type: integer }
+        syncJobId: { type: integer }
+        budLearningPlanId: { type: string }
+        internalLearnerId: { type: ["integer", "null"] }
+        matchStatus: { $ref: "#/components/schemas/FsBudSyncMatchStatus" }
+        proposedMaths: { type: ["boolean", "null"] }
+        proposedEnglish: { type: ["boolean", "null"] }
+        existingMaths: { type: ["boolean", "null"] }
+        existingEnglish: { type: ["boolean", "null"] }
+        existingStatus: { type: ["string", "null"] }
+        existingSource: { type: ["string", "null"] }
+        sourceSubjectRows:
+          type: array
+          items: { $ref: "#/components/schemas/FsBudSyncSubjectRow" }
+        warnings:
+          type: array
+          items: { type: string }
+        approved: { type: boolean }
+        applied: { type: boolean }
+        outcome: { type: ["string", "null"] }
+        processedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        learnerName: { type: ["string", "null"] }
+        learnerRef: { type: ["string", "null"] }
+        learnerStatus: { type: ["string", "null"] }
+
+    FsBudSyncItemListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FsBudSyncItem" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    FsBudSyncItemUpdateInput:
+      type: object
+      required: [approved]
+      properties:
+        approved: { type: boolean }
+
+    FsBudSyncBulkApproveInput:
+      type: object
+      required: [itemIds]
+      properties:
+        itemIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+
+    FsBudSyncBulkApproveResult:
+      type: object
+      required: [approvedCount, errors]
+      properties:
+        approvedCount: { type: integer }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [itemId, message]
+            properties:
+              itemId: { type: integer }
+              message: { type: string }
+
+    FsBudSyncCommitInput:
+      type: object
+      required: [itemIds, approvalReason]
+      properties:
+        itemIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+        approvalReason: { type: string, minLength: 1 }
