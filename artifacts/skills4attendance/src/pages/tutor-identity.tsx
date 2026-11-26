@@ -86,7 +86,7 @@ export default function TutorIdentityPage() {
   if (user && !isAdmin) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-        <Breadcrumbs items={[{ label: "Tutor Identity" }]} />
+        <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Tutor Identity" }]} />
         <Card className="shadow-sm"><CardContent className="p-8 text-center text-muted-foreground">Administrator access required.</CardContent></Card>
       </div>
     );
@@ -94,7 +94,7 @@ export default function TutorIdentityPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-      <Breadcrumbs items={[{ label: "Tutor Identity" }]} />
+      <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Tutor Identity" }]} />
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <UserRoundSearch className="w-7 h-7 text-primary" /> Tutor Identity

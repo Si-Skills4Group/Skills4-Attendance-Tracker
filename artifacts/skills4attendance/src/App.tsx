@@ -40,6 +40,7 @@ const LastAttendanceReportPage = React.lazy(() => import("@/pages/reports/last-a
 const AllocationHistoryReportPage = React.lazy(() => import("@/pages/reports/allocation-history"));
 const ParticipationReportPage = React.lazy(() => import("@/pages/reports/participation"));
 const EngagementRecencyReportPage = React.lazy(() => import("@/pages/reports/engagement-recency"));
+const AdminPage = React.lazy(() => import("@/pages/admin"));
 const AuditLogPage = React.lazy(() => import("@/pages/audit-log"));
 const BudSyncTrialPage = React.lazy(() => import("@/pages/bud-sync-trial"));
 const AllocationReconciliationPage = React.lazy(() => import("@/pages/allocation-reconciliation"));
@@ -93,6 +94,7 @@ function ProtectedRouter() {
           <Route path="/reports/allocation-history" component={AllocationHistoryReportPage} />
           <Route path="/reports/participation" component={ParticipationReportPage} />
           <Route path="/reports/engagement-recency" component={EngagementRecencyReportPage} />
+          <Route path="/admin">{() => <RequireAdmin><AdminPage /></RequireAdmin>}</Route>
           <Route path="/audit-log">{() => <RequireAdmin><AuditLogPage /></RequireAdmin>}</Route>
           <Route path="/bud-sync-trial">{() => <RequireAdmin><BudSyncTrialPage /></RequireAdmin>}</Route>
           <Route path="/allocation-reconciliation">{() => <RequireAdmin><AllocationReconciliationPage /></RequireAdmin>}</Route>
