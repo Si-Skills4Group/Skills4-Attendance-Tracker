@@ -102,7 +102,7 @@ export default function AuditLogPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-      <Breadcrumbs items={[{ label: "Audit Log" }]} />
+      <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Audit Log" }]} />
 
       <div className="mb-8 page-transition-enter">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">

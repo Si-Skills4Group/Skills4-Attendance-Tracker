@@ -188,7 +188,7 @@ export default function AllocationReconciliationPage() {
   if (user && !isAdmin) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-        <Breadcrumbs items={[{ label: "Allocation Reconciliation" }]} />
+        <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Allocation Reconciliation" }]} />
         <Card className="shadow-sm"><CardContent className="p-8 text-center text-muted-foreground">Administrator access required.</CardContent></Card>
       </div>
     );
@@ -196,7 +196,7 @@ export default function AllocationReconciliationPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-      <Breadcrumbs items={[{ label: "Allocation Reconciliation" }]} />
+      <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Allocation Reconciliation" }]} />
 
       <div className="mb-6 page-transition-enter">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">

@@ -31,8 +31,11 @@ vi.mock('@workspace/api-client-react', () => ({
   getGetCurrentUserQueryKey: () => ['getCurrentUser'],
 }));
 
-// Admin-only nav items per shell.tsx's navItems roles config.
-const ADMIN_ONLY = ['Tutors', 'Users', 'Allocation', 'Audit Log', 'Settings'];
+// Admin-only nav items per shell.tsx's navItems roles config. Allocation
+// Reconciliation, Audit Log, Tutor Identity, and Missing Source Records are
+// no longer top-level nav items -- they live under the single "Admin Tools"
+// entry (see pages/admin.tsx).
+const ADMIN_ONLY = ['Tutors', 'Users', 'Allocation', 'Admin Tools', 'Settings'];
 const SHARED = ['Dashboard', 'Learners', 'Cohorts', 'Attendance', 'Reports'];
 
 function mockCurrentUser(role: 'admin' | 'tutor') {

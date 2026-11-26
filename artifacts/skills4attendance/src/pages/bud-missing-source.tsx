@@ -49,7 +49,7 @@ export default function BudMissingSourcePage() {
   if (user && !isAdmin) {
     return (
       <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-        <Breadcrumbs items={[{ label: "Missing Source Records" }]} />
+        <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Missing Source Records" }]} />
         <Card className="shadow-sm"><CardContent className="p-8 text-center text-muted-foreground">Administrator access required.</CardContent></Card>
       </div>
     );
@@ -59,7 +59,7 @@ export default function BudMissingSourcePage() {
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto w-full">
-      <Breadcrumbs items={[{ label: "Missing Source Records" }]} />
+      <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Missing Source Records" }]} />
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
